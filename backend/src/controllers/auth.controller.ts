@@ -39,14 +39,17 @@ export const initLogin = async (req: Request, res: Response) => {
     const hasSavedCreds = !!req.cookies[COOKIE_NAME];
     const { sessionId, captchaType, captchaImageData } = await startLogin();
 
+    // 1. Set the cookie for backend session persistence
     res.cookie('vtop_session_id', sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax'
     });
 
+    // 2. MUST return session_id in JSON so React state doesn't break
     return res.json({
       status: 'captcha_ready',
+      session_id: sessionId,
       captcha_type: captchaType,
       captcha_image_data: captchaImageData,
       has_saved_creds: hasSavedCreds
