@@ -1,6 +1,7 @@
 import axios from 'axios';
-import https from 'https';
 import * as cheerio from 'cheerio';
+import { HttpsCookieAgent } from 'http-cookie-agent/http';
+import { CookieJar } from 'tough-cookie';
 import { sessionService } from './session.service';
 
 const VTOP_BASE_URL = 'https://vtopcc.vit.ac.in/vtop/';
@@ -8,46 +9,31 @@ const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
 };
 
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false
-});
-
-const httpClient = axios.create({
-  baseURL: VTOP_BASE_URL,
-  headers: HEADERS,
-  httpsAgent,
-  timeout: 20000
-});
-
-// Helper: parse set-cookie headers from VTOP response
-export function parseCookies(cookieHeaders: string[] | undefined, existingCookies: Record<string, string> = {}) {
-  if (!cookieHeaders) return existingCookies;
-  const cookies = { ...existingCookies };
-  cookieHeaders.forEach(header => {
-    const parts = header.split(';')[0].split('=');
-    if (parts.length >= 2) {
-      const name = parts[0].trim();
-      const value = parts.slice(1).join('=').trim();
-      cookies[name] = value;
-    }
+// Helper to create a cookie-aware axios client per user session
+export function createClient(jar: CookieJar) {
+  const httpsAgent = new HttpsCookieAgent({
+    cookies: { jar },
+    rejectUnauthorized: false
   });
-  return cookies;
-}
 
-// Helper: serialize cookies back to Cookie request header format
-export function serializeCookies(cookies: Record<string, string>) {
-  return Object.entries(cookies)
-    .map(([name, value]) => `${name}=${value}`)
-    .join('; ');
+  return axios.create({
+    baseURL: VTOP_BASE_URL,
+    headers: HEADERS,
+    httpsAgent,
+    withCredentials: true,
+    timeout: 20000,
+    maxRedirects: 5
+  });
 }
 
 export async function startLogin() {
   try {
-    let sessionCookies: Record<string, string> = {};
+    const sessionId = sessionService.createSession();
+    const session = sessionService.getSession(sessionId)!;
+    const client = createClient(session.cookieJar);
 
     // 1. GET open/page to extract prelogin CSRF token & cookies
-    const openPageRes = await httpClient.get('open/page');
-    sessionCookies = parseCookies(openPageRes.headers['set-cookie'], sessionCookies);
+    const openPageRes = await client.get('open/page');
     
     let $ = cheerio.load(openPageRes.data);
     const csrfPrelogin = $('input[name="_csrf"]').val() as string;
@@ -58,32 +44,23 @@ export async function startLogin() {
     preloginPayload.append('_csrf', csrfPrelogin);
     preloginPayload.append('flag', 'VTOP');
 
-    const preloginRes = await httpClient.post('prelogin/setup', preloginPayload, {
+    const preloginRes = await client.post('prelogin/setup', preloginPayload, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie': serializeCookies(sessionCookies)
+        'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
-    sessionCookies = parseCookies(preloginRes.headers['set-cookie'], sessionCookies);
 
     const htmlText = preloginRes.data;
     $ = cheerio.load(htmlText);
     const csrfLogin = $('input[name="_csrf"]').val() as string;
     if (!csrfLogin) throw new Error('Login CSRF token not found');
 
-    // Force built-in text CAPTCHA (matching Flask app behavior)
-    // This avoids Google ReCAPTCHA localhost domain check issues
+    // Force built-in text CAPTCHA
     const captchaType = 1; 
     let captchaSrc = '';
 
     try {
-      const captchaRes = await httpClient.get('get/new/captcha', {
-        headers: {
-          'Cookie': serializeCookies(sessionCookies)
-        }
-      });
-      sessionCookies = parseCookies(captchaRes.headers['set-cookie'], sessionCookies);
-
+      const captchaRes = await client.get('get/new/captcha');
       const $captcha = cheerio.load(captchaRes.data);
       const captchaImg = $captcha('img');
       captchaSrc = captchaImg.attr('src') || '';
@@ -91,8 +68,7 @@ export async function startLogin() {
       console.error('Failed to load VTOP built-in CAPTCHA image', err);
     }
 
-    // Save in session manager
-    const sessionId = sessionService.createSession(sessionCookies);
+    // Update in session manager
     sessionService.updateSession(sessionId, { csrfToken: csrfLogin });
 
     return {
@@ -124,6 +100,7 @@ export async function performVtopLogin(
   }
 
   try {
+    const client = createClient(session.cookieJar);
     const payload = new URLSearchParams();
     payload.append('_csrf', csrfToken);
     payload.append('username', username);
@@ -135,16 +112,11 @@ export async function performVtopLogin(
       payload.append('captchaStr', captchaText);
     }
 
-    const loginRes = await httpClient.post('login', payload, {
+    const loginRes = await client.post('login', payload, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie': serializeCookies(session.cookies)
+        'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
-
-    // Update cookies from login response
-    const updatedCookies = parseCookies(loginRes.headers['set-cookie'], session.cookies);
-    sessionService.updateSession(sessionId, { cookies: updatedCookies });
 
     const $ = cheerio.load(loginRes.data);
     const loginForm = $('#vtopLoginForm');
@@ -204,14 +176,14 @@ export async function getSessionDetails(sessionId: string) {
   const baseUrl = VTOP_BASE_URL;
 
   try {
-    const contentRes = await httpClient.get('content', {
+    const client = createClient(session.cookieJar);
+
+    const contentRes = await client.get('content', {
       headers: { 
-        Referer: `${baseUrl}/content`,
-        'Cookie': serializeCookies(session.cookies)
+        Referer: `${VTOP_BASE_URL}content`
       }
     });
 
-    const updatedCookies = parseCookies(contentRes.headers['set-cookie'], session.cookies);
     const $ = cheerio.load(contentRes.data);
 
     // If redirected to login or we don't have authorizedID/IDX in DOM, session is invalid/expired
@@ -228,20 +200,12 @@ export async function getSessionDetails(sessionId: string) {
       throw new Error('Session expired (CSRF missing).');
     }
 
-    // Update csrfToken and cookies in session store
-    sessionService.updateSession(sessionId, { csrfToken, cookies: updatedCookies });
+    // Update csrfToken in session store
+    sessionService.updateSession(sessionId, { csrfToken });
 
-    const client = axios.create({
-      baseURL: VTOP_BASE_URL,
-      headers: {
-        ...HEADERS,
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': `${VTOP_BASE_URL}content`,
-        'Cookie': serializeCookies(updatedCookies)
-      },
-      httpsAgent,
-      timeout: 20000
-    });
+    // Set common headers for all data queries
+    client.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+    client.defaults.headers.common['Referer'] = `${VTOP_BASE_URL}content`;
 
     return {
       client,
@@ -254,3 +218,4 @@ export async function getSessionDetails(sessionId: string) {
     throw new Error(error.message || 'Session expired or network error.');
   }
 }
+

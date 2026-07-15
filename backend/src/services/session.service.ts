@@ -1,7 +1,8 @@
 import crypto from 'crypto';
+import { CookieJar } from 'tough-cookie';
 
 export interface VtopSession {
-  cookies: Record<string, string>;
+  cookieJar: CookieJar;
   csrfToken?: string;
   username?: string;
   authorizedId?: string;
@@ -9,15 +10,15 @@ export interface VtopSession {
 }
 
 class SessionService {
-  private sessions = new Map<string, VtopSession>();
+  public sessions = new Map<string, VtopSession>();
 
   /**
    * Creates a new session ID and registers a new session object.
    */
-  public createSession(cookies: Record<string, string> = {}): string {
+  public createSession(): string {
     const sessionId = crypto.randomUUID();
     this.sessions.set(sessionId, {
-      cookies,
+      cookieJar: new CookieJar(),
       lastAccessed: Date.now(),
     });
     return sessionId;

@@ -365,7 +365,7 @@ function VtopLoginDashboard() {
   // Logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await api.post('/auth/logout', { session_id: sessionId });
+      await api.post('/auth/logout');
     },
     onSuccess: () => {
       setIsLoggedIn(false);
@@ -403,7 +403,7 @@ function VtopLoginDashboard() {
   const profileQuery = useQuery({
     queryKey: ['profile', sessionId],
     queryFn: async () => {
-      const res = await api.post('/data/profile', { session_id: sessionId });
+      const res = await api.post('/data/profile');
       return res.data.raw_data;
     },
     enabled: isLoggedIn && !!sessionId && activeTab === 'profile'
@@ -412,7 +412,7 @@ function VtopLoginDashboard() {
   const timetableQuery = useQuery({
     queryKey: ['timetable', sessionId, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/timetable', { session_id: sessionId, semesterSubId: activeSemester });
+      const res = await api.post('/data/timetable', { semesterSubId: activeSemester });
       return res.data.raw_data;
     },
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'timetable'
@@ -421,7 +421,7 @@ function VtopLoginDashboard() {
   const attendanceQuery = useQuery({
     queryKey: ['attendance', sessionId, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/attendance', { session_id: sessionId, semesterSubId: activeSemester });
+      const res = await api.post('/data/attendance', { semesterSubId: activeSemester });
       return res.data.raw_data as any[];
     },
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'attendance'
@@ -431,7 +431,6 @@ function VtopLoginDashboard() {
     queryKey: ['attendance-detail', sessionId, activeSemester, selectedAttendanceCourse?.class_id, selectedAttendanceCourse?.slot_param],
     queryFn: async () => {
       const res = await api.post('/data/attendance-detail', {
-        session_id: sessionId,
         semesterSubId: activeSemester,
         classId: selectedAttendanceCourse.class_id,
         slot: selectedAttendanceCourse.slot_param
@@ -444,7 +443,7 @@ function VtopLoginDashboard() {
   const marksQuery = useQuery({
     queryKey: ['marks', sessionId, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/marks', { session_id: sessionId, semesterSubId: activeSemester });
+      const res = await api.post('/data/marks', { semesterSubId: activeSemester });
       return res.data.raw_data;
     },
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'marks'
@@ -453,7 +452,7 @@ function VtopLoginDashboard() {
   const gradesQuery = useQuery({
     queryKey: ['grades', sessionId, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/grades', { session_id: sessionId, semesterSubId: activeSemester });
+      const res = await api.post('/data/grades', { semesterSubId: activeSemester });
       return res.data.raw_data;
     },
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'grades'
@@ -462,7 +461,7 @@ function VtopLoginDashboard() {
   const examsQuery = useQuery({
     queryKey: ['exams', sessionId, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/exams', { session_id: sessionId, semesterSubId: activeSemester });
+      const res = await api.post('/data/exams', { semesterSubId: activeSemester });
       return res.data.raw_data as any[];
     },
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'exams'
@@ -474,7 +473,6 @@ function VtopLoginDashboard() {
       const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
       const dateStr = `01-${months[calendarDate.getMonth()]}-${calendarDate.getFullYear()}`;
       const res = await api.post('/data/calendar', {
-        session_id: sessionId,
         semesterSubId: activeSemester,
         calDate: dateStr
       });
@@ -486,7 +484,7 @@ function VtopLoginDashboard() {
   const credentialsQuery = useQuery({
     queryKey: ['credentials', sessionId],
     queryFn: async () => {
-      const res = await api.post('/data/credentials', { session_id: sessionId });
+      const res = await api.post('/data/credentials');
       return res.data.raw_data;
     },
     enabled: isLoggedIn && !!sessionId && activeTab === 'credentials'
@@ -495,7 +493,7 @@ function VtopLoginDashboard() {
   const debugQuery = useQuery({
     queryKey: ['debug', sessionId],
     queryFn: async () => {
-      const res = await api.post('/data/debug', { session_id: sessionId });
+      const res = await api.post('/data/debug');
       return res.data;
     },
     enabled: isLoggedIn && !!sessionId && activeTab === 'debug'

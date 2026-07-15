@@ -17,7 +17,7 @@ function decryptCredentials(token: string): { u: string; p: string } {
 }
 
 export const checkSession = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
+  const session_id = req.cookies.vtop_session_id;
   if (session_id) {
     const session = sessionService.getSession(session_id);
     if (session) {
@@ -39,9 +39,14 @@ export const initLogin = async (req: Request, res: Response) => {
     const hasSavedCreds = !!req.cookies[COOKIE_NAME];
     const { sessionId, captchaType, captchaImageData } = await startLogin();
 
+    res.cookie('vtop_session_id', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+    });
+
     return res.json({
       status: 'captcha_ready',
-      session_id: sessionId,
       captcha_type: captchaType,
       captcha_image_data: captchaImageData,
       has_saved_creds: hasSavedCreds
@@ -55,7 +60,8 @@ export const initLogin = async (req: Request, res: Response) => {
 };
 
 export const loginAttempt = async (req: Request, res: Response) => {
-  const { username, password, captcha, session_id, gResponse } = req.body;
+  const { username, password, captcha, gResponse } = req.body;
+  const session_id = req.cookies.vtop_session_id;
 
   if (!session_id || !sessionService.getSession(session_id)) {
     return res.status(400).json({ status: 'failure', message: 'Session expired.' });
@@ -87,7 +93,8 @@ export const loginAttempt = async (req: Request, res: Response) => {
 };
 
 export const autoLogin = async (req: Request, res: Response) => {
-  const { captcha, session_id, gResponse } = req.body;
+  const { captcha, gResponse } = req.body;
+  const session_id = req.cookies.vtop_session_id;
 
   if (!session_id || !sessionService.getSession(session_id)) {
     return res.status(400).json({ status: 'failure', message: 'Session expired.' });
@@ -133,12 +140,13 @@ export const autoLogin = async (req: Request, res: Response) => {
 };
 
 export const logout = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
+  const session_id = req.cookies.vtop_session_id;
   if (session_id) {
     sessionService.deleteSession(session_id);
   }
 
   res.clearCookie(COOKIE_NAME);
+  res.clearCookie('vtop_session_id');
   return res.json({ status: 'success' });
 };
 
