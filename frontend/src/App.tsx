@@ -17,18 +17,27 @@ import {
   Sun,
   Moon,
   Calendar as CalendarIcon,
-  BookOpen,
   FileText,
   Award,
   Clock,
-  ChevronRight,
-  TrendingUp,
   UserCheck,
   Bug,
   Eye,
   EyeOff,
-  Menu
+  Menu,
+  LayoutDashboard
 } from 'lucide-react';
+
+import { DashboardView } from './components/DashboardView';
+import { ProfileView } from './components/ProfileView';
+import { TimetableView } from './components/TimetableView';
+import { AttendanceView } from './components/AttendanceView';
+import { MarksView } from './components/MarksView';
+import { GradesView } from './components/GradesView';
+import { ExamsView } from './components/ExamsView';
+import { CalendarView } from './components/CalendarView';
+import { CredentialsView } from './components/CredentialsView';
+import { DebugView } from './components/DebugView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,7 +74,7 @@ const TIMETABLE_SLOTS = [
   { id: 12, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
-type DashboardTab = 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'debug';
+type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'debug';
 
 function VtopLoginDashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -91,7 +100,7 @@ function VtopLoginDashboard() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Dashboard state
-  const [activeTab, setActiveTab] = useState<DashboardTab>('profile');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
   const [activeSemester, setActiveSemester] = useState<string>('');
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
@@ -102,9 +111,11 @@ function VtopLoginDashboard() {
   const autoLoginRetryCount = useRef(0);
   const manualLoginRetryCount = useRef(0);
   const initRef = useRef(false);
+  const lastRestorationTime = useRef(0);
 
   // Toggle theme
   useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
     const root = window.document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
@@ -171,7 +182,7 @@ function VtopLoginDashboard() {
   }, []);
 
   // Fetch CSRF & CAPTCHA
-  const startLoginFlow = async () => {
+  const startLoginFlow = async (autoTriggerAfterInit = false) => {
     console.log("[VTOP] Initializing session, showCaptchaUI:", showCaptchaUI);
     // Only show loading message if we aren't silently retrying in background
     if (showCaptchaUI || manualLoginRetryCount.current === 0) {
@@ -202,9 +213,20 @@ function VtopLoginDashboard() {
             const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
             setCaptcha(solvedText);
             console.log("CAPTCHA solved successfully:", solvedText);
+
+            if (autoTriggerAfterInit && credsAvailable) {
+              console.log("[AUTO-RESTORE] Restoring VTOP session automatically...");
+              autoLoginMutation.mutate({
+                captchaText: solvedText,
+                currentSessionId: currentSessionId
+              });
+            }
           } catch (solveError: any) {
             console.error("CAPTCHA solve failed:", solveError);
             setCaptcha('');
+            if (autoTriggerAfterInit && credsAvailable) {
+              triggerSilentAutoLoginAttempt();
+            }
           } finally {
             setIsCaptchaSolving(false);
           }
@@ -564,6 +586,12 @@ function VtopLoginDashboard() {
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'calendar'
   });
 
+  useEffect(() => {
+    if (activeSemester) {
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+    }
+  }, [activeSemester]);
+
   const credentialsQuery = useQuery({
     queryKey: ['credentials', sessionId],
     queryFn: async () => {
@@ -584,16 +612,54 @@ function VtopLoginDashboard() {
 
   // Handle session expiration globally on query errors
   useEffect(() => {
-    if (semestersQuery.isError || profileQuery.isError || timetableQuery.isError) {
-      console.warn("API request failed. Session likely expired. Logging out...");
-      setIsLoggedIn(false);
-      setActiveUser('');
+    if (
+      semestersQuery.isError || 
+      profileQuery.isError || 
+      timetableQuery.isError ||
+      attendanceQuery.isError ||
+      marksQuery.isError ||
+      gradesQuery.isError ||
+      examsQuery.isError ||
+      calendarQuery.isError
+    ) {
+      const now = Date.now();
+      if (now - lastRestorationTime.current < 12000) {
+        console.warn("Restoration attempt rate limit hit. Logging out...");
+        setIsLoggedIn(false);
+        setActiveUser('');
+        localStorage.removeItem('vtop_session_id');
+        setMessage({ text: 'Session expired. Please log in again.', type: 'error' });
+        setShowManualForm(true);
+        startLoginFlow();
+        return;
+      }
+      lastRestorationTime.current = now;
+
+      console.warn("API request failed. Session likely expired. Attempting automatic restoration...");
       localStorage.removeItem('vtop_session_id');
-      setMessage({ text: 'Session expired. Please log in again.', type: 'error' });
-      setShowManualForm(true);
-      startLoginFlow();
+      setSessionId(null);
+
+      if (hasSavedCreds) {
+        setMessage({ text: 'Session expired. Restoring VTOP session silently...', type: 'info' });
+        startLoginFlow(true);
+      } else {
+        setIsLoggedIn(false);
+        setActiveUser('');
+        setMessage({ text: 'Session expired. Please log in again.', type: 'error' });
+        setShowManualForm(true);
+        startLoginFlow();
+      }
     }
-  }, [semestersQuery.isError, profileQuery.isError, timetableQuery.isError]);
+  }, [
+    semestersQuery.isError, 
+    profileQuery.isError, 
+    timetableQuery.isError,
+    attendanceQuery.isError,
+    marksQuery.isError,
+    gradesQuery.isError,
+    examsQuery.isError,
+    calendarQuery.isError
+  ]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -882,24 +948,32 @@ function VtopLoginDashboard() {
         </div>
       ) : (
         /* ================= STUDENT DASHBOARD INTERFACE ================= */
-        <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 relative bg-bgPrimary text-textMain">
           
           {/* Mobile Header Bar */}
-          <div className="md:hidden flex items-center justify-between px-6 py-4 bg-white dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800 shrink-0">
+          <div className="md:hidden flex items-center justify-between px-6 py-4 bg-bgCard border-b border-borderColor shrink-0">
             <div className="flex items-center gap-3">
               <span className="text-xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
               <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
             </div>
             <button 
               onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-              className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg outline-none cursor-pointer"
+              className="p-2 text-textMuted hover:bg-bgPrimary rounded-lg outline-none cursor-pointer"
             >
               <Menu className="h-6 w-6" />
             </button>
           </div>
 
+          {/* Mobile Overlay Backdrop */}
+          {isMobileSidebarOpen && (
+            <div
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300"
+            />
+          )}
+
           {/* SIDEBAR NAVIGATION */}
-          <aside className={`w-full md:w-64 bg-white dark:bg-neutral-900 border-b md:border-b-0 md:border-r border-slate-200 dark:border-neutral-800 flex flex-col justify-between shrink-0 ${isMobileSidebarOpen ? 'flex' : 'hidden md:flex'}`}>
+          <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-bgSidebar border-r border-borderColor flex flex-col justify-between shrink-0 transform transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 md:static md:flex'}`}>
             <div className="p-6 flex-1 overflow-y-auto min-h-0">
               {/* App logo inside sidebar */}
               <div className="hidden md:flex items-center gap-3 mb-8">
@@ -910,10 +984,19 @@ function VtopLoginDashboard() {
               {/* Navigation Items */}
               <nav className="space-y-1">
                 <button
+                  onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'dashboard'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-textMuted hover:bg-bgPrimary'
+                    }`}
+                >
+                  <LayoutDashboard className="h-4 w-4" /> Dashboard
+                </button>
+                <button
                   onClick={() => { setActiveTab('profile'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'profile'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <UserIcon className="h-4 w-4" /> Student Profile
@@ -922,7 +1005,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('timetable'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'timetable'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <Clock className="h-4 w-4" /> Timetable Grid
@@ -931,7 +1014,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('attendance'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'attendance'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <UserCheck className="h-4 w-4" /> Class Attendance
@@ -940,7 +1023,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('marks'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'marks'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <FileText className="h-4 w-4" /> Course Marks
@@ -949,7 +1032,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('grades'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'grades'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <Award className="h-4 w-4" /> Final Grades
@@ -958,7 +1041,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('exams'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'exams'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <CalendarIcon className="h-4 w-4" /> Exam Schedule
@@ -967,7 +1050,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('calendar'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'calendar'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <CalendarIcon className="h-4 w-4" /> Academic Calendar
@@ -976,7 +1059,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('credentials'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'credentials'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <Lock className="h-4 w-4" /> WiFi & Systems
@@ -985,7 +1068,7 @@ function VtopLoginDashboard() {
                   onClick={() => { setActiveTab('debug'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'debug'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
+                      : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
                   <Bug className="h-4 w-4" /> Debug Window
@@ -1048,833 +1131,71 @@ function VtopLoginDashboard() {
               </button>
             </div>
 
-            {/* TAB VIEWS IN ACTION */}
+            {/* TAB VIEWS */}
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                attendanceQuery={attendanceQuery}
+                timetableQuery={timetableQuery}
+                profileQuery={profileQuery}
+                TIMETABLE_SLOTS={TIMETABLE_SLOTS}
+              />
+            )}
 
             {/* 1. PROFILE VIEW */}
             {activeTab === 'profile' && (
-              <div className="space-y-6">
-                {profileQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : profileQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to load student profile details. Please refresh.</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Left profile block */}
-                    <div className="md:col-span-1 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 text-center space-y-4 shadow-sm">
-                      <div className="h-28 w-28 rounded-full bg-slate-100 dark:bg-black border border-slate-200 dark:border-neutral-800 overflow-hidden mx-auto relative flex items-center justify-center">
-                        {profileQuery.data?.personal?.photo_url ? (
-                          <img
-                            src={profileQuery.data.personal.photo_url}
-                            alt="Student"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <UserIcon className="h-12 w-12 text-slate-400" />
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold">{profileQuery.data?.personal?.name || 'N/A'}</h3>
-                        <p className="text-xs text-blue-600 dark:text-blue-500 font-mono font-bold mt-1">
-                          {profileQuery.data?.educational?.reg_no || 'N/A'}
-                        </p>
-                      </div>
-                      <div className="pt-4 border-t border-slate-100 dark:border-neutral-800 text-left space-y-2.5 text-xs">
-                        <div className="flex justify-between"><span className="text-slate-400 font-medium">Application No</span><span className="font-semibold">{profileQuery.data?.personal?.app_no}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-400 font-medium">Blood Group</span><span className="font-semibold">{profileQuery.data?.personal?.blood_group}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-400 font-medium">DOB</span><span className="font-semibold">{profileQuery.data?.personal?.dob}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-400 font-medium">Native State</span><span className="font-semibold">{profileQuery.data?.personal?.native_state}</span></div>
-                      </div>
-                    </div>
-
-                    {/* Right details grids */}
-                    <div className="md:col-span-2 space-y-6">
-                      {/* Academic & Proctor Info */}
-                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4">
-                        <h3 className="text-sm font-bold border-b border-slate-100 dark:border-neutral-800 pb-2 text-blue-600 dark:text-blue-500">Academic Details</h3>
-                        <div className="grid grid-cols-2 gap-4 text-xs">
-                          <div><div className="text-slate-400 mb-1">School</div><div className="font-bold">{profileQuery.data?.educational?.school}</div></div>
-                          <div><div className="text-slate-400 mb-1">Board</div><div className="font-bold">{profileQuery.data?.educational?.board}</div></div>
-                          <div><div className="text-slate-400 mb-1">Medium</div><div className="font-bold">{profileQuery.data?.educational?.medium}</div></div>
-                          <div><div className="text-slate-400 mb-1">Passing Year</div><div className="font-bold">{profileQuery.data?.educational?.year_passing}</div></div>
-                        </div>
-                      </div>
-
-                      {/* Proctor details */}
-                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4">
-                        <h3 className="text-sm font-bold border-b border-slate-100 dark:border-neutral-800 pb-2 text-blue-600 dark:text-blue-500">Proctor Details</h3>
-                        <div className="grid grid-cols-2 gap-4 text-xs">
-                          <div><div className="text-slate-400 mb-1">Proctor Name</div><div className="font-bold">{profileQuery.data?.proctor?.name}</div></div>
-                          <div><div className="text-slate-400 mb-1">Designation</div><div className="font-bold">{profileQuery.data?.proctor?.designation}</div></div>
-                          <div><div className="text-slate-400 mb-1">Cabin</div><div className="font-bold font-mono">{profileQuery.data?.proctor?.cabin}</div></div>
-                          <div><div className="text-slate-400 mb-1">Email</div><div className="font-bold truncate select-all">{profileQuery.data?.proctor?.email}</div></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <ProfileView profileQuery={profileQuery} />
             )}
 
             {/* 2. TIMETABLE VIEW */}
-            {/* 2. TIMETABLE VIEW */}
-            {activeTab === 'timetable' && (() => {
-              // Lookup function to support colSpans and find course detail for slot
-              const getClassForSlot = (day: string, slotIndex: number) => {
-                const timetable = timetableQuery.data?.timetable?.[day];
-                if (!timetable) return null;
-
-                const currentSlot = TIMETABLE_SLOTS[slotIndex];
-                if (timetable[currentSlot.key]) {
-                  return { data: timetable[currentSlot.key], isStart: true };
-                }
-
-                // Check previous slots to see if they span into this one
-                for (let i = slotIndex - 1; i >= 0; i--) {
-                  const prevSlot = TIMETABLE_SLOTS[i];
-                  if (prevSlot.id === 'break') continue;
-                  const prevData = timetable[prevSlot.key];
-                  if (prevData && prevData.rowspan) {
-                    let slotsCovered = 0;
-                    let checkIdx = i;
-                    while (slotsCovered < prevData.rowspan && checkIdx < TIMETABLE_SLOTS.length) {
-                      if (TIMETABLE_SLOTS[checkIdx].id !== 'break') {
-                        slotsCovered++;
-                      }
-                      if (checkIdx === slotIndex) {
-                        return { data: prevData, isStart: false };
-                      }
-                      checkIdx++;
-                    }
-                  }
-                }
-
-                return null;
-              };
-
-              return (
-                <div className="space-y-6">
-                  {timetableQuery.isPending ? (
-                    <div className="h-64 flex items-center justify-center">
-                      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                    </div>
-                  ) : timetableQuery.isError ? (
-                    <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                      <AlertTriangle className="h-5 w-5 shrink-0" />
-                      <span>Failed to load student timetable. Please select another semester or check connection.</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {/* Courses Credit Stat Bar */}
-                      <div className="p-4 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl flex justify-between items-center shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-500" />
-                          <span className="text-sm font-semibold">Registered Credits</span>
-                        </div>
-                        <div className="text-lg font-black text-blue-600 dark:text-blue-500">{timetableQuery.data?.total_credits}</div>
-                      </div>
-
-                      {/* Desktop Timetable grid */}
-                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl overflow-hidden shadow-sm">
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse text-left text-xs table-fixed min-w-[1200px]">
-                            <thead>
-                              <tr className="bg-slate-100 dark:bg-black border-b border-slate-200 dark:border-neutral-800">
-                                <th className="p-4 font-bold w-24 text-center border-r border-slate-200 dark:border-neutral-800">Day</th>
-                                {TIMETABLE_SLOTS.map((slot) => (
-                                  <th key={slot.key} className="p-3 text-center border-r border-slate-200 dark:border-neutral-800 w-32 min-w-[120px]">
-                                    <div className="font-extrabold text-[11px] text-slate-700 dark:text-slate-300">{slot.name}</div>
-                                    <div className="text-[9px] text-slate-400 dark:text-neutral-500 font-mono mt-0.5 leading-tight">
-                                      {slot.id === 'break' ? (
-                                        <span>13:25 - 14:00</span>
-                                      ) : (
-                                        <>
-                                          <span>T: {slot.theoryTime.split(' - ')[0]}</span>
-                                          <br />
-                                          <span>L: {slot.labTime.split(' - ')[0]}</span>
-                                        </>
-                                      )}
-                                    </div>
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {['MON', 'TUE', 'WED', 'THU', 'FRI'].map(day => (
-                                <tr key={day} className="border-b border-slate-100 dark:border-neutral-800/40 hover:bg-slate-50/50 dark:hover:bg-neutral-800/20">
-                                  <td className="p-4 font-bold text-center bg-slate-50/40 dark:bg-black/35 border-r border-slate-200 dark:border-neutral-800">{day}</td>
-                                  {TIMETABLE_SLOTS.map((slot, slotIdx) => {
-                                    if (slot.id === 'break') {
-                                      return (
-                                        <td key={slot.key} className="p-2 text-center bg-slate-50/20 dark:bg-black/10 text-slate-400 font-semibold border-r border-slate-200 dark:border-neutral-800">
-                                          LUNCH
-                                        </td>
-                                      );
-                                    }
-
-                                    const slotClass = getClassForSlot(day, slotIdx);
-
-                                    // Skip duplicate td rendering for spanned slots
-                                    if (slotClass && !slotClass.isStart) {
-                                      return null;
-                                    }
-
-                                    const cellData = slotClass?.data;
-                                    const isLab = cellData && (cellData.type?.includes('L') || cellData.type?.includes('Lab'));
-                                    const activeTime = cellData ? (isLab ? slot.labTime : slot.theoryTime) : '';
-
-                                    return (
-                                      <td 
-                                        key={slot.key} 
-                                        colSpan={cellData?.rowspan || 1}
-                                        className="p-2 border-r border-slate-200 dark:border-neutral-800 text-center align-middle"
-                                      >
-                                        {cellData ? (
-                                          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-2 rounded-xl space-y-1">
-                                            <div className="font-extrabold text-[10px] text-blue-600 dark:text-blue-500">{cellData.code}</div>
-                                            <div className="text-[9px] text-slate-700 dark:text-slate-300 font-bold truncate" title={cellData.title}>{cellData.title}</div>
-                                            <div className="text-[9px] text-slate-400 font-mono">{cellData.venue}</div>
-                                            <div className="text-[8px] text-slate-400 font-mono mt-0.5 bg-slate-100 dark:bg-neutral-800/60 px-1 py-0.5 rounded inline-block">{activeTime}</div>
-                                          </div>
-                                        ) : (
-                                          <span className="text-slate-300 dark:text-neutral-800 font-bold">-</span>
-                                        )}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+            {activeTab === 'timetable' && (
+              <TimetableView
+                timetableQuery={timetableQuery}
+                TIMETABLE_SLOTS={TIMETABLE_SLOTS}
+              />
+            )}
 
             {/* 3. ATTENDANCE VIEW */}
             {activeTab === 'attendance' && (
-              <div className="space-y-6">
-                {attendanceQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : attendanceQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to fetch attendance data. Please verify your connection.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Main Summary cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {attendanceQuery.data.map((course: any, idx: number) => {
-                        const percent = parseFloat(course.percentage) || 0;
-                        const isSafe = percent >= 75;
-
-                        return (
-                          <div
-                            key={idx}
-                            className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm flex flex-col justify-between"
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 font-bold px-2 py-0.5 rounded text-slate-500">{course.course_code}</span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isSafe
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
-                                    : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400'
-                                  }`}>
-                                  {isSafe ? 'Attendance Safe' : 'Below 75%'}
-                                </span>
-                              </div>
-                              <h4 className="text-sm font-bold line-clamp-1 text-slate-800 dark:text-slate-100" title={course.course_title}>{course.course_title}</h4>
-                              <p className="text-xs text-slate-400">{course.faculty}</p>
-
-                              <div className="pt-2 flex justify-between items-end text-xs">
-                                <div>
-                                  <span className="text-slate-400">Class Hours: </span>
-                                  <span className="font-bold">{course.attended_classes}</span>
-                                  <span className="text-slate-400"> / </span>
-                                  <span className="font-bold">{course.total_classes}</span>
-                                </div>
-                                <div className="text-base font-black text-blue-600 dark:text-blue-500">{course.percentage}%</div>
-                              </div>
-
-                              {/* Progress bar */}
-                              <div className="w-full bg-slate-100 dark:bg-neutral-800 h-2 rounded-full overflow-hidden mt-1">
-                                <div
-                                  className={`h-full rounded-full ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                                  style={{ width: `${percent}%` }}
-                                />
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={() => setSelectedAttendanceCourse(course)}
-                              className="w-full py-2.5 mt-4 text-xs font-semibold bg-slate-50 hover:bg-slate-100 dark:bg-black dark:hover:bg-neutral-800 border border-slate-200 dark:border-neutral-800 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
-                            >
-                              View Attendance Log <ChevronRight className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <AttendanceView
+                attendanceQuery={attendanceQuery}
+                selectedAttendanceCourse={selectedAttendanceCourse}
+                setSelectedAttendanceCourse={setSelectedAttendanceCourse}
+                attendanceDetailQuery={attendanceDetailQuery}
+              />
             )}
 
             {/* 4. MARKS VIEW */}
             {activeTab === 'marks' && (
-              <div className="space-y-6">
-                {marksQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : marksQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to fetch course marks. Please refresh.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Estimated Consolidated Scores summary (if combined scores exist) */}
-                    {marksQuery.data?.combined_scores?.length > 0 && (
-                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4">
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-500" />
-                          <h3 className="text-sm font-bold">Aggregated Subject Performance</h3>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {marksQuery.data.combined_scores.map((cs: any, idx: number) => (
-                            <div key={idx} className="p-4 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl flex justify-between items-center text-xs">
-                              <div>
-                                <span className="font-extrabold text-blue-600 dark:text-blue-500">{cs.code}</span>
-                                <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{cs.title}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-black text-slate-800 dark:text-slate-100">{cs.converted_score} / {cs.converted_max}</div>
-                                <div className="text-[9px] text-slate-400">Total Credits: {cs.total_credits}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Raw assessments tables list */}
-                    <div className="space-y-6">
-                      {marksQuery.data?.courses?.map((course: any, idx: number) => (
-                        <div key={idx} className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4">
-                          <div className="flex justify-between items-start border-b border-slate-100 dark:border-neutral-800 pb-3">
-                            <div>
-                              <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 font-bold px-2 py-0.5 rounded text-slate-500 uppercase">{course.code} ({course.type})</span>
-                              <h4 className="text-base font-bold text-slate-800 dark:text-slate-100 mt-1.5">{course.title}</h4>
-                              <p className="text-xs text-slate-400 mt-0.5">{course.faculty}</p>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-[10px] text-slate-400 font-medium">Scored / Target Weightage</span>
-                              <div className="text-lg font-black text-blue-600 dark:text-blue-500">{course.total_obtained} / {course.total_max_weightage}</div>
-                            </div>
-                          </div>
-
-                          {/* Assessments Table */}
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs border-collapse">
-                              <thead>
-                                <tr className="text-slate-400 font-bold border-b border-slate-100 dark:border-neutral-800/40">
-                                  <th className="py-2.5">Assessment Name</th>
-                                  <th className="py-2.5 text-center">Max Mark</th>
-                                  <th className="py-2.5 text-center">Scored</th>
-                                  <th className="py-2.5 text-center">Weightage %</th>
-                                  <th className="py-2.5 text-center">Earned Wt</th>
-                                  <th className="py-2.5 text-center">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {course.assessments.map((a: any, aIdx: number) => (
-                                  <tr key={aIdx} className="border-b border-slate-100/50 dark:border-neutral-800/20 hover:bg-slate-50/40 dark:hover:bg-neutral-800/10">
-                                    <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200">{a.title}</td>
-                                    <td className="py-2.5 text-center">{a.max_mark}</td>
-                                    <td className="py-2.5 text-center font-bold">{a.scored || '-'}</td>
-                                    <td className="py-2.5 text-center">{a.weightage_pct}%</td>
-                                    <td className="py-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{a.weightage_mark || '-'}</td>
-                                    <td className="py-2.5 text-center">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${a.status.toLowerCase() === 'present'
-                                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
-                                          : 'bg-slate-100 dark:bg-neutral-800 text-slate-500'
-                                        }`}>{a.status}</span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <MarksView marksQuery={marksQuery} />
             )}
 
             {/* 5. GRADES VIEW */}
             {activeTab === 'grades' && (
-              <div className="space-y-6">
-                {gradesQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : gradesQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to fetch GPA / Course Grade details. Please refresh.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* GPA Top Banner */}
-                    {gradesQuery.data?.gpa && (
-                      <div className="p-6 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl flex justify-between items-center shadow-sm">
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Academic Merit</span>
-                          <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Cumulative Semester GPA</h3>
-                        </div>
-                        <div className="text-3xl font-black text-blue-600 dark:text-blue-500">{gradesQuery.data.gpa}</div>
-                      </div>
-                    )}
-
-                    {/* Grades Table */}
-                    <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl overflow-hidden shadow-sm">
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse text-left text-xs">
-                          <thead>
-                            <tr className="bg-slate-100 dark:bg-black border-b border-slate-200 dark:border-neutral-800">
-                              <th className="p-4 font-bold">Course Info</th>
-                              <th className="p-4 font-bold text-center">Type</th>
-                              <th className="p-4 font-bold text-center">Credits</th>
-                              <th className="p-4 font-bold text-center">Total Marks</th>
-                              <th className="p-4 font-bold text-center">Grade Letter</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {gradesQuery.data?.grades?.map((g: any, index: number) => (
-                              <tr key={index} className="border-b border-slate-100 dark:border-neutral-800/40 hover:bg-slate-50/50 dark:hover:bg-neutral-800/20">
-                                <td className="p-4">
-                                  <div className="font-extrabold text-blue-600 dark:text-blue-500">{g.code}</div>
-                                  <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{g.title}</div>
-                                </td>
-                                <td className="p-4 text-center text-slate-400">{g.type}</td>
-                                <td className="p-4 text-center font-semibold">{g.credits}</td>
-                                <td className="p-4 text-center font-bold">{g.total || '-'}</td>
-                                <td className="p-4 text-center">
-                                  <span className="text-sm font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 px-3 py-1 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                                    {g.grade || '-'}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <GradesView gradesQuery={gradesQuery} />
             )}
 
             {/* 6. EXAMS VIEW */}
             {activeTab === 'exams' && (
-              <div className="space-y-6">
-                {examsQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : examsQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>No exam schedules found or session timed out. Please retry.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {examsQuery.data.length === 0 ? (
-                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-8 text-center space-y-2 shadow-sm">
-                        <CalendarIcon className="h-12 w-12 text-slate-400 mx-auto" />
-                        <h4 className="font-bold">No Exams Scheduled</h4>
-                        <p className="text-xs text-slate-400">There are currently no active exam schedules for this semester.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-6">
-                        {examsQuery.data.map((exam: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6"
-                          >
-                            <div className="space-y-3 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] bg-blue-50 dark:bg-blue-950/25 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded border border-blue-100 dark:border-blue-900/30">{exam.exam_type}</span>
-                                <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 text-slate-500 font-bold px-2 py-0.5 rounded">{exam.course_code}</span>
-                              </div>
-                              <h4 className="text-base font-bold text-slate-800 dark:text-slate-100">{exam.course_title}</h4>
-
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 text-xs">
-                                <div><div className="text-slate-400 mb-0.5">Date</div><div className="font-bold">{exam.exam_date}</div></div>
-                                <div><div className="text-slate-400 mb-0.5">Session</div><div className="font-bold font-mono">{exam.exam_session}</div></div>
-                                <div><div className="text-slate-400 mb-0.5">Time</div><div className="font-bold">{exam.exam_time}</div></div>
-                                <div><div className="text-slate-400 mb-0.5 font-bold text-blue-600 dark:text-blue-500">Venue</div><div className="font-extrabold font-mono text-blue-600 dark:text-blue-500">{exam.venue}</div></div>
-                              </div>
-                            </div>
-
-                            {/* Seating Location info box */}
-                            <div className="bg-slate-50 dark:bg-black border border-slate-150 dark:border-neutral-800/80 rounded-2xl p-4 md:w-56 shrink-0 flex flex-col justify-center space-y-2.5 text-xs text-center">
-                              <div>
-                                <span className="text-slate-400 font-semibold">Seat Number</span>
-                                <div className="text-lg font-black text-slate-800 dark:text-slate-100 mt-0.5">{exam.seat_no || 'N/A'}</div>
-                              </div>
-                              <div className="border-t border-slate-200 dark:border-neutral-800 pt-2">
-                                <span className="text-slate-400 font-semibold">Room / Location</span>
-                                <div className="font-bold text-blue-600 dark:text-blue-400 mt-0.5">{exam.seat_location || 'N/A'}</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <ExamsView examsQuery={examsQuery} />
             )}
 
             {/* 7. CALENDAR VIEW */}
             {activeTab === 'calendar' && (
-              <div className="space-y-6">
-                {calendarQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : calendarQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to fetch Academic Calendar. Please retry.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Header Controls for Month */}
-                    <div className="flex items-center justify-between bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl p-4 shadow-sm">
-                      <button
-                        onClick={() => {
-                          const prev = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
-                          setCalendarDate(prev);
-                        }}
-                        className="px-3 py-1.5 text-xs font-bold bg-slate-50 hover:bg-slate-100 dark:bg-black dark:hover:bg-neutral-800 border border-slate-200 dark:border-neutral-800 rounded-lg cursor-pointer text-slate-800 dark:text-slate-200"
-                      >
-                        ◀ Previous Month
-                      </button>
-                      <h3 className="font-extrabold text-blue-600 dark:text-blue-500 text-sm md:text-base">
-                        {calendarQuery.data?.month_title || 'Calendar Month'}
-                      </h3>
-                      <button
-                        onClick={() => {
-                          const next = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
-                          setCalendarDate(next);
-                        }}
-                        className="px-3 py-1.5 text-xs font-bold bg-slate-50 hover:bg-slate-100 dark:bg-black dark:hover:bg-neutral-800 border border-slate-200 dark:border-neutral-800 rounded-lg cursor-pointer text-slate-800 dark:text-slate-200"
-                      >
-                        Next Month ▶
-                      </button>
-                    </div>
-
-                    {/* Calendar Grid */}
-                    <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl overflow-hidden shadow-sm">
-                      <div className="grid grid-cols-7 border-b border-slate-200 dark:border-neutral-800 bg-slate-100 dark:bg-black font-bold text-center text-xs text-slate-500 py-3">
-                        <div>Sun</div>
-                        <div>Mon</div>
-                        <div>Tue</div>
-                        <div>Wed</div>
-                        <div>Thu</div>
-                        <div>Fri</div>
-                        <div>Sat</div>
-                      </div>
-                      <div className="grid grid-cols-7 auto-rows-[90px] md:auto-rows-[110px] divide-x divide-y divide-slate-100 dark:divide-neutral-800/40 border-l border-t border-slate-100 dark:divide-neutral-800/40">
-                        {calendarQuery.data?.days?.map((dayObj: any, index: number) => {
-                          const isPadding = dayObj.status === 'padding';
-                          const isHoliday = dayObj.status === 'holiday';
-                          const isWorking = dayObj.status === 'working';
-                          const isDayOrder = dayObj.status === 'day_order';
-
-                          let bgClass = 'bg-transparent';
-                          if (isHoliday) bgClass = 'bg-rose-50/20 dark:bg-rose-950/5';
-                          else if (isWorking) bgClass = 'bg-emerald-50/20 dark:bg-emerald-950/5';
-                          else if (isDayOrder) bgClass = 'bg-amber-50/20 dark:bg-amber-950/5';
-
-                          return (
-                            <div key={index} className={`p-2 flex flex-col justify-between overflow-hidden text-left relative ${bgClass}`}>
-                              {!isPadding && (
-                                <>
-                                  <div className="flex justify-between items-center">
-                                    <span className={`text-xs font-extrabold ${isHoliday ? 'text-rose-600 dark:text-rose-400' :
-                                        isWorking ? 'text-emerald-600 dark:text-emerald-400' :
-                                          isDayOrder ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
-                                      }`}>
-                                      {dayObj.day}
-                                    </span>
-                                    {isDayOrder && (
-                                      <span className="text-[8px] font-bold text-amber-600 dark:text-amber-400 uppercase">Day Ord</span>
-                                    )}
-                                  </div>
-                                  <div className="flex-1 mt-1 flex flex-col justify-end space-y-0.5 max-h-[50px] overflow-y-auto">
-                                    {dayObj.events?.map((e: any, eIdx: number) => (
-                                      <div
-                                        key={eIdx}
-                                        className={`text-[9px] truncate px-1 py-0.5 rounded-sm font-semibold ${isHoliday ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' :
-                                            isWorking ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' :
-                                              isDayOrder ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' :
-                                                'bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-slate-300'
-                                          }`}
-                                        title={e.text}
-                                      >
-                                        {e.text}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <CalendarView
+                calendarQuery={calendarQuery}
+                calendarDate={calendarDate}
+                setCalendarDate={setCalendarDate}
+              />
             )}
 
             {/* 8. CREDENTIALS VIEW */}
             {activeTab === 'credentials' && (
-              <div className="space-y-6">
-                {credentialsQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : credentialsQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to fetch WiFi and Proctor System credentials from VTOP.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Intro text */}
-                    <div className="p-5 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl shadow-sm space-y-1.5">
-                      <h3 className="text-sm font-bold text-blue-600 dark:text-blue-500">VTOP Stored System Logins</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        These credentials are automatically registered by Chennai Campus for your official lab computers, hostel WiFi access, and related university networks.
-                      </p>
-                    </div>
-
-                    {/* WiFi / Account Credentials */}
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">WiFi & System Accounts</h4>
-                      {credentialsQuery.data?.accounts?.length === 0 ? (
-                        <div className="text-xs text-slate-400 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl p-4 text-center">
-                          No general system accounts found.
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {credentialsQuery.data?.accounts?.map((acc: any, index: number) => (
-                            <div
-                              key={index}
-                              className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4 relative overflow-hidden"
-                            >
-                              <div className="flex justify-between items-start border-b border-slate-100 dark:border-neutral-800 pb-3">
-                                <div>
-                                  <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 font-bold px-2 py-0.5 rounded text-slate-500 uppercase">Account</span>
-                                  <h4 className="text-sm font-bold mt-1 text-slate-800 dark:text-slate-100">{acc.account}</h4>
-                                </div>
-                                {acc.url && acc.url !== '#' && (
-                                  <a
-                                    href={acc.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-[10px] font-bold text-blue-600 hover:underline"
-                                  >
-                                    Login Portal ↗
-                                  </a>
-                                )}
-                              </div>
-                              <div className="space-y-2 text-xs">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-slate-400">Username</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-bold select-all">{acc.username}</span>
-                                    <button
-                                      onClick={() => navigator.clipboard.writeText(acc.username)}
-                                      className="text-[10px] text-blue-600 dark:text-blue-500 hover:underline active:text-blue-850 cursor-pointer"
-                                    >
-                                      Copy
-                                    </button>
-                                  </div>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-slate-400">Password</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-bold select-all">{acc.password}</span>
-                                    <button
-                                      onClick={() => navigator.clipboard.writeText(acc.password)}
-                                      className="text-[10px] text-blue-600 dark:text-blue-500 hover:underline active:text-blue-850 cursor-pointer"
-                                    >
-                                      Copy
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Special Exam Credentials */}
-                    <div className="space-y-4 pt-2">
-                      <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">Exam Network Credentials</h4>
-                      {credentialsQuery.data?.exams?.length === 0 ? (
-                        <div className="text-xs text-slate-400 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl p-4 text-center">
-                          No active exam credentials found.
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {credentialsQuery.data?.exams?.map((ex: any, index: number) => (
-                            <div
-                              key={index}
-                              className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4"
-                            >
-                              <div className="flex justify-between items-start border-b border-slate-100 dark:border-neutral-800 pb-3">
-                                <div>
-                                  <span className="text-[10px] bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-bold px-2 py-0.5 rounded uppercase">Exam Seat</span>
-                                  <h4 className="text-sm font-bold mt-1 text-slate-800 dark:text-slate-100">{ex.account}</h4>
-                                </div>
-                                <div className="text-right text-[10px] text-slate-400">
-                                  Seat Number: <strong className="text-slate-700 dark:text-slate-300 font-mono">{ex.seat}</strong>
-                                </div>
-                              </div>
-                              <div className="space-y-2 text-xs">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-slate-400">Venue & Date</span>
-                                  <span className="font-bold">{ex.venue_date}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-slate-400">Username</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-bold select-all">{ex.username}</span>
-                                    <button
-                                      onClick={() => navigator.clipboard.writeText(ex.username)}
-                                      className="text-[10px] text-blue-600 dark:text-blue-500 hover:underline cursor-pointer"
-                                    >
-                                      Copy
-                                    </button>
-                                  </div>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-slate-400">Password</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-bold select-all">{ex.password}</span>
-                                    <button
-                                      onClick={() => navigator.clipboard.writeText(ex.password)}
-                                      className="text-[10px] text-blue-600 dark:text-blue-500 hover:underline cursor-pointer"
-                                    >
-                                      Copy
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-                )}
-              </div>
+              <CredentialsView credentialsQuery={credentialsQuery} />
             )}
 
             {/* 9. DEBUG WINDOW VIEW */}
             {activeTab === 'debug' && (
-              <div className="space-y-6">
-                {debugQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : debugQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2 animate-fade-in">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to load debug details from backend. Ensure your VTOP session is active.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6 animate-fade-in">
-                    {/* Header */}
-                    <div className="p-5 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl shadow-sm space-y-2">
-                      <h3 className="text-sm font-bold text-blue-600 dark:text-blue-500">VTOP Session Credentials (Debug)</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Below are the active session variables parsed by the backend after successful login, along with the raw HTML retrieved from the timetable menu route.
-                      </p>
-                    </div>
-
-                    {/* Meta details */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-3">
-                        <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 font-bold px-2 py-0.5 rounded text-slate-500 uppercase">Authorized ID</span>
-                        <div className="text-base font-mono font-extrabold text-slate-800 dark:text-slate-100 select-all">
-                          {debugQuery.data?.authorizedId || 'N/A'}
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-relaxed">
-                          This is the internal VTOP student roll code. Note that it might be different than your login ID.
-                        </p>
-                      </div>
-
-                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-3">
-                        <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 font-bold px-2 py-0.5 rounded text-slate-500 uppercase">Active CSRF Token</span>
-                        <div className="text-base font-mono font-extrabold text-slate-800 dark:text-slate-100 select-all truncate" title={debugQuery.data?.csrfToken}>
-                          {debugQuery.data?.csrfToken || 'N/A'}
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-relaxed">
-                          The active cross-site request forgery protection token extracted from the /content page.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Raw response html */}
-                    <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm space-y-4">
-                      <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-                        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Timetable Endpoint Response HTML</h4>
-                        <button
-                          onClick={() => {
-                            if (debugQuery.data?.rawHtml) {
-                              navigator.clipboard.writeText(debugQuery.data.rawHtml);
-                            }
-                          }}
-                          className="text-xs font-semibold text-blue-600 dark:text-blue-500 hover:underline cursor-pointer"
-                        >
-                          Copy Full HTML
-                        </button>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        HTML output returned from requesting <code className="bg-slate-100 dark:bg-black font-mono px-1 rounded">academics/common/StudentTimeTableChn</code>:
-                      </p>
-                      <div className="bg-slate-50 dark:bg-black border border-slate-150 dark:border-neutral-800 rounded-2xl p-4 overflow-x-auto max-h-[400px] overflow-y-auto">
-                        <pre className="text-[10px] font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap select-all">
-                          {debugQuery.data?.rawHtml || 'No HTML content returned.'}
-                        </pre>
-                      </div>
-                    </div>
-
-                  </div>
-                )}
-              </div>
+              <DebugView debugQuery={debugQuery} />
             )}
 
           </main>

@@ -15,6 +15,13 @@ export default {
     },
     extend: {
       colors: {
+        bgPrimary: "var(--bg-primary)",
+        bgCard: "var(--bg-card)",
+        bgSidebar: "var(--bg-sidebar)",
+        textMain: "var(--text-main)",
+        textMuted: "var(--text-muted)",
+        accentColor: "var(--accent)",
+        borderColor: "var(--border)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

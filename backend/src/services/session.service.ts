@@ -7,6 +7,8 @@ export interface VtopSession {
   username?: string;
   authorizedId?: string;
   lastAccessed: number;
+  semestersList?: any[];
+  calendarCache?: Record<string, string>;
 }
 
 class SessionService {

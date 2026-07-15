@@ -350,36 +350,94 @@ export const getProfile = async (req: Request, res: Response) => {
   }
 };
 
+const hasMeaningfulEvents = (calendarData: any): boolean => {
+  if (!calendarData || !Array.isArray(calendarData.days)) {
+    return false;
+  }
+  for (const day of calendarData.days) {
+    if (day && Array.isArray(day.events) && day.events.length > 0) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const getClassGroupId = async (client: any, authorizedId: string, csrfToken: string, semesterSubId: string): Promise<string> => {
+  let selectedGroup = 'ALL';
+  try {
+    const ttPayload = new URLSearchParams();
+    ttPayload.append('authorizedID', authorizedId);
+    ttPayload.append('_csrf', csrfToken);
+    ttPayload.append('semesterSubId', semesterSubId);
+
+    const ttRes = await client.post('academics/common/processViewTimeTable', ttPayload, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+    const pattern = /[A-Z0-9\+]+-[A-Z0-9]+-[A-Z]+-[A-Z0-9\.-]+-[A-Z0-9\.-]+-([A-Z0-9]+)/;
+    const match = pattern.exec(ttRes.data);
+    if (match) {
+      selectedGroup = match[1];
+    }
+  } catch (err) {
+    console.warn('Failed to extract Class Group ID, falling back to ALL:', err);
+  }
+  return selectedGroup;
+};
+
+const fetchSemestersList = async (client: any, authorizedId: string, csrfToken: string): Promise<any[]> => {
+  try {
+    const payload = new URLSearchParams();
+    payload.append('authorizedID', authorizedId);
+    payload.append('_csrf', csrfToken);
+    payload.append('verifyMenu', 'true');
+
+    const response = await client.post('academics/common/StudentTimeTableChn', payload, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(response.data);
+    const semSelect = $('select#semesterSubId');
+    const semesters: any[] = [];
+    if (semSelect.length) {
+      semSelect.find('option').each((_: any, opt: any) => {
+        const val = $(opt).attr('value');
+        if (val) {
+          semesters.push({ id: val, name: $(opt).text().trim() });
+        }
+      });
+    }
+    return semesters;
+  } catch (err) {
+    console.error('fetchSemestersList failed:', err);
+    return [];
+  }
+};
+
+import { sessionService } from '../services/session.service';
+
 export const getCalendar = async (req: Request, res: Response) => {
   const { session_id, semesterSubId, calDate } = req.body;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
 
-    // 1. Get Class Group ID for this semester
-    let selectedGroup = 'ALL';
-    try {
-      const ttPayload = new URLSearchParams();
-      ttPayload.append('authorizedID', authorizedId);
-      ttPayload.append('_csrf', csrfToken);
-      ttPayload.append('semesterSubId', semesterSubId);
-
-      const ttRes = await client.post('processViewTimeTable', ttPayload, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      });
-      const pattern = /[A-Z0-9\+]+-[A-Z0-9]+-[A-Z]+-[A-Z0-9\.-]+-[A-Z0-9\.-]+-([A-Z0-9]+)/;
-      const match = pattern.exec(ttRes.data);
-      if (match) {
-        selectedGroup = match[1];
-      }
-    } catch (err) {
-      console.warn('Failed to extract Class Group ID, falling back to ALL:', err);
+    const session = sessionService.getSession(session_id);
+    if (!session) {
+      throw new Error('Session not found in service.');
     }
 
-    // 2. Fetch Calendar Date
+    // --- 0. Fetch & Cache Semester List ---
+    if (!session.semestersList || session.semestersList.length === 0) {
+      const semesters = await fetchSemestersList(client, authorizedId, csrfToken);
+      sessionService.updateSession(session_id, { semestersList: semesters });
+      session.semestersList = semesters;
+    }
+    const allSemesters = session.semestersList || [];
+
+    // --- 1. Cache Lookup for Target Semester ---
     let dateStr = calDate;
     if (!dateStr) {
-      // Default to 1st of current month
       const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
       const now = new Date();
       const monthStr = months[now.getMonth()];
@@ -387,20 +445,149 @@ export const getCalendar = async (req: Request, res: Response) => {
       dateStr = `01-${monthStr}-${year}`;
     }
 
-    const payload = new URLSearchParams();
+    const monthKey = dateStr;
+    let targetSemId = semesterSubId;
+
+    if (!session.calendarCache) {
+      session.calendarCache = {};
+    }
+
+    const cachedSem = session.calendarCache[monthKey];
+    if (cachedSem) {
+      console.log(`[DEBUG] Cache Hit: Using semester ${cachedSem} for ${monthKey}`);
+      targetSemId = cachedSem;
+    }
+
+    // --- 2. Fetch Calendar ---
+    let selectedGroup = await getClassGroupId(client, authorizedId, csrfToken, targetSemId);
+    
+    let payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
     payload.append('calDate', dateStr);
-    payload.append('semSubId', semesterSubId);
+    payload.append('semSubId', targetSemId);
     payload.append('classGroupId', selectedGroup);
     payload.append('x', new Date().toUTCString());
 
-    const response = await client.post('processViewCalendar', payload, {
+    let response = await client.post('academics/common/processViewCalendar', payload, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
 
-    const parsedData = parsers.parseAcademicCalendar(response.data);
-    return res.json({ status: 'success', raw_data: parsedData });
+    let parsedData = parsers.parseAcademicCalendar(response.data);
+    let newSemesterId: string | null = null;
+
+    // --- 3. Auto-Switch Logic (If Empty) ---
+    if (!hasMeaningfulEvents(parsedData)) {
+      console.log(`[DEBUG] Month ${dateStr} appears empty for sem ${targetSemId}. Checking others...`);
+      for (const sem of allSemesters) {
+        if (sem.id === targetSemId) continue;
+
+        const candidateGroup = await getClassGroupId(client, authorizedId, csrfToken, sem.id);
+        const retryPayload = new URLSearchParams();
+        retryPayload.append('authorizedID', authorizedId);
+        retryPayload.append('_csrf', csrfToken);
+        retryPayload.append('calDate', dateStr);
+        retryPayload.append('semSubId', sem.id);
+        retryPayload.append('classGroupId', candidateGroup);
+        retryPayload.append('x', new Date().toUTCString());
+
+        try {
+          const retryRes = await client.post('academics/common/processViewCalendar', retryPayload, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+          const retryData = parsers.parseAcademicCalendar(retryRes.data);
+          if (hasMeaningfulEvents(retryData)) {
+            parsedData = retryData;
+            targetSemId = sem.id;
+            newSemesterId = sem.id;
+            console.log(`[DEBUG] Auto-switched calendar semester to: ${sem.name || sem.id}`);
+            if (session.calendarCache) {
+              session.calendarCache[monthKey] = sem.id;
+            }
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    } else {
+      if (session.calendarCache) {
+        session.calendarCache[monthKey] = targetSemId;
+      }
+    }
+
+    // --- 4. Merge Exams (From ALL Semesters) ---
+    try {
+      const monthsMap: Record<string, number> = {
+        JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+        JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11
+      };
+      const dateParts = dateStr.split('-');
+      const viewMonth = monthsMap[dateParts[1].toUpperCase()];
+      const viewYear = parseInt(dateParts[2], 10);
+
+      for (const sem of allSemesters) {
+        const semId = sem.id;
+        if (!semId) continue;
+
+        try {
+          const examPayload = new URLSearchParams();
+          examPayload.append('authorizedID', authorizedId);
+          examPayload.append('_csrf', csrfToken);
+          examPayload.append('semesterSubId', semId);
+
+          const examRes = await client.post('examinations/doSearchExamScheduleForStudent', examPayload, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+          const examSchedule = parsers.parseExamSchedule(examRes.data);
+
+          for (const exam of examSchedule) {
+            try {
+              const exDateParts = exam.exam_date.split('-');
+              const exDay = parseInt(exDateParts[0], 10);
+              const exMonth = monthsMap[exDateParts[1].toUpperCase()];
+              const exYear = parseInt(exDateParts[2], 10);
+
+              if (exMonth === viewMonth && exYear === viewYear) {
+                if (parsedData && Array.isArray(parsedData.days)) {
+                  for (const dayObj of parsedData.days) {
+                    if (dayObj.day === exDay) {
+                      dayObj.status = 'exam';
+                      if (Array.isArray(dayObj.events)) {
+                        dayObj.events = dayObj.events.filter((e: any) => 
+                          !e.text.toLowerCase().includes('holiday') && 
+                          !e.text.toLowerCase().includes('no instructional')
+                        );
+                        
+                        const examTypeLabel = exam.exam_type || 'Exam';
+                        const eventText = `${examTypeLabel}: ${exam.course_code} (${exam.slot})`;
+                        
+                        if (!dayObj.events.some((e: any) => e.text === eventText)) {
+                          dayObj.events.push({ text: eventText });
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (exErr) {
+              continue;
+            }
+          }
+        } catch (semExamErr) {
+          console.warn(`[DEBUG] Exam fetch warning for sem ${semId}:`, semExamErr);
+        }
+      }
+    } catch (mergeErr) {
+      console.error('[DEBUG] Exam merge error:', mergeErr);
+    }
+
+    const responsePayload: any = { status: 'success', raw_data: parsedData };
+    if (newSemesterId) {
+      responsePayload.new_semester_id = newSemesterId;
+    }
+
+    return res.json(responsePayload);
   } catch (error: any) {
     console.error('getCalendar failed:', error);
     return res.status(401).json({ status: 'error', message: error.message || 'Session expired or invalid.' });

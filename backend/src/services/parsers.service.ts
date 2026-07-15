@@ -352,15 +352,13 @@ export function parseCourseData(htmlContent: string) {
   };
 }
 
-function parseTimetableGrid($: cheerio.CheerioAPI, courseTitleMap: Map<string, string>): Record<string, any> {
+function parseGridNewFormat($: cheerio.CheerioAPI, courseTitleMap: Map<string, string>): Record<string, any> {
   const rawData: Record<string, any> = {
     MON: {}, TUE: {}, WED: {}, THU: {}, FRI: {}, SAT: {}, SUN: {}
   };
 
   const tables = $('table#timeTableStyle');
   if (!tables.length) return rawData;
-
-  $(tables[0]).find('td[bgcolor="#e2e2e2"]');
 
   const timeSlotKeys = [
     '08:00 - 08:50', '08:55 - 09:45', '09:50 - 10:40', '10:45 - 11:35',
@@ -423,6 +421,124 @@ function parseTimetableGrid($: cheerio.CheerioAPI, courseTitleMap: Map<string, s
   });
 
   return rawData;
+}
+
+function parseGridOldFormat($: cheerio.CheerioAPI, courseTitleMap: Map<string, string>): Record<string, any> {
+  const rawData: Record<string, any> = {
+    MON: {}, TUE: {}, WED: {}, THU: {}, FRI: {}, SAT: {}, SUN: {}
+  };
+  const theorySlots = ["08:00 - 08:50", "08:55 - 09:45", "09:50 - 10:40", "10:45 - 11:35", "11:40 - 12:30", "12:35 - 13:25", "LUNCH", "14:00 - 14:50", "14:55 - 15:45", "15:50 - 16:40", "16:45 - 17:35", "17:40 - 18:30", "18:35 - 19:25"];
+  const labSlots = ["08:00 - 08:50", "08:50 - 09:40", "09:50 - 10:40", "10:40 - 11:30", "11:40 - 12:30", "12:30 - 13:20", "LUNCH", "14:00 - 14:50", "14:50 - 15:40", "15:50 - 16:40", "16:40 - 17:30", "17:40 - 18:30", "18:30 - 19:20"];
+  const labSlotMap: Record<string, string> = { 
+    "08:50 - 09:40": "08:55 - 09:45", 
+    "10:40 - 11:30": "10:45 - 11:35", 
+    "12:30 - 13:20": "12:35 - 13:25", 
+    "14:50 - 15:40": "14:55 - 15:45", 
+    "16:40 - 17:30": "16:45 - 17:35", 
+    "18:30 - 19:20": "18:35 - 19:25" 
+  };
+
+  const tables = $('table#timeTableStyle');
+  if (!tables.length) return rawData;
+
+  let scheduleTable: any = null;
+  tables.each((_, table): any => {
+    const cells = $(table).find('td');
+    cells.each((_, td): any => {
+      const text = $(td).text().trim();
+      if (text.includes('THEORY') && $(td).attr('rowspan') === '2') {
+        scheduleTable = $(table);
+        return false;
+      }
+      return true;
+    });
+    if (scheduleTable) return false;
+    return true;
+  });
+
+  if (!scheduleTable) return rawData;
+
+  const rows = $(scheduleTable).find('tr');
+  let currentDay = '';
+
+  rows.slice(2).each((_, row) => {
+    const cells = $(row).find('td');
+    if (!cells.length) return;
+
+    let rowType = '';
+    let dataCells: cheerio.Cheerio<any>;
+
+    const cell0 = cells.eq(0);
+    if (cell0.attr('rowspan')) {
+      currentDay = cell0.text().trim();
+      const cell1 = cells.eq(1);
+      if (!cell1.text().trim()) return;
+      rowType = cell1.text().trim();
+      dataCells = cells.slice(2);
+    } else if (['THEORY', 'LAB'].includes(cell0.text().trim())) {
+      rowType = cell0.text().trim();
+      dataCells = cells.slice(1);
+    } else {
+      return;
+    }
+
+    if (!rawData[currentDay]) return;
+
+    let slotKeys: string[] = [];
+    let slotMap: Record<string, string> = {};
+
+    if (rowType === 'THEORY') {
+      slotKeys = theorySlots;
+      slotMap = {};
+    } else if (rowType === 'LAB') {
+      slotKeys = labSlots;
+      slotMap = labSlotMap;
+    } else {
+      return;
+    }
+
+    dataCells.each((i, cell): any => {
+      if (i >= slotKeys.length) return false; // break
+      const text = $(cell).text().trim();
+      const slotKeyStd = slotMap[slotKeys[i]] || slotKeys[i];
+      if (slotKeyStd === 'LUNCH') return;
+
+      if (text && text !== '-' && !/^[A-Z]{1,3}\d{1,2}$/.test(text)) {
+        const parts = text.split('-');
+        if (parts.length > 2) {
+          const courseCode = parts[1];
+          const courseTypeShort = parts[2];
+          const venue = parts.slice(3, -1).join('-');
+          const classInfo = {
+            code: courseCode,
+            type: courseTypeShort,
+            venue,
+            title: courseTitleMap.get(courseCode) || courseCode
+          };
+          rawData[currentDay][slotKeyStd] = classInfo;
+        }
+      }
+      return true;
+    });
+  });
+
+  return rawData;
+}
+
+function parseTimetableGrid($: cheerio.CheerioAPI, courseTitleMap: Map<string, string>): Record<string, any> {
+  const tables = $('table#timeTableStyle');
+  if (!tables.length) {
+    return {
+      MON: {}, TUE: {}, WED: {}, THU: {}, FRI: {}, SAT: {}, SUN: {}
+    };
+  }
+
+  const firstHeaderCell = $(tables[0]).find('td[bgcolor="#e2e2e2"]').first();
+  if (firstHeaderCell.length && firstHeaderCell.text().includes(' - ')) {
+    return parseGridNewFormat($, courseTitleMap);
+  } else {
+    return parseGridOldFormat($, courseTitleMap);
+  }
 }
 
 export function parseAcademicCalendar(htmlContent: string) {
