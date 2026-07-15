@@ -26,7 +26,8 @@ import {
   UserCheck,
   Bug,
   Eye,
-  EyeOff
+  EyeOff,
+  Menu
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -48,10 +49,29 @@ interface StartLoginResponse {
 
 const MAX_RETRIES = 5;
 
+const TIMETABLE_SLOTS = [
+  { id: 1, name: 'Slot 1', theoryTime: '08:00 - 08:50', labTime: '08:00 - 08:45', key: '08:00 - 08:50' },
+  { id: 2, name: 'Slot 2', theoryTime: '08:55 - 09:45', labTime: '08:50 - 09:35', key: '08:55 - 09:45' },
+  { id: 3, name: 'Slot 3', theoryTime: '09:50 - 10:40', labTime: '09:40 - 10:25', key: '09:50 - 10:40' },
+  { id: 4, name: 'Slot 4', theoryTime: '10:45 - 11:35', labTime: '10:30 - 11:15', key: '10:45 - 11:35' },
+  { id: 5, name: 'Slot 5', theoryTime: '11:40 - 12:30', labTime: '11:20 - 12:05', key: '11:40 - 12:30' },
+  { id: 6, name: 'Slot 6', theoryTime: '12:35 - 13:25', labTime: '12:10 - 12:55', key: '12:35 - 13:25' },
+  { id: 'break', name: 'LUNCH', theoryTime: '13:25 - 14:00', labTime: '12:55 - 14:00', key: 'LUNCH' },
+  { id: 7, name: 'Slot 7', theoryTime: '14:00 - 14:50', labTime: '14:00 - 14:45', key: '14:00 - 14:50' },
+  { id: 8, name: 'Slot 8', theoryTime: '14:55 - 15:45', labTime: '14:50 - 15:35', key: '14:55 - 15:45' },
+  { id: 9, name: 'Slot 9', theoryTime: '15:50 - 16:40', labTime: '15:40 - 16:25', key: '15:50 - 16:40' },
+  { id: 10, name: 'Slot 10', theoryTime: '16:45 - 17:35', labTime: '16:30 - 17:15', key: '16:45 - 17:35' },
+  { id: 11, name: 'Slot 11', theoryTime: '17:40 - 18:30', labTime: '17:20 - 18:05', key: '17:40 - 18:30' },
+  { id: 12, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
+];
+
 type DashboardTab = 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'debug';
 
 function VtopLoginDashboard() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [captcha, setCaptcha] = useState('');
@@ -67,6 +87,8 @@ function VtopLoginDashboard() {
   const [activeUser, setActiveUser] = useState('');
   const [showManualForm, setShowManualForm] = useState(true);
   const [isCaptchaSolving, setIsCaptchaSolving] = useState(false);
+  const [showCaptchaUI, setShowCaptchaUI] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Dashboard state
   const [activeTab, setActiveTab] = useState<DashboardTab>('profile');
@@ -89,6 +111,7 @@ function VtopLoginDashboard() {
     } else {
       root.classList.remove('dark');
     }
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
   // Set up global ReCAPTCHA callback
@@ -149,7 +172,11 @@ function VtopLoginDashboard() {
 
   // Fetch CSRF & CAPTCHA
   const startLoginFlow = async () => {
-    setMessage({ text: 'Initializing secure connection to VTOP...', type: 'info' });
+    console.log("[VTOP] Initializing session, showCaptchaUI:", showCaptchaUI);
+    // Only show loading message if we aren't silently retrying in background
+    if (showCaptchaUI || manualLoginRetryCount.current === 0) {
+      setMessage({ text: 'Initializing secure connection to VTOP...', type: 'info' });
+    }
     try {
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready') {
@@ -162,20 +189,22 @@ function VtopLoginDashboard() {
         setCaptchaImg(res.data.captcha_image_data || '');
         setHasSavedCreds(credsAvailable);
         setCaptcha('');
-        setMessage(null);
+        if (showCaptchaUI || manualLoginRetryCount.current === 0) {
+          setMessage(null);
+        }
 
         console.log(`[VTOP] Session initialized. Captcha type: ${currentCaptchaType === 2 ? 'Google ReCAPTCHA' : 'Text CAPTCHA'}`);
 
         if (currentCaptchaType === 1) {
           setIsCaptchaSolving(true);
-          // Solve built-in CAPTCHA in background
           try {
+            console.log("Running built-in CAPTCHA solver in background...");
             const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
             setCaptcha(solvedText);
+            console.log("CAPTCHA solved successfully:", solvedText);
           } catch (solveError: any) {
             console.error("CAPTCHA solve failed:", solveError);
-            setCaptcha(''); // Clear it
-            setMessage({ text: 'Auto-captcha failed. Please enter it manually.', type: 'error' });
+            setCaptcha('');
           } finally {
             setIsCaptchaSolving(false);
           }
@@ -186,6 +215,77 @@ function VtopLoginDashboard() {
         text: err.response?.data?.message || 'Failed to connect to VTOP server.',
         type: 'error'
       });
+    }
+  };
+
+  // Silent retry logic for manual login
+  const triggerSilentLoginAttempt = async () => {
+    try {
+      setIsCaptchaSolving(true);
+      const res = await api.post<StartLoginResponse>('/auth/start-login');
+      if (res.data.status === 'captcha_ready') {
+        setSessionId(res.data.session_id);
+        setCaptchaImg(res.data.captcha_image_data);
+
+        try {
+          const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
+          setCaptcha(solvedText);
+
+          loginMutation.mutate({
+            captchaText: solvedText,
+            currentSessionId: res.data.session_id
+          });
+        } catch (solveErr) {
+          console.error("Silent solve failed, checking retries...");
+          if (manualLoginRetryCount.current < MAX_RETRIES) {
+            manualLoginRetryCount.current++;
+            triggerSilentLoginAttempt();
+          } else {
+            setShowCaptchaUI(true);
+            setMessage({ text: 'Automated CAPTCHA verification failed. Please enter the code manually.', type: 'error' });
+            setIsCaptchaSolving(false);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Silent start-login failed:", err);
+      setIsCaptchaSolving(false);
+    }
+  };
+
+  // Silent retry logic for auto login
+  const triggerSilentAutoLoginAttempt = async () => {
+    try {
+      setIsCaptchaSolving(true);
+      const res = await api.post<StartLoginResponse>('/auth/start-login');
+      if (res.data.status === 'captcha_ready') {
+        setSessionId(res.data.session_id);
+        setCaptchaImg(res.data.captcha_image_data);
+
+        try {
+          const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
+          setCaptcha(solvedText);
+
+          autoLoginMutation.mutate({
+            captchaText: solvedText,
+            currentSessionId: res.data.session_id
+          });
+        } catch (solveErr) {
+          console.error("Silent auto-solve failed, checking retries...");
+          if (autoLoginRetryCount.current < MAX_RETRIES) {
+            autoLoginRetryCount.current++;
+            triggerSilentAutoLoginAttempt();
+          } else {
+            setShowManualForm(true);
+            setShowCaptchaUI(true);
+            setMessage({ text: 'Automated CAPTCHA verification failed. Please enter the code manually.', type: 'error' });
+            setIsCaptchaSolving(false);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Silent auto start-login failed:", err);
+      setIsCaptchaSolving(false);
     }
   };
 
@@ -232,36 +332,6 @@ function VtopLoginDashboard() {
     }
   };
 
-  // CAPTCHA Refresh / Silent loop helper for manual login (only used for built-in text captcha)
-  const startLoginFlowAndRetry = async () => {
-    try {
-      const res = await api.post<StartLoginResponse>('/auth/start-login');
-      if (res.data.status === 'captcha_ready') {
-        setSessionId(res.data.session_id);
-        setCaptchaImg(res.data.captcha_image_data);
-        setHasSavedCreds(res.data.has_saved_creds);
-
-        try {
-          setIsCaptchaSolving(true);
-          const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
-          setCaptcha(solvedText);
-          console.log("Captcha solved silently in background:", solvedText);
-
-          loginMutation.mutate({
-            captchaText: solvedText,
-            currentSessionId: res.data.session_id
-          });
-        } catch (solveError) {
-          startLoginFlow();
-        } finally {
-          setIsCaptchaSolving(false);
-        }
-      }
-    } catch (err) {
-      startLoginFlow();
-    }
-  };
-
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async ({ captchaText, gResponse, currentSessionId }: { captchaText: string; gResponse?: string; currentSessionId: string }) => {
@@ -285,20 +355,22 @@ function VtopLoginDashboard() {
           setSessionId(variables.currentSessionId);
           localStorage.setItem('vtop_session_id', variables.currentSessionId);
         }
-        // Auto reset message after success
         setTimeout(() => setMessage(null), 3000);
       } else if (data.status === 'invalid_captcha') {
-        console.log("Manual login CAPTCHA failed. Retrying...");
         safeResetRecaptcha();
-        if (captchaType === 1 && manualLoginRetryCount.current < MAX_RETRIES) {
+        if (!showCaptchaUI && manualLoginRetryCount.current < MAX_RETRIES) {
           manualLoginRetryCount.current++;
-          startLoginFlowAndRetry();
+          console.log(`Manual login CAPTCHA failed. Retrying silently (${manualLoginRetryCount.current}/${MAX_RETRIES})...`);
+          triggerSilentLoginAttempt();
         } else {
-          manualLoginRetryCount.current = 0;
-          setMessage({ text: 'Failed to solve CAPTCHA after 5 attempts. Please try again.', type: 'error' });
+          // Exceeded silent retries, or already in manual mode
+          setShowCaptchaUI(true);
+          setMessage({ text: 'Automated CAPTCHA verification failed. Please enter the code manually.', type: 'error' });
           startLoginFlow();
         }
       } else {
+        // e.g. invalid_credentials (wrong username or password)
+        setShowCaptchaUI(true);
         setMessage({ text: data.message || 'Login failed.', type: 'error' });
         safeResetRecaptcha();
         startLoginFlow();
@@ -333,32 +405,30 @@ function VtopLoginDashboard() {
         if (variables.currentSessionId) {
           setSessionId(variables.currentSessionId);
           localStorage.setItem('vtop_session_id', variables.currentSessionId);
-          // Fetch username to display
           api.post('/auth/check-session', { session_id: variables.currentSessionId })
             .then(res => {
               if (res.data.username) setActiveUser(res.data.username);
             });
         }
         setTimeout(() => setMessage(null), 3000);
-      } else if (data.status === 'invalid_captcha' || data.status === 'error') {
-        console.log("Auto-login error or CAPTCHA rejected. Retrying automatically...");
+      } else if (data.status === 'invalid_captcha') {
         safeResetRecaptcha();
         if (autoLoginRetryCount.current < MAX_RETRIES) {
           autoLoginRetryCount.current++;
-          setTimeout(() => startLoginFlow(), 1000);
+          console.log(`Auto-login CAPTCHA failed. Retrying silently (${autoLoginRetryCount.current}/${MAX_RETRIES})...`);
+          triggerSilentAutoLoginAttempt();
         } else {
-          autoLoginRetryCount.current = 0;
-          setMessage({ text: 'Auto-login timed out. Please log in manually.', type: 'error' });
           setShowManualForm(true);
+          setShowCaptchaUI(true);
+          setMessage({ text: 'Auto-login CAPTCHA failed. Please sign in manually.', type: 'error' });
           startLoginFlow();
         }
       } else {
-        setMessage({ text: data.message || 'Auto-login failed.', type: 'error' });
-        if (data.status === 'invalid_credentials') {
-          setHasSavedCreds(false); // Stored credentials deleted
-        }
-        safeResetRecaptcha();
+        // e.g. invalid_credentials (wrong credentials saved)
         setShowManualForm(true);
+        setShowCaptchaUI(true);
+        setMessage({ text: data.message || 'Auto-login failed.', type: 'error' });
+        safeResetRecaptcha();
         startLoginFlow();
       }
     },
@@ -384,6 +454,8 @@ function VtopLoginDashboard() {
       localStorage.removeItem('vtop_session_id');
       setMessage({ text: 'Successfully logged out.', type: 'success' });
       autoLoginRetryCount.current = 0;
+      manualLoginRetryCount.current = 0;
+      setShowCaptchaUI(false);
       setShowManualForm(true);
       startLoginFlow();
     }
@@ -523,13 +595,17 @@ function VtopLoginDashboard() {
     }
   }, [semestersQuery.isError, profileQuery.isError, timetableQuery.isError]);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (captchaType === 2) {
-      triggerGoogleReCAPTCHA();
-    } else {
-      if (!username || !password || !captcha) {
-        setMessage({ text: 'All fields are required.', type: 'error' });
+    if (!username || !password) {
+      setMessage({ text: 'All fields are required.', type: 'error' });
+      return;
+    }
+
+    if (showCaptchaUI) {
+      // Manual mode submission
+      if (!captcha) {
+        setMessage({ text: 'Please enter the CAPTCHA code.', type: 'error' });
         return;
       }
       if (sessionId) {
@@ -538,16 +614,47 @@ function VtopLoginDashboard() {
           currentSessionId: sessionId
         });
       }
+    } else {
+      // Start silent login workflow
+      manualLoginRetryCount.current = 1;
+      setMessage({ text: 'Preparing secure VTOP session...', type: 'info' });
+
+      // Auto-solve the current CAPTCHA
+      if (captcha) {
+        // If already solved (or pre-filled), submit it
+        if (sessionId) {
+          loginMutation.mutate({
+            captchaText: captcha,
+            currentSessionId: sessionId
+          });
+        }
+      } else {
+        // Solve and submit
+        try {
+          setIsCaptchaSolving(true);
+          const solvedText = await solveCaptchaClient(_captchaImg);
+          setCaptcha(solvedText);
+          if (sessionId) {
+            loginMutation.mutate({
+              captchaText: solvedText,
+              currentSessionId: sessionId
+            });
+          }
+        } catch (err) {
+          console.error("Initial solver failed. Retrying silently...", err);
+          triggerSilentLoginAttempt();
+        } finally {
+          setIsCaptchaSolving(false);
+        }
+      }
     }
   };
 
-  const handleAutoLoginSubmit = (e: React.FormEvent) => {
+  const handleAutoLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (captchaType === 2) {
-      triggerGoogleReCAPTCHA();
-    } else {
+    if (showCaptchaUI) {
       if (!captcha) {
-        setMessage({ text: 'CAPTCHA preparation in progress...', type: 'error' });
+        setMessage({ text: 'Please enter the CAPTCHA code.', type: 'error' });
         return;
       }
       if (sessionId) {
@@ -555,6 +662,35 @@ function VtopLoginDashboard() {
           captchaText: captcha,
           currentSessionId: sessionId
         });
+      }
+    } else {
+      autoLoginRetryCount.current = 1;
+      setMessage({ text: 'Preparing secure VTOP session...', type: 'info' });
+
+      if (captcha) {
+        if (sessionId) {
+          autoLoginMutation.mutate({
+            captchaText: captcha,
+            currentSessionId: sessionId
+          });
+        }
+      } else {
+        try {
+          setIsCaptchaSolving(true);
+          const solvedText = await solveCaptchaClient(_captchaImg);
+          setCaptcha(solvedText);
+          if (sessionId) {
+            autoLoginMutation.mutate({
+              captchaText: solvedText,
+              currentSessionId: sessionId
+            });
+          }
+        } catch (err) {
+          console.error("Initial auto-solver failed. Retrying silently...", err);
+          triggerSilentAutoLoginAttempt();
+        } finally {
+          setIsCaptchaSolving(false);
+        }
       }
     }
   };
@@ -694,26 +830,28 @@ function VtopLoginDashboard() {
                     </div>
                   </div>
 
-                  {captchaType === 1 && (
-                    <div>
-                      <label className="block text-sm font-semibold mb-1.5 text-slate-700 dark:text-slate-300">CAPTCHA</label>
-                      <div className="flex gap-4 items-center">
-                        {_captchaImg ? (
-                          <img
-                            src={_captchaImg}
-                            alt="CAPTCHA"
-                            className="h-12 border border-slate-200 dark:border-neutral-800 rounded-xl bg-white dark:bg-neutral-900 px-3 py-1"
-                          />
-                        ) : (
-                          <div className="h-12 w-32 animate-pulse bg-slate-100 dark:bg-neutral-800 rounded-xl" />
-                        )}
+                  {showCaptchaUI && captchaType === 1 && (
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">CAPTCHA Verification</label>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex justify-center bg-slate-50 dark:bg-black p-3 rounded-2xl border border-slate-100 dark:border-neutral-800">
+                          {_captchaImg ? (
+                            <img
+                              src={_captchaImg}
+                              alt="CAPTCHA"
+                              className="h-12 object-contain"
+                            />
+                          ) : (
+                            <div className="h-12 w-32 animate-pulse bg-slate-100 dark:bg-neutral-800 rounded-xl" />
+                          )}
+                        </div>
                         <input
                           type="text"
                           value={captcha}
                           onChange={(e) => setCaptcha(e.target.value)}
-                          placeholder="Enter CAPTCHA"
+                          placeholder="Enter CAPTCHA code"
                           disabled={isPending}
-                          className="flex-1 px-4 py-3 rounded-xl border border-slate-200 dark:border-neutral-800 bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all uppercase"
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-neutral-800 bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all uppercase text-center font-bold tracking-widest text-lg"
                         />
                       </div>
                     </div>
@@ -744,37 +882,35 @@ function VtopLoginDashboard() {
         </div>
       ) : (
         /* ================= STUDENT DASHBOARD INTERFACE ================= */
-        <div className="flex-1 flex flex-col md:flex-row">
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
+          
+          {/* Mobile Header Bar */}
+          <div className="md:hidden flex items-center justify-between px-6 py-4 bg-white dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800 shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="text-xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
+              <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
+            </div>
+            <button 
+              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg outline-none cursor-pointer"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+          </div>
 
           {/* SIDEBAR NAVIGATION */}
-          <aside className="w-full md:w-64 bg-white dark:bg-neutral-900 border-b md:border-b-0 md:border-r border-slate-200 dark:border-neutral-800 flex flex-col justify-between shrink-0">
-            <div className="p-6">
+          <aside className={`w-full md:w-64 bg-white dark:bg-neutral-900 border-b md:border-b-0 md:border-r border-slate-200 dark:border-neutral-800 flex flex-col justify-between shrink-0 ${isMobileSidebarOpen ? 'flex' : 'hidden md:flex'}`}>
+            <div className="p-6 flex-1 overflow-y-auto min-h-0">
               {/* App logo inside sidebar */}
-              <div className="flex items-center gap-3 mb-8">
+              <div className="hidden md:flex items-center gap-3 mb-8">
                 <span className="text-2xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
                 <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
               </div>
 
-              {/* Semester selector */}
-              {semestersQuery.data && semestersQuery.data.length > 0 && (
-                <div className="mb-6">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Semester</label>
-                  <select
-                    value={activeSemester}
-                    onChange={(e) => setActiveSemester(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  >
-                    {semestersQuery.data.map(sem => (
-                      <option key={sem.id} value={sem.id}>{sem.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
               {/* Navigation Items */}
               <nav className="space-y-1">
                 <button
-                  onClick={() => { setActiveTab('profile'); }}
+                  onClick={() => { setActiveTab('profile'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'profile'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -783,7 +919,7 @@ function VtopLoginDashboard() {
                   <UserIcon className="h-4 w-4" /> Student Profile
                 </button>
                 <button
-                  onClick={() => { setActiveTab('timetable'); }}
+                  onClick={() => { setActiveTab('timetable'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'timetable'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -792,7 +928,7 @@ function VtopLoginDashboard() {
                   <Clock className="h-4 w-4" /> Timetable Grid
                 </button>
                 <button
-                  onClick={() => { setActiveTab('attendance'); }}
+                  onClick={() => { setActiveTab('attendance'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'attendance'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -801,7 +937,7 @@ function VtopLoginDashboard() {
                   <UserCheck className="h-4 w-4" /> Class Attendance
                 </button>
                 <button
-                  onClick={() => { setActiveTab('marks'); }}
+                  onClick={() => { setActiveTab('marks'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'marks'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -810,7 +946,7 @@ function VtopLoginDashboard() {
                   <FileText className="h-4 w-4" /> Course Marks
                 </button>
                 <button
-                  onClick={() => { setActiveTab('grades'); }}
+                  onClick={() => { setActiveTab('grades'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'grades'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -819,7 +955,7 @@ function VtopLoginDashboard() {
                   <Award className="h-4 w-4" /> Final Grades
                 </button>
                 <button
-                  onClick={() => { setActiveTab('exams'); }}
+                  onClick={() => { setActiveTab('exams'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'exams'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -828,7 +964,7 @@ function VtopLoginDashboard() {
                   <CalendarIcon className="h-4 w-4" /> Exam Schedule
                 </button>
                 <button
-                  onClick={() => { setActiveTab('calendar'); }}
+                  onClick={() => { setActiveTab('calendar'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'calendar'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -837,7 +973,7 @@ function VtopLoginDashboard() {
                   <CalendarIcon className="h-4 w-4" /> Academic Calendar
                 </button>
                 <button
-                  onClick={() => { setActiveTab('credentials'); }}
+                  onClick={() => { setActiveTab('credentials'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'credentials'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -846,7 +982,7 @@ function VtopLoginDashboard() {
                   <Lock className="h-4 w-4" /> WiFi & Systems
                 </button>
                 <button
-                  onClick={() => { setActiveTab('debug'); }}
+                  onClick={() => { setActiveTab('debug'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'debug'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
@@ -857,8 +993,24 @@ function VtopLoginDashboard() {
               </nav>
             </div>
 
+            {/* Semester selector at the bottom, above the profile card */}
+            {semestersQuery.data && semestersQuery.data.length > 0 && (
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-neutral-800/40">
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Semester</label>
+                <select
+                  value={activeSemester}
+                  onChange={(e) => setActiveSemester(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  {semestersQuery.data.map(sem => (
+                    <option key={sem.id} value={sem.id}>{sem.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* User Profile Card & Sign Out at the Bottom */}
-            <div className="p-4 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-between">
+            <div className="p-4 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs uppercase border border-blue-200 dark:border-blue-900/60">
                   {activeUser ? activeUser.substring(0, 2) : 'ST'}
@@ -969,70 +1121,142 @@ function VtopLoginDashboard() {
             )}
 
             {/* 2. TIMETABLE VIEW */}
-            {activeTab === 'timetable' && (
-              <div className="space-y-6">
-                {timetableQuery.isPending ? (
-                  <div className="h-64 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                  </div>
-                ) : timetableQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Failed to load student timetable. Please select another semester or check connection.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Courses Credit Stat Bar */}
-                    <div className="p-4 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl flex justify-between items-center shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-500" />
-                        <span className="text-sm font-semibold">Registered Credits</span>
-                      </div>
-                      <div className="text-lg font-black text-blue-600 dark:text-blue-500">{timetableQuery.data?.total_credits}</div>
-                    </div>
+            {/* 2. TIMETABLE VIEW */}
+            {activeTab === 'timetable' && (() => {
+              // Lookup function to support colSpans and find course detail for slot
+              const getClassForSlot = (day: string, slotIndex: number) => {
+                const timetable = timetableQuery.data?.timetable?.[day];
+                if (!timetable) return null;
 
-                    {/* Desktop Timetable grid */}
-                    <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl overflow-hidden shadow-sm">
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse text-left text-xs table-fixed min-w-[700px]">
-                          <thead>
-                            <tr className="bg-slate-100 dark:bg-black border-b border-slate-200 dark:border-neutral-800">
-                              <th className="p-4 font-bold w-20 text-center">Day</th>
-                              {Object.keys(timetableQuery.data?.timetable?.MON || {}).map((slotKey) => (
-                                <th key={slotKey} className="p-4 font-bold text-center overflow-hidden truncate" title={slotKey}>{slotKey}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {['MON', 'TUE', 'WED', 'THU', 'FRI'].map(day => (
-                              <tr key={day} className="border-b border-slate-100 dark:border-neutral-800/40 hover:bg-slate-50/50 dark:hover:bg-neutral-800/20">
-                                <td className="p-4 font-bold text-center bg-slate-50/40 dark:bg-black/35">{day}</td>
-                                {Object.keys(timetableQuery.data?.timetable?.MON || {}).map((slotKey) => {
-                                  const cellData = timetableQuery.data?.timetable[day]?.[slotKey];
-                                  return (
-                                    <td key={slotKey} className="p-2 border-r border-slate-100 dark:border-neutral-800/40 text-center">
-                                      {cellData ? (
-                                        <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-2 rounded-lg space-y-1">
-                                          <div className="font-extrabold text-[10px] text-blue-600 dark:text-blue-500">{cellData.code}</div>
-                                          <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold truncate" title={cellData.title}>{cellData.title}</div>
-                                          <div className="text-[9px] text-slate-400 font-mono">{cellData.venue}</div>
-                                        </div>
+                const currentSlot = TIMETABLE_SLOTS[slotIndex];
+                if (timetable[currentSlot.key]) {
+                  return { data: timetable[currentSlot.key], isStart: true };
+                }
+
+                // Check previous slots to see if they span into this one
+                for (let i = slotIndex - 1; i >= 0; i--) {
+                  const prevSlot = TIMETABLE_SLOTS[i];
+                  if (prevSlot.id === 'break') continue;
+                  const prevData = timetable[prevSlot.key];
+                  if (prevData && prevData.rowspan) {
+                    let slotsCovered = 0;
+                    let checkIdx = i;
+                    while (slotsCovered < prevData.rowspan && checkIdx < TIMETABLE_SLOTS.length) {
+                      if (TIMETABLE_SLOTS[checkIdx].id !== 'break') {
+                        slotsCovered++;
+                      }
+                      if (checkIdx === slotIndex) {
+                        return { data: prevData, isStart: false };
+                      }
+                      checkIdx++;
+                    }
+                  }
+                }
+
+                return null;
+              };
+
+              return (
+                <div className="space-y-6">
+                  {timetableQuery.isPending ? (
+                    <div className="h-64 flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    </div>
+                  ) : timetableQuery.isError ? (
+                    <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
+                      <AlertTriangle className="h-5 w-5 shrink-0" />
+                      <span>Failed to load student timetable. Please select another semester or check connection.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Courses Credit Stat Bar */}
+                      <div className="p-4 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl flex justify-between items-center shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-500" />
+                          <span className="text-sm font-semibold">Registered Credits</span>
+                        </div>
+                        <div className="text-lg font-black text-blue-600 dark:text-blue-500">{timetableQuery.data?.total_credits}</div>
+                      </div>
+
+                      {/* Desktop Timetable grid */}
+                      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-left text-xs table-fixed min-w-[1200px]">
+                            <thead>
+                              <tr className="bg-slate-100 dark:bg-black border-b border-slate-200 dark:border-neutral-800">
+                                <th className="p-4 font-bold w-24 text-center border-r border-slate-200 dark:border-neutral-800">Day</th>
+                                {TIMETABLE_SLOTS.map((slot) => (
+                                  <th key={slot.key} className="p-3 text-center border-r border-slate-200 dark:border-neutral-800 w-32 min-w-[120px]">
+                                    <div className="font-extrabold text-[11px] text-slate-700 dark:text-slate-300">{slot.name}</div>
+                                    <div className="text-[9px] text-slate-400 dark:text-neutral-500 font-mono mt-0.5 leading-tight">
+                                      {slot.id === 'break' ? (
+                                        <span>13:25 - 14:00</span>
                                       ) : (
-                                        <span className="text-slate-300 dark:text-neutral-800">-</span>
+                                        <>
+                                          <span>T: {slot.theoryTime.split(' - ')[0]}</span>
+                                          <br />
+                                          <span>L: {slot.labTime.split(' - ')[0]}</span>
+                                        </>
                                       )}
-                                    </td>
-                                  );
-                                })}
+                                    </div>
+                                  </th>
+                                ))}
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {['MON', 'TUE', 'WED', 'THU', 'FRI'].map(day => (
+                                <tr key={day} className="border-b border-slate-100 dark:border-neutral-800/40 hover:bg-slate-50/50 dark:hover:bg-neutral-800/20">
+                                  <td className="p-4 font-bold text-center bg-slate-50/40 dark:bg-black/35 border-r border-slate-200 dark:border-neutral-800">{day}</td>
+                                  {TIMETABLE_SLOTS.map((slot, slotIdx) => {
+                                    if (slot.id === 'break') {
+                                      return (
+                                        <td key={slot.key} className="p-2 text-center bg-slate-50/20 dark:bg-black/10 text-slate-400 font-semibold border-r border-slate-200 dark:border-neutral-800">
+                                          LUNCH
+                                        </td>
+                                      );
+                                    }
+
+                                    const slotClass = getClassForSlot(day, slotIdx);
+
+                                    // Skip duplicate td rendering for spanned slots
+                                    if (slotClass && !slotClass.isStart) {
+                                      return null;
+                                    }
+
+                                    const cellData = slotClass?.data;
+                                    const isLab = cellData && (cellData.type?.includes('L') || cellData.type?.includes('Lab'));
+                                    const activeTime = cellData ? (isLab ? slot.labTime : slot.theoryTime) : '';
+
+                                    return (
+                                      <td 
+                                        key={slot.key} 
+                                        colSpan={cellData?.rowspan || 1}
+                                        className="p-2 border-r border-slate-200 dark:border-neutral-800 text-center align-middle"
+                                      >
+                                        {cellData ? (
+                                          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-2 rounded-xl space-y-1">
+                                            <div className="font-extrabold text-[10px] text-blue-600 dark:text-blue-500">{cellData.code}</div>
+                                            <div className="text-[9px] text-slate-700 dark:text-slate-300 font-bold truncate" title={cellData.title}>{cellData.title}</div>
+                                            <div className="text-[9px] text-slate-400 font-mono">{cellData.venue}</div>
+                                            <div className="text-[8px] text-slate-400 font-mono mt-0.5 bg-slate-100 dark:bg-neutral-800/60 px-1 py-0.5 rounded inline-block">{activeTime}</div>
+                                          </div>
+                                        ) : (
+                                          <span className="text-slate-300 dark:text-neutral-800 font-bold">-</span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })()}
 
             {/* 3. ATTENDANCE VIEW */}
             {activeTab === 'attendance' && (
