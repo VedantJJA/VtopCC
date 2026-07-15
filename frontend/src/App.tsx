@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  QueryClient, 
-  QueryClientProvider, 
+import {
+  QueryClient,
+  QueryClientProvider,
   useMutation,
   useQuery
 } from '@tanstack/react-query';
 import api from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
-import { 
-  Lock, 
-  User as UserIcon, 
-  Loader2, 
-  LogOut, 
-  CheckCircle2, 
+import {
+  Lock,
+  User as UserIcon,
+  Loader2,
+  LogOut,
+  CheckCircle2,
   AlertTriangle,
   Sun,
   Moon,
@@ -56,7 +56,7 @@ function VtopLoginDashboard() {
   const [password, setPassword] = useState('');
   const [captcha, setCaptcha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Auth states
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [captchaType, setCaptchaType] = useState<number>(1);
@@ -66,18 +66,20 @@ function VtopLoginDashboard() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeUser, setActiveUser] = useState('');
   const [showManualForm, setShowManualForm] = useState(true);
+  const [isCaptchaSolving, setIsCaptchaSolving] = useState(false);
 
   // Dashboard state
   const [activeTab, setActiveTab] = useState<DashboardTab>('profile');
   const [activeSemester, setActiveSemester] = useState<string>('');
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
-  
+
   // Attendance detail state (for modal)
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<any | null>(null);
 
   // Keep track of retry count across renders
   const autoLoginRetryCount = useRef(0);
   const manualLoginRetryCount = useRef(0);
+  const initRef = useRef(false);
 
   // Toggle theme
   useEffect(() => {
@@ -103,6 +105,9 @@ function VtopLoginDashboard() {
 
   // Check if session already exists on mount
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
     const localSessionId = localStorage.getItem('vtop_session_id');
     if (localSessionId) {
       setMessage({ text: 'Verifying active session...', type: 'info' });
@@ -162,21 +167,24 @@ function VtopLoginDashboard() {
         console.log(`[VTOP] Session initialized. Captcha type: ${currentCaptchaType === 2 ? 'Google ReCAPTCHA' : 'Text CAPTCHA'}`);
 
         if (currentCaptchaType === 1) {
+          setIsCaptchaSolving(true);
           // Solve built-in CAPTCHA in background
           try {
-            console.log("Running built-in CAPTCHA solver...");
             const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
             setCaptcha(solvedText);
-            console.log("CAPTCHA solved successfully:", solvedText);
           } catch (solveError: any) {
             console.error("CAPTCHA solve failed:", solveError);
+            setCaptcha(''); // Clear it
+            setMessage({ text: 'Auto-captcha failed. Please enter it manually.', type: 'error' });
+          } finally {
+            setIsCaptchaSolving(false);
           }
         }
       }
     } catch (err: any) {
-      setMessage({ 
-        text: err.response?.data?.message || 'Failed to connect to VTOP server.', 
-        type: 'error' 
+      setMessage({
+        text: err.response?.data?.message || 'Failed to connect to VTOP server.',
+        type: 'error'
       });
     }
   };
@@ -232,18 +240,21 @@ function VtopLoginDashboard() {
         setSessionId(res.data.session_id);
         setCaptchaImg(res.data.captcha_image_data);
         setHasSavedCreds(res.data.has_saved_creds);
-        
+
         try {
+          setIsCaptchaSolving(true);
           const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
           setCaptcha(solvedText);
           console.log("Captcha solved silently in background:", solvedText);
-          
+
           loginMutation.mutate({
             captchaText: solvedText,
             currentSessionId: res.data.session_id
           });
         } catch (solveError) {
           startLoginFlow();
+        } finally {
+          setIsCaptchaSolving(false);
         }
       }
     } catch (err) {
@@ -294,9 +305,9 @@ function VtopLoginDashboard() {
       }
     },
     onError: (err: any) => {
-      setMessage({ 
-        text: err.response?.data?.message || 'An error occurred during login.', 
-        type: 'error' 
+      setMessage({
+        text: err.response?.data?.message || 'An error occurred during login.',
+        type: 'error'
       });
       safeResetRecaptcha();
       startLoginFlow();
@@ -352,9 +363,9 @@ function VtopLoginDashboard() {
       }
     },
     onError: (err: any) => {
-      setMessage({ 
-        text: err.response?.data?.message || 'An error occurred during auto-login.', 
-        type: 'error' 
+      setMessage({
+        text: err.response?.data?.message || 'An error occurred during auto-login.',
+        type: 'error'
       });
       safeResetRecaptcha();
       setShowManualForm(true);
@@ -548,28 +559,26 @@ function VtopLoginDashboard() {
     }
   };
 
-  // If CAPTCHA is loading/solving, disable buttons
-  const isCaptchaSolving = captchaType === 1 && !captcha && !loginMutation.isError && !autoLoginMutation.isError;
   const isPending = loginMutation.isPending || autoLoginMutation.isPending;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300">
-      
+
       {/* Global Google ReCAPTCHA element */}
-      <div 
-        id="recaptcha" 
-        className="g-recaptcha" 
-        data-sitekey="6Ld1VmQaAAAAAGQCz6k_jbG4l1s-ncpVHzS_F5iy" 
-        data-size="invisible" 
+      <div
+        id="recaptcha"
+        className="g-recaptcha"
+        data-sitekey="6Ld1VmQaAAAAAGQCz6k_jbG4l1s-ncpVHzS_F5iy"
+        data-size="invisible"
         data-callback="onRecaptchaSolved"
       />
 
       {!isLoggedIn ? (
         /* ================= AUTHENTICATION CONTAINER ================= */
         <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
-          
+
           {/* Theme Toggle */}
-          <button 
+          <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="absolute top-6 right-6 p-3 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors shadow-sm cursor-pointer"
           >
@@ -589,13 +598,12 @@ function VtopLoginDashboard() {
 
             {/* Error/Info Banner */}
             {message && (
-              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border text-sm shadow-sm transition-all duration-300 ${
-                message.type === 'success' 
-                  ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-300' 
+              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border text-sm shadow-sm transition-all duration-300 ${message.type === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-300'
                   : message.type === 'error'
-                  ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300'
-                  : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300'
-              }`}>
+                    ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300'
+                    : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300'
+                }`}>
                 {message.type === 'success' && <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />}
                 {message.type === 'error' && <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />}
                 {message.type === 'info' && <Loader2 className="h-5 w-5 shrink-0 mt-0.5 animate-spin text-blue-600 dark:text-blue-400" />}
@@ -605,7 +613,7 @@ function VtopLoginDashboard() {
 
             {/* Form Box */}
             <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-8 shadow-md">
-              
+
               <h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">
                 {hasSavedCreds && !showManualForm ? 'Auto-Login Available' : 'Student Credentials'}
               </h2>
@@ -686,6 +694,31 @@ function VtopLoginDashboard() {
                     </div>
                   </div>
 
+                  {captchaType === 1 && (
+                    <div>
+                      <label className="block text-sm font-semibold mb-1.5 text-slate-700 dark:text-slate-300">CAPTCHA</label>
+                      <div className="flex gap-4 items-center">
+                        {_captchaImg ? (
+                          <img
+                            src={_captchaImg}
+                            alt="CAPTCHA"
+                            className="h-12 border border-slate-200 dark:border-neutral-800 rounded-xl bg-white dark:bg-neutral-900 px-3 py-1"
+                          />
+                        ) : (
+                          <div className="h-12 w-32 animate-pulse bg-slate-100 dark:bg-neutral-800 rounded-xl" />
+                        )}
+                        <input
+                          type="text"
+                          value={captcha}
+                          onChange={(e) => setCaptcha(e.target.value)}
+                          placeholder="Enter CAPTCHA"
+                          disabled={isPending}
+                          className="flex-1 px-4 py-3 rounded-xl border border-slate-200 dark:border-neutral-800 bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all uppercase"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-col gap-2 pt-2">
                     <button
                       type="submit"
@@ -712,7 +745,7 @@ function VtopLoginDashboard() {
       ) : (
         /* ================= STUDENT DASHBOARD INTERFACE ================= */
         <div className="flex-1 flex flex-col md:flex-row">
-          
+
           {/* SIDEBAR NAVIGATION */}
           <aside className="w-full md:w-64 bg-white dark:bg-neutral-900 border-b md:border-b-0 md:border-r border-slate-200 dark:border-neutral-800 flex flex-col justify-between shrink-0">
             <div className="p-6">
@@ -726,7 +759,7 @@ function VtopLoginDashboard() {
               {semestersQuery.data && semestersQuery.data.length > 0 && (
                 <div className="mb-6">
                   <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Semester</label>
-                  <select 
+                  <select
                     value={activeSemester}
                     onChange={(e) => setActiveSemester(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600"
@@ -740,93 +773,84 @@ function VtopLoginDashboard() {
 
               {/* Navigation Items */}
               <nav className="space-y-1">
-                <button 
+                <button
                   onClick={() => { setActiveTab('profile'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'profile' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'profile'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <UserIcon className="h-4 w-4" /> Student Profile
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('timetable'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'timetable' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'timetable'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <Clock className="h-4 w-4" /> Timetable Grid
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('attendance'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'attendance' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'attendance'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <UserCheck className="h-4 w-4" /> Class Attendance
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('marks'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'marks' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'marks'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <FileText className="h-4 w-4" /> Course Marks
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('grades'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'grades' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'grades'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <Award className="h-4 w-4" /> Final Grades
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('exams'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'exams' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'exams'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <CalendarIcon className="h-4 w-4" /> Exam Schedule
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('calendar'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'calendar' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'calendar'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <CalendarIcon className="h-4 w-4" /> Academic Calendar
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('credentials'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'credentials' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'credentials'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <Lock className="h-4 w-4" /> WiFi & Systems
                 </button>
-                <button 
+                <button
                   onClick={() => { setActiveTab('debug'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'debug' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'debug'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
-                  }`}
+                    }`}
                 >
                   <Bug className="h-4 w-4" /> Debug Window
                 </button>
@@ -844,8 +868,8 @@ function VtopLoginDashboard() {
                   <div className="text-[10px] text-slate-400 truncate font-mono">VTOP Chennai</div>
                 </div>
               </div>
-              <button 
-                onClick={() => logoutMutation.mutate()} 
+              <button
+                onClick={() => logoutMutation.mutate()}
                 title="Sign Out"
                 disabled={logoutMutation.isPending}
                 className="p-2 hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
@@ -857,14 +881,14 @@ function VtopLoginDashboard() {
 
           {/* MAIN DASHBOARD CONTENT AREA */}
           <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
-            
+
             {/* Header controls (Theme switcher and title) */}
             <div className="flex items-center justify-between mb-8">
               <div>
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dashboard Workspace</span>
                 <h2 className="text-2xl font-black capitalize text-slate-900 dark:text-slate-50">{activeTab} View</h2>
               </div>
-              <button 
+              <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                 className="p-3 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors shadow-sm cursor-pointer"
               >
@@ -873,7 +897,7 @@ function VtopLoginDashboard() {
             </div>
 
             {/* TAB VIEWS IN ACTION */}
-            
+
             {/* 1. PROFILE VIEW */}
             {activeTab === 'profile' && (
               <div className="space-y-6">
@@ -892,10 +916,10 @@ function VtopLoginDashboard() {
                     <div className="md:col-span-1 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 text-center space-y-4 shadow-sm">
                       <div className="h-28 w-28 rounded-full bg-slate-100 dark:bg-black border border-slate-200 dark:border-neutral-800 overflow-hidden mx-auto relative flex items-center justify-center">
                         {profileQuery.data?.personal?.photo_url ? (
-                          <img 
-                            src={profileQuery.data.personal.photo_url} 
-                            alt="Student" 
-                            className="h-full w-full object-cover" 
+                          <img
+                            src={profileQuery.data.personal.photo_url}
+                            alt="Student"
+                            className="h-full w-full object-cover"
                           />
                         ) : (
                           <UserIcon className="h-12 w-12 text-slate-400" />
@@ -1031,24 +1055,23 @@ function VtopLoginDashboard() {
                         const isSafe = percent >= 75;
 
                         return (
-                          <div 
+                          <div
                             key={idx}
                             className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm flex flex-col justify-between"
                           >
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 font-bold px-2 py-0.5 rounded text-slate-500">{course.course_code}</span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  isSafe 
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isSafe
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
                                     : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400'
-                                }`}>
+                                  }`}>
                                   {isSafe ? 'Attendance Safe' : 'Below 75%'}
                                 </span>
                               </div>
                               <h4 className="text-sm font-bold line-clamp-1 text-slate-800 dark:text-slate-100" title={course.course_title}>{course.course_title}</h4>
                               <p className="text-xs text-slate-400">{course.faculty}</p>
-                              
+
                               <div className="pt-2 flex justify-between items-end text-xs">
                                 <div>
                                   <span className="text-slate-400">Class Hours: </span>
@@ -1061,14 +1084,14 @@ function VtopLoginDashboard() {
 
                               {/* Progress bar */}
                               <div className="w-full bg-slate-100 dark:bg-neutral-800 h-2 rounded-full overflow-hidden mt-1">
-                                <div 
+                                <div
                                   className={`h-full rounded-full ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`}
                                   style={{ width: `${percent}%` }}
                                 />
                               </div>
                             </div>
 
-                            <button 
+                            <button
                               onClick={() => setSelectedAttendanceCourse(course)}
                               className="w-full py-2.5 mt-4 text-xs font-semibold bg-slate-50 hover:bg-slate-100 dark:bg-black dark:hover:bg-neutral-800 border border-slate-200 dark:border-neutral-800 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
                             >
@@ -1159,11 +1182,10 @@ function VtopLoginDashboard() {
                                     <td className="py-2.5 text-center">{a.weightage_pct}%</td>
                                     <td className="py-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{a.weightage_mark || '-'}</td>
                                     <td className="py-2.5 text-center">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                        a.status.toLowerCase() === 'present' 
-                                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${a.status.toLowerCase() === 'present'
+                                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
                                           : 'bg-slate-100 dark:bg-neutral-800 text-slate-500'
-                                      }`}>{a.status}</span>
+                                        }`}>{a.status}</span>
                                     </td>
                                   </tr>
                                 ))}
@@ -1265,7 +1287,7 @@ function VtopLoginDashboard() {
                     ) : (
                       <div className="grid grid-cols-1 gap-6">
                         {examsQuery.data.map((exam: any, idx: number) => (
-                          <div 
+                          <div
                             key={idx}
                             className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6"
                           >
@@ -1275,7 +1297,7 @@ function VtopLoginDashboard() {
                                 <span className="text-[10px] bg-slate-100 dark:bg-neutral-800 text-slate-500 font-bold px-2 py-0.5 rounded">{exam.course_code}</span>
                               </div>
                               <h4 className="text-base font-bold text-slate-800 dark:text-slate-100">{exam.course_title}</h4>
-                              
+
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 text-xs">
                                 <div><div className="text-slate-400 mb-0.5">Date</div><div className="font-bold">{exam.exam_date}</div></div>
                                 <div><div className="text-slate-400 mb-0.5">Session</div><div className="font-bold font-mono">{exam.exam_session}</div></div>
@@ -1371,11 +1393,10 @@ function VtopLoginDashboard() {
                               {!isPadding && (
                                 <>
                                   <div className="flex justify-between items-center">
-                                    <span className={`text-xs font-extrabold ${
-                                      isHoliday ? 'text-rose-600 dark:text-rose-400' :
-                                      isWorking ? 'text-emerald-600 dark:text-emerald-400' :
-                                      isDayOrder ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
-                                    }`}>
+                                    <span className={`text-xs font-extrabold ${isHoliday ? 'text-rose-600 dark:text-rose-400' :
+                                        isWorking ? 'text-emerald-600 dark:text-emerald-400' :
+                                          isDayOrder ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
+                                      }`}>
                                       {dayObj.day}
                                     </span>
                                     {isDayOrder && (
@@ -1386,12 +1407,11 @@ function VtopLoginDashboard() {
                                     {dayObj.events?.map((e: any, eIdx: number) => (
                                       <div
                                         key={eIdx}
-                                        className={`text-[9px] truncate px-1 py-0.5 rounded-sm font-semibold ${
-                                          isHoliday ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' :
-                                          isWorking ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' :
-                                          isDayOrder ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' :
-                                          'bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-slate-300'
-                                        }`}
+                                        className={`text-[9px] truncate px-1 py-0.5 rounded-sm font-semibold ${isHoliday ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' :
+                                            isWorking ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' :
+                                              isDayOrder ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' :
+                                                'bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-slate-300'
+                                          }`}
                                         title={e.text}
                                       >
                                         {e.text}
@@ -1650,7 +1670,7 @@ function VtopLoginDashboard() {
                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">{selectedAttendanceCourse.course_title}</h3>
                   <p className="text-xs text-slate-400 mt-0.5">{selectedAttendanceCourse.faculty}</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedAttendanceCourse(null)}
                   className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-bold text-lg leading-none cursor-pointer"
                 >
@@ -1661,7 +1681,7 @@ function VtopLoginDashboard() {
               {/* Attendance Log Table */}
               <div className="space-y-4">
                 <h4 className="text-sm font-bold text-blue-600 dark:text-blue-500">Hourly Lecture History</h4>
-                
+
                 {attendanceDetailQuery.isPending ? (
                   <div className="h-32 flex items-center justify-center">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
@@ -1695,11 +1715,10 @@ function VtopLoginDashboard() {
                                   <div className="text-[10px] text-slate-400 mt-0.5">{log.timing}</div>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                                    isPresent 
-                                      ? 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400' 
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${isPresent
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400'
                                       : 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400'
-                                  }`}>
+                                    }`}>
                                     {log.status}
                                   </span>
                                 </td>
@@ -1714,7 +1733,7 @@ function VtopLoginDashboard() {
               </div>
             </div>
 
-            <button 
+            <button
               onClick={() => setSelectedAttendanceCourse(null)}
               className="w-full py-3 mt-6 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-black text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer"
             >
