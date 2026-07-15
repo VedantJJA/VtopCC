@@ -117,12 +117,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             ) : (
               <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
                 {todayClasses.list.map((cls, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-bgPrimary rounded-xl border border-borderColor/45">
+                  <div key={idx} className="flex items-center justify-between p-3 bg-bgPrimary rounded-xl border border-borderColor">
                     <div>
-                      <div className="font-bold text-xs text-blue-600 dark:text-blue-500">{cls.code} - {cls.title}</div>
+                      <div className="font-bold text-xs text-accentColor">{cls.code} - {cls.title}</div>
                       <div className="text-[10px] text-textMuted font-mono mt-0.5">{cls.time} | Venue: {cls.venue}</div>
                     </div>
-                    <span className="text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-md">{cls.slot}</span>
+                    <span className="text-[10px] font-bold bg-bgPrimary text-accentColor px-2.5 py-1 rounded-md">{cls.slot}</span>
                   </div>
                 ))}
               </div>

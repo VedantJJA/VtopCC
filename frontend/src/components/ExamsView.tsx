@@ -34,19 +34,19 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery }) => {
                 >
                   <div className="space-y-3 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] bg-blue-50 dark:bg-blue-950/25 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded border border-blue-100 dark:border-blue-900/30">{exam.exam_type}</span>
+                      <span className="text-[10px] bg-bgPrimary text-accentColor font-bold px-2 py-0.5 rounded border border-borderColor">{exam.exam_type}</span>
                       <span className="text-[10px] bg-bgPrimary border border-borderColor text-textMuted font-bold px-2 py-0.5 rounded">{exam.course_code}</span>
                     </div>
                     <h4 className="text-base font-bold text-textMain">{exam.course_title}</h4>
-
+ 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 text-xs">
                       <div><div className="text-textMuted mb-0.5">Date</div><div className="font-bold text-textMain">{exam.exam_date}</div></div>
                       <div><div className="text-textMuted mb-0.5">Session</div><div className="font-bold font-mono text-textMain">{exam.exam_session}</div></div>
                       <div><div className="text-textMuted mb-0.5">Time</div><div className="font-bold text-textMain">{exam.exam_time}</div></div>
-                      <div><div className="text-textMuted mb-0.5 font-bold text-blue-600 dark:text-blue-500">Venue</div><div className="font-extrabold font-mono text-blue-600 dark:text-blue-500">{exam.venue}</div></div>
+                      <div><div className="text-textMuted mb-0.5 font-bold text-accentColor">Venue</div><div className="font-extrabold font-mono text-accentColor">{exam.venue}</div></div>
                     </div>
                   </div>
-
+ 
                   {/* Seating Location info box */}
                   <div className="bg-bgPrimary border border-borderColor rounded-2xl p-4 md:w-56 shrink-0 flex flex-col justify-center space-y-2.5 text-xs text-center">
                     <div>
@@ -55,7 +55,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery }) => {
                     </div>
                     <div className="border-t border-borderColor pt-2">
                       <span className="text-textMuted font-semibold">Room / Location</span>
-                      <div className="font-bold text-blue-600 dark:text-blue-400 mt-0.5">{exam.seat_location || 'N/A'}</div>
+                      <div className="font-bold text-accentColor mt-0.5">{exam.seat_location || 'N/A'}</div>
                     </div>
                   </div>
                 </div>

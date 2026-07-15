@@ -36,7 +36,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             >
               ◀ Previous Month
             </button>
-            <h3 className="font-extrabold text-blue-600 dark:text-blue-500 text-sm md:text-base">
+            <h3 className="font-extrabold text-accentColor text-sm md:text-base">
               {calendarQuery.data?.month_title || 'Calendar Month'}
             </h3>
             <button
@@ -61,7 +61,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <div>Fri</div>
               <div>Sat</div>
             </div>
-            <div className="grid grid-cols-7 auto-rows-[90px] md:auto-rows-[110px] divide-x divide-y divide-borderColor/40 border-l border-t border-borderColor/40">
+            <div className="grid grid-cols-7 auto-rows-[90px] md:auto-rows-[110px] divide-x divide-y divide-borderColor border-l border-t border-borderColor">
               {calendarQuery.data?.days?.map((dayObj: any, index: number) => {
                 const isPadding = dayObj.status === 'padding';
                 const isHoliday = dayObj.status === 'holiday';
@@ -70,10 +70,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 const isExam = dayObj.status === 'exam';
 
                 let bgClass = 'bg-transparent';
-                if (isHoliday) bgClass = 'bg-rose-50/20 dark:bg-rose-950/5';
-                else if (isWorking) bgClass = 'bg-emerald-50/20 dark:bg-emerald-950/5';
-                else if (isDayOrder) bgClass = 'bg-amber-50/20 dark:bg-amber-950/5';
-                else if (isExam) bgClass = 'bg-blue-50/20 dark:bg-blue-950/5';
+                if (isHoliday || isWorking || isDayOrder || isExam) {
+                  bgClass = 'bg-bgPrimary';
+                }
 
                 return (
                   <div key={index} className={`p-2 flex flex-col justify-between overflow-hidden text-left relative ${bgClass}`}>
@@ -81,30 +80,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       <>
                         <div className="flex justify-between items-center">
                           <span className={`text-xs font-extrabold ${
-                              isHoliday ? 'text-rose-600 dark:text-rose-400' :
-                              isWorking ? 'text-emerald-600 dark:text-emerald-400' :
-                              isDayOrder ? 'text-amber-600 dark:text-amber-400' : 
-                              isExam ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'
+                              isHoliday ? 'text-textMuted' : 'text-accentColor'
                             }`}>
                             {dayObj.day}
                           </span>
                           {isDayOrder && (
-                            <span className="text-[8px] font-bold text-amber-600 dark:text-amber-400 uppercase">Day Ord</span>
+                            <span className="text-[8px] font-bold text-accentColor uppercase">Day Ord</span>
                           )}
                           {isExam && (
-                            <span className="text-[8px] font-bold text-blue-600 dark:text-blue-400 uppercase font-mono">Exam</span>
+                            <span className="text-[8px] font-bold text-accentColor uppercase font-mono">Exam</span>
                           )}
                         </div>
                         <div className="flex-1 mt-1 flex flex-col justify-end space-y-0.5 max-h-[50px] overflow-y-auto">
                           {dayObj.events?.map((e: any, eIdx: number) => (
                             <div
                               key={eIdx}
-                              className={`text-[9px] truncate px-1 py-0.5 rounded-sm font-semibold ${
-                                  isHoliday ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' :
-                                  isWorking ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' :
-                                  isDayOrder ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' :
-                                  isExam ? 'bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300' :
-                                  'bg-bgPrimary border border-borderColor text-textMain'
+                              className={`text-[9px] truncate px-1 py-0.5 rounded-sm font-semibold bg-bgCard border border-borderColor ${
+                                  isHoliday ? 'text-textMuted' : 'text-accentColor'
                                 }`}
                               title={e.text}
                             >

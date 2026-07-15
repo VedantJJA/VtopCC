@@ -41,16 +41,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted">{course.course_code}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isSafe
-                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400'
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-bgPrimary border border-borderColor ${isSafe
+                          ? 'text-accentColor'
+                          : 'text-textMuted'
                         }`}>
                         {isSafe ? 'Attendance Safe' : 'Below 75%'}
                       </span>
                     </div>
                     <h4 className="text-sm font-bold line-clamp-1 text-textMain" title={course.course_title}>{course.course_title}</h4>
                     <p className="text-xs text-textMuted">{course.faculty}</p>
-
+ 
                     <div className="pt-2 flex justify-between items-end text-xs">
                       <div>
                         <span className="text-textMuted">Class Hours: </span>
@@ -58,13 +58,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         <span className="text-textMuted"> / </span>
                         <span className="font-bold text-textMain">{course.total_classes}</span>
                       </div>
-                      <div className="text-base font-black text-blue-600 dark:text-blue-500">{course.percentage}%</div>
+                      <div className="text-base font-black text-accentColor">{course.percentage}%</div>
                     </div>
-
+ 
                     {/* Progress bar */}
-                    <div className="w-full bg-bgPrimary h-2 rounded-full overflow-hidden mt-1">
+                    <div className="w-full bg-bgPrimary h-2 rounded-full overflow-hidden mt-1 border border-borderColor">
                       <div
-                        className={`h-full rounded-full ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                        className="h-full rounded-full bg-accentColor"
                         style={{ width: `${percent}%` }}
                       />
                     </div>
@@ -101,18 +101,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 >
                   ✕
                 </button>
-              </div>
-
-              {/* Attendance Log Table */}
+              </div>              {/* Attendance Log Table */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold text-blue-600 dark:text-blue-500">Hourly Lecture History</h4>
-
+                <h4 className="text-sm font-bold text-accentColor">Hourly Lecture History</h4>
+ 
                 {attendanceDetailQuery.isPending ? (
                   <div className="h-32 flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                    <Loader2 className="h-6 w-6 animate-spin text-accentColor" />
                   </div>
                 ) : attendanceDetailQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2 text-xs">
+                  <div className="p-4 bg-bgPrimary text-textMuted border border-borderColor rounded-2xl flex gap-2 text-xs">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
                     <span>Failed to retrieve lecture history log.</span>
                   </div>
@@ -132,7 +130,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                           {attendanceDetailQuery.data?.map((log: any, logIdx: number) => {
                             const isPresent = log.status.toLowerCase() === 'present';
                             return (
-                              <tr key={logIdx} className="border-b border-borderColor/40 hover:bg-bgPrimary/55">
+                              <tr key={logIdx} className="border-b border-borderColor hover:bg-bgPrimary/55">
                                 <td className="p-3 font-semibold text-textMuted">{log.sl_no}</td>
                                 <td className="p-3 font-bold text-textMain">{log.date}</td>
                                 <td className="p-3 text-textMain">
@@ -140,9 +138,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                                   <div className="text-[10px] text-textMuted mt-0.5">{log.timing}</div>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${isPresent
-                                      ? 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400'
-                                      : 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400'
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-bgPrimary border border-borderColor ${isPresent
+                                      ? 'text-accentColor'
+                                      : 'text-textMuted'
                                     }`}>
                                     {log.status}
                                   </span>
@@ -157,10 +155,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 )}
               </div>
             </div>
-
+ 
             <button
               onClick={() => setSelectedAttendanceCourse(null)}
-              className="w-full py-3 mt-6 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-black text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              className="w-full py-3 mt-6 bg-bgPrimary hover:bg-bgPrimary/85 text-textMain border border-borderColor font-semibold rounded-xl text-xs transition-colors cursor-pointer"
             >
               Close History Drawer
             </button>

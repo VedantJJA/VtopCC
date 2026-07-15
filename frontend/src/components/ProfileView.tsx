@@ -34,7 +34,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery }) => {
             </div>
             <div>
               <h3 className="text-lg font-bold">{profileQuery.data?.personal?.name || 'N/A'}</h3>
-              <p className="text-xs text-blue-600 dark:text-blue-500 font-mono font-bold mt-1">
+              <p className="text-xs text-accentColor font-mono font-bold mt-1">
                 {profileQuery.data?.educational?.reg_no || 'N/A'}
               </p>
             </div>
@@ -50,7 +50,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery }) => {
           <div className="md:col-span-2 space-y-6">
             {/* Academic & Proctor Info */}
             <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4">
-              <h3 className="text-sm font-bold border-b border-borderColor pb-2 text-blue-600 dark:text-blue-500">Academic Details</h3>
+              <h3 className="text-sm font-bold border-b border-borderColor pb-2 text-accentColor">Academic Details</h3>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div><div className="text-textMuted mb-1">School</div><div className="font-bold">{profileQuery.data?.educational?.school}</div></div>
                 <div><div className="text-textMuted mb-1">Board</div><div className="font-bold">{profileQuery.data?.educational?.board}</div></div>
@@ -61,7 +61,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery }) => {
 
             {/* Proctor details */}
             <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4">
-              <h3 className="text-sm font-bold border-b border-borderColor pb-2 text-blue-600 dark:text-blue-500">Proctor Details</h3>
+              <h3 className="text-sm font-bold border-b border-borderColor pb-2 text-accentColor">Proctor Details</h3>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div><div className="text-textMuted mb-1">Proctor Name</div><div className="font-bold">{profileQuery.data?.proctor?.name}</div></div>
                 <div><div className="text-textMuted mb-1">Designation</div><div className="font-bold">{profileQuery.data?.proctor?.designation}</div></div>

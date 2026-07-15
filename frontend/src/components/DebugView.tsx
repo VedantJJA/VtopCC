@@ -21,7 +21,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ debugQuery }) => {
         <div className="space-y-6 animate-fade-in">
           {/* Header */}
           <div className="p-5 bg-bgCard border border-borderColor rounded-3xl shadow-sm space-y-2">
-            <h3 className="text-sm font-bold text-blue-600 dark:text-blue-500">VTOP Session Credentials (Debug)</h3>
+            <h3 className="text-sm font-bold text-accentColor">VTOP Session Credentials (Debug)</h3>
             <p className="text-xs text-textMuted leading-relaxed">
               Below are the active session variables parsed by the backend after successful login, along with the raw HTML retrieved from the timetable menu route.
             </p>
@@ -60,7 +60,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ debugQuery }) => {
                     navigator.clipboard.writeText(debugQuery.data.rawHtml);
                   }
                 }}
-                className="text-xs font-semibold text-blue-600 dark:text-blue-500 hover:underline cursor-pointer"
+                className="text-xs font-semibold text-accentColor hover:underline cursor-pointer"
               >
                 Copy Full HTML
               </button>

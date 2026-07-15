@@ -80,7 +80,21 @@ export async function performVtopLogin(sessionId: string, username: string, pass
     sessionService.updateSession(sessionId, { username, authorizedId: authorizedId as string });
     return { success: true, authorizedId, code: 'success' };
   } else {
-    return { success: false, message: 'Invalid Credentials/CAPTCHA', code: 'invalid' };
+    // PARSE ERROR MESSAGES LIKE THE FLASK APP
+    let status_code = 'invalid_credentials';
+    let error_message = 'Invalid credentials.';
+    
+    const errorText = $('span.text-danger strong').text().toLowerCase();
+    if (errorText) {
+      if (errorText.includes('captcha')) {
+        status_code = 'invalid_captcha';
+        error_message = 'Incorrect CAPTCHA.';
+      } else if (errorText.includes('maximum fail')) {
+        status_code = 'locked';
+        error_message = 'Account locked due to multiple failed attempts.';
+      }
+    }
+    return { success: false, message: error_message, code: status_code };
   }
 }
 

@@ -440,28 +440,28 @@ function VtopLoginDashboard() {
           console.log(`Auto-login CAPTCHA failed. Retrying silently (${autoLoginRetryCount.current}/${MAX_RETRIES})...`);
           triggerSilentAutoLoginAttempt();
         } else {
+          logoutMutation.mutate();
           setShowManualForm(true);
           setShowCaptchaUI(true);
           setMessage({ text: 'Auto-login CAPTCHA failed. Please sign in manually.', type: 'error' });
-          startLoginFlow();
         }
       } else {
         // e.g. invalid_credentials (wrong credentials saved)
+        logoutMutation.mutate();
         setShowManualForm(true);
         setShowCaptchaUI(true);
-        setMessage({ text: data.message || 'Auto-login failed.', type: 'error' });
+        setMessage({ text: data.message || 'Auto-login failed. Please sign in again.', type: 'error' });
         safeResetRecaptcha();
-        startLoginFlow();
       }
     },
     onError: (err: any) => {
+      logoutMutation.mutate();
       setMessage({
         text: err.response?.data?.message || 'An error occurred during auto-login.',
         type: 'error'
       });
       safeResetRecaptcha();
       setShowManualForm(true);
-      startLoginFlow();
     }
   });
 
@@ -764,7 +764,7 @@ function VtopLoginDashboard() {
   const isPending = loginMutation.isPending || autoLoginMutation.isPending;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300">
+    <div className="min-h-screen bg-bgPrimary text-textMain flex flex-col font-sans transition-colors duration-300">
 
       {/* Global Google ReCAPTCHA element */}
       <div
@@ -782,48 +782,43 @@ function VtopLoginDashboard() {
           {/* Theme Toggle */}
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="absolute top-6 right-6 p-3 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors shadow-sm cursor-pointer"
+            className="absolute top-6 right-6 p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
           >
-            {theme === 'dark' ? <Sun className="h-5 w-5 text-blue-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
+            {theme === 'dark' ? <Sun className="h-5 w-5 text-accentColor" /> : <Moon className="h-5 w-5 text-textMuted" />}
           </button>
 
           <div className="w-full max-w-md">
             {/* Title */}
             <div className="text-center mb-8">
-              <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">
+              <h1 className="text-4xl font-extrabold tracking-tight text-accentColor">
                 VtopC
               </h1>
-              <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">
+              <p className="text-textMuted mt-2 text-sm">
                 Decoupled VTOP Chennai Portal Dashboard
               </p>
             </div>
 
             {/* Error/Info Banner */}
             {message && (
-              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border text-sm shadow-sm transition-all duration-300 ${message.type === 'success'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-300'
-                  : message.type === 'error'
-                    ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300'
-                    : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300'
-                }`}>
-                {message.type === 'success' && <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />}
-                {message.type === 'error' && <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />}
-                {message.type === 'info' && <Loader2 className="h-5 w-5 shrink-0 mt-0.5 animate-spin text-blue-600 dark:text-blue-400" />}
+              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border text-sm shadow-sm transition-all duration-300 bg-bgCard border-borderColor text-textMain`}>
+                {message.type === 'success' && <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-accentColor" />}
+                {message.type === 'error' && <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-textMuted" />}
+                {message.type === 'info' && <Loader2 className="h-5 w-5 shrink-0 mt-0.5 animate-spin text-accentColor" />}
                 <span>{message.text}</span>
               </div>
             )}
 
             {/* Form Box */}
-            <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-8 shadow-md">
+            <div className="bg-bgCard border border-borderColor rounded-3xl p-8 shadow-md">
 
-              <h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-slate-100">
+              <h2 className="text-2xl font-bold mb-6 text-textMain">
                 {hasSavedCreds && !showManualForm ? 'Auto-Login Available' : 'Student Credentials'}
               </h2>
 
               {hasSavedCreds && !showManualForm ? (
                 /* Auto login flow (CAPTCHA details are completely hidden) */
                 <form onSubmit={handleAutoLoginSubmit} className="space-y-6">
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <p className="text-sm text-textMuted leading-relaxed">
                     VTOP is initializing securely. The built-in solver is decoding the captcha silently. Click below to enter your workspace.
                   </p>
 
@@ -831,7 +826,7 @@ function VtopLoginDashboard() {
                     <button
                       type="submit"
                       disabled={isPending || isCaptchaSolving}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-700/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                      className="w-full py-3.5 bg-accentColor hover:bg-accentColor/85 disabled:bg-accentColor/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                     >
                       {isPending || isCaptchaSolving ? (
                         <>
@@ -845,7 +840,7 @@ function VtopLoginDashboard() {
                     <button
                       type="button"
                       onClick={() => setShowManualForm(true)}
-                      className="w-full py-3 text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                      className="w-full py-3 text-sm text-textMuted hover:text-textMain transition-colors cursor-pointer"
                     >
                       Sign In with Another Account
                     </button>
@@ -855,36 +850,36 @@ function VtopLoginDashboard() {
                 /* Standard manual login flow (CAPTCHA is completely hidden!) */
                 <form onSubmit={handleLoginSubmit} className="space-y-5">
                   <div>
-                    <label className="block text-sm font-semibold mb-1.5 text-slate-700 dark:text-slate-300">Registration Number</label>
+                    <label className="block text-sm font-semibold mb-1.5 text-textMain">Registration Number</label>
                     <div className="relative">
-                      <UserIcon className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+                      <UserIcon className="absolute left-4 top-3.5 h-5 w-5 text-textMuted" />
                       <input
                         type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="e.g. 21BCE5001"
                         disabled={isPending}
-                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 dark:border-neutral-800 bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-accentColor focus:border-transparent outline-none transition-all"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold mb-1.5 text-slate-700 dark:text-slate-300">Password</label>
+                    <label className="block text-sm font-semibold mb-1.5 text-textMain">Password</label>
                     <div className="relative">
-                      <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+                      <Lock className="absolute left-4 top-3.5 h-5 w-5 text-textMuted" />
                       <input
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
                         disabled={isPending}
-                        className="w-full pl-12 pr-12 py-3 rounded-xl border border-slate-200 dark:border-neutral-800 bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-12 pr-12 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-accentColor focus:border-transparent outline-none transition-all"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(prev => !prev)}
-                        className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer outline-none"
+                        className="absolute right-4 top-3.5 text-textMuted hover:text-textMain cursor-pointer outline-none"
                         title={showPassword ? 'Hide Password' : 'Show Password'}
                       >
                         {showPassword ? (
@@ -898,9 +893,9 @@ function VtopLoginDashboard() {
 
                   {showCaptchaUI && captchaType === 1 && (
                     <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">CAPTCHA Verification</label>
+                      <label className="block text-sm font-semibold text-textMain">CAPTCHA Verification</label>
                       <div className="flex flex-col gap-3">
-                        <div className="flex justify-center bg-slate-50 dark:bg-black p-3 rounded-2xl border border-slate-100 dark:border-neutral-800">
+                        <div className="flex justify-center bg-bgPrimary p-3 rounded-2xl border border-borderColor">
                           {_captchaImg ? (
                             <img
                               src={_captchaImg}
@@ -908,7 +903,7 @@ function VtopLoginDashboard() {
                               className="h-12 object-contain"
                             />
                           ) : (
-                            <div className="h-12 w-32 animate-pulse bg-slate-100 dark:bg-neutral-800 rounded-xl" />
+                            <div className="h-12 w-32 animate-pulse bg-bgPrimary rounded-xl" />
                           )}
                         </div>
                         <input
@@ -917,7 +912,7 @@ function VtopLoginDashboard() {
                           onChange={(e) => setCaptcha(e.target.value)}
                           placeholder="Enter CAPTCHA code"
                           disabled={isPending}
-                          className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-neutral-800 bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all uppercase text-center font-bold tracking-widest text-lg"
+                          className="w-full px-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-accentColor focus:border-transparent outline-none transition-all uppercase text-center font-bold tracking-widest text-lg"
                         />
                       </div>
                     </div>
@@ -927,7 +922,7 @@ function VtopLoginDashboard() {
                     <button
                       type="submit"
                       disabled={isPending || isCaptchaSolving || !username || !password}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-700/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                      className="w-full py-3.5 bg-accentColor hover:bg-accentColor/85 disabled:bg-accentColor/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                     >
                       {isPending || isCaptchaSolving ? (
                         <>
@@ -938,7 +933,6 @@ function VtopLoginDashboard() {
                         'Sign In to VTOP'
                       )}
                     </button>
-                    {/* Return to Auto-Login button removed */}
                   </div>
                 </form>
               )}
@@ -953,8 +947,8 @@ function VtopLoginDashboard() {
           {/* Mobile Header Bar */}
           <div className="md:hidden flex items-center justify-between px-6 py-4 bg-bgCard border-b border-borderColor shrink-0">
             <div className="flex items-center gap-3">
-              <span className="text-xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
-              <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
+              <span className="text-xl font-black text-accentColor">VtopC</span>
+              <span className="text-[10px] bg-bgPrimary border border-borderColor text-accentColor font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
             </div>
             <button 
               onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
@@ -977,8 +971,8 @@ function VtopLoginDashboard() {
             <div className="p-6 flex-1 overflow-y-auto min-h-0">
               {/* App logo inside sidebar */}
               <div className="hidden md:flex items-center gap-3 mb-8">
-                <span className="text-2xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
-                <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
+                <span className="text-2xl font-black text-accentColor">VtopC</span>
+                <span className="text-[10px] bg-bgPrimary border border-borderColor text-accentColor font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
               </div>
 
               {/* Navigation Items */}
@@ -986,7 +980,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'dashboard'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -995,7 +989,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('profile'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'profile'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1004,7 +998,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('timetable'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'timetable'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1013,7 +1007,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('attendance'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'attendance'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1022,7 +1016,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('marks'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'marks'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1031,7 +1025,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('grades'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'grades'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1040,7 +1034,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('exams'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'exams'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1049,7 +1043,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('calendar'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'calendar'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1058,7 +1052,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('credentials'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'credentials'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1067,7 +1061,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('debug'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'debug'
-                      ? 'bg-blue-600 text-white shadow-sm'
+                      ? 'bg-accentColor text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1078,12 +1072,12 @@ function VtopLoginDashboard() {
 
             {/* Semester selector at the bottom, above the profile card */}
             {semestersQuery.data && semestersQuery.data.length > 0 && (
-              <div className="px-6 py-4 border-t border-slate-100 dark:border-neutral-800/40">
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Semester</label>
+              <div className="px-6 py-4 border-t border-borderColor">
+                <label className="block text-[11px] font-bold text-textMuted uppercase tracking-wider mb-2">Select Semester</label>
                 <select
                   value={activeSemester}
                   onChange={(e) => setActiveSemester(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-3 py-2 bg-bgPrimary border border-borderColor rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-accentColor text-textMain"
                 >
                   {semestersQuery.data.map(sem => (
                     <option key={sem.id} value={sem.id}>{sem.name}</option>
@@ -1093,21 +1087,21 @@ function VtopLoginDashboard() {
             )}
 
             {/* User Profile Card & Sign Out at the Bottom */}
-            <div className="p-4 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-between shrink-0">
+            <div className="p-4 border-t border-borderColor flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs uppercase border border-blue-200 dark:border-blue-900/60">
+                <div className="h-9 w-9 rounded-full bg-bgPrimary flex items-center justify-center text-accentColor font-bold text-xs uppercase border border-borderColor">
                   {activeUser ? activeUser.substring(0, 2) : 'ST'}
                 </div>
                 <div className="overflow-hidden">
-                  <div className="text-xs font-bold truncate text-slate-800 dark:text-slate-200">{activeUser || 'Active Session'}</div>
-                  <div className="text-[10px] text-slate-400 truncate font-mono">VTOP Chennai</div>
+                  <div className="text-xs font-bold truncate text-textMain">{activeUser || 'Active Session'}</div>
+                  <div className="text-[10px] text-textMuted truncate font-mono">VTOP Chennai</div>
                 </div>
               </div>
               <button
                 onClick={() => logoutMutation.mutate()}
                 title="Sign Out"
                 disabled={logoutMutation.isPending}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                className="p-2 hover:bg-bgPrimary text-textMuted hover:text-accentColor rounded-lg transition-colors cursor-pointer"
               >
                 <LogOut className="h-4 w-4" />
               </button>
@@ -1120,14 +1114,14 @@ function VtopLoginDashboard() {
             {/* Header controls (Theme switcher and title) */}
             <div className="flex items-center justify-between mb-8">
               <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dashboard Workspace</span>
-                <h2 className="text-2xl font-black capitalize text-slate-900 dark:text-slate-50">{activeTab} View</h2>
+                <span className="text-xs font-bold text-textMuted uppercase tracking-widest">Dashboard Workspace</span>
+                <h2 className="text-2xl font-black capitalize text-textMain">{activeTab} View</h2>
               </div>
               <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-3 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors shadow-sm cursor-pointer"
+                className="p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
               >
-                {theme === 'dark' ? <Sun className="h-4 w-4 text-blue-500" /> : <Moon className="h-4 w-4 text-slate-700" />}
+                {theme === 'dark' ? <Sun className="h-4 w-4 text-accentColor" /> : <Moon className="h-4 w-4 text-textMuted" />}
               </button>
             </div>
 

@@ -26,7 +26,7 @@ export const GradesView: React.FC<GradesViewProps> = ({ gradesQuery }) => {
                 <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Academic Merit</span>
                 <h3 className="text-lg font-black text-textMain">Cumulative Semester GPA</h3>
               </div>
-              <div className="text-3xl font-black text-blue-600 dark:text-blue-500">{gradesQuery.data.gpa}</div>
+              <div className="text-3xl font-black text-accentColor">{gradesQuery.data.gpa}</div>
             </div>
           )}
 
@@ -45,16 +45,16 @@ export const GradesView: React.FC<GradesViewProps> = ({ gradesQuery }) => {
                 </thead>
                 <tbody>
                   {gradesQuery.data?.grades?.map((g: any, index: number) => (
-                    <tr key={index} className="border-b border-borderColor/40 hover:bg-bgPrimary/55">
+                    <tr key={index} className="border-b border-borderColor hover:bg-bgPrimary/55">
                       <td className="p-4 text-textMain">
-                        <div className="font-extrabold text-blue-600 dark:text-blue-500">{g.code}</div>
+                        <div className="font-extrabold text-accentColor">{g.code}</div>
                         <div className="font-semibold mt-0.5">{g.title}</div>
                       </td>
                       <td className="p-4 text-center text-textMuted">{g.type}</td>
                       <td className="p-4 text-center font-semibold text-textMain">{g.credits}</td>
                       <td className="p-4 text-center font-bold text-textMain">{g.total || '-'}</td>
                       <td className="p-4 text-center">
-                        <span className="text-sm font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 px-3 py-1 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                        <span className="text-sm font-black text-accentColor bg-bgPrimary px-3 py-1 rounded-lg border border-borderColor">
                           {g.grade || '-'}
                         </span>
                       </td>

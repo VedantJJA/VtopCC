@@ -56,10 +56,10 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
           {/* Courses Credit Stat Bar */}
           <div className="p-4 bg-bgCard border border-borderColor rounded-2xl flex justify-between items-center shadow-sm">
             <div className="flex items-center gap-3">
-              <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-500" />
-              <span className="text-sm font-semibold">Registered Credits</span>
+              <BookOpen className="h-5 w-5 text-accentColor" />
+              <span className="text-sm font-semibold text-textMain">Registered Credits</span>
             </div>
-            <div className="text-lg font-black text-blue-600 dark:text-blue-500">{timetableQuery.data?.total_credits}</div>
+            <div className="text-lg font-black text-accentColor">{timetableQuery.data?.total_credits}</div>
           </div>
 
           {/* Desktop Timetable grid */}
@@ -67,12 +67,12 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
             <div className="overflow-auto w-full relative">
               <table className="w-full border-collapse text-left text-xs table-fixed min-w-[1200px]">
                 <thead>
-                  <tr className="bg-slate-100 dark:bg-black border-b border-borderColor">
-                    <th className="p-4 font-bold w-24 text-center border-r border-borderColor">Day</th>
+                  <tr className="bg-bgPrimary border-b border-borderColor">
+                    <th className="p-4 font-bold w-24 text-center border-r border-borderColor text-textMain">Day</th>
                     {TIMETABLE_SLOTS.map((slot) => (
                       <th key={slot.key} className="p-3 text-center border-r border-borderColor w-32 min-w-[120px]">
-                        <div className="font-extrabold text-[11px] text-slate-700 dark:text-slate-300">{slot.name}</div>
-                        <div className="text-[9px] text-slate-400 dark:text-neutral-500 font-mono mt-0.5 leading-tight">
+                        <div className="font-extrabold text-[11px] text-textMain">{slot.name}</div>
+                        <div className="text-[9px] text-textMuted font-mono mt-0.5 leading-tight">
                           {slot.id === 'break' ? (
                             <span>13:25 - 14:00</span>
                           ) : (
@@ -89,12 +89,12 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
                 </thead>
                 <tbody>
                   {['MON', 'TUE', 'WED', 'THU', 'FRI'].map(day => (
-                    <tr key={day} className="border-b border-slate-100 dark:border-neutral-800/40 hover:bg-slate-50/50 dark:hover:bg-neutral-800/20">
-                      <td className="p-4 font-bold text-center bg-slate-50/40 dark:bg-black/35 border-r border-borderColor">{day}</td>
+                    <tr key={day} className="border-b border-borderColor hover:bg-bgPrimary/50">
+                      <td className="p-4 font-bold text-center bg-bgPrimary border-r border-borderColor text-textMain">{day}</td>
                       {TIMETABLE_SLOTS.map((slot, slotIdx) => {
                         if (slot.id === 'break') {
                           return (
-                            <td key={slot.key} className="p-2 text-center bg-slate-50/20 dark:bg-black/10 text-slate-400 font-semibold border-r border-borderColor">
+                            <td key={slot.key} className="p-2 text-center bg-bgPrimary text-textMuted font-semibold border-r border-borderColor">
                               LUNCH
                             </td>
                           );
@@ -118,14 +118,14 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
                             className="p-2 border-r border-borderColor text-center align-middle"
                           >
                             {cellData ? (
-                              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-2 rounded-xl space-y-1">
-                                <div className="font-extrabold text-[10px] text-blue-600 dark:text-blue-500">{cellData.code}</div>
-                                <div className="text-[9px] text-slate-700 dark:text-slate-300 font-bold truncate" title={cellData.title}>{cellData.title}</div>
-                                <div className="text-[9px] text-slate-400 font-mono">{cellData.venue}</div>
-                                <div className="text-[8px] text-slate-400 font-mono mt-0.5 bg-slate-100 dark:bg-neutral-800/60 px-1 py-0.5 rounded inline-block">{activeTime}</div>
+                              <div className="bg-bgPrimary border border-borderColor p-2 rounded-xl space-y-1">
+                                <div className="font-extrabold text-[10px] text-accentColor">{cellData.code}</div>
+                                <div className="text-[9px] text-textMain font-bold truncate" title={cellData.title}>{cellData.title}</div>
+                                <div className="text-[9px] text-textMuted font-mono">{cellData.venue}</div>
+                                <div className="text-[8px] text-textMuted font-mono mt-0.5 bg-bgCard px-1 py-0.5 rounded inline-block">{activeTime}</div>
                               </div>
                             ) : (
-                              <span className="text-slate-300 dark:text-neutral-800 font-bold">-</span>
+                              <span className="text-textMuted font-bold">-</span>
                             )}
                           </td>
                         );
