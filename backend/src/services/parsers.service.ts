@@ -625,13 +625,13 @@ export function parseMarks(htmlContent: string) {
   const mainTable = $('table.customTable');
   if (!mainTable.length) return [];
 
-  const rows = mainTable.find('> tr');
+  const rows = mainTable.find('> tbody > tr, > tr');
   let currentCourse: any = null;
 
   rows.each((_, row) => {
     if ($(row).hasClass('tableHeader')) return;
 
-    const cells = $(row).find('> td');
+    const cells = $(row).find('> td, > th');
     if (cells.length > 5 && !$(row).find('table').length) {
       if ($(cells[2]).text().trim() === 'Course Code') return;
 

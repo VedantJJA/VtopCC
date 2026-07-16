@@ -34,7 +34,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               }}
               className="px-3 py-1.5 text-xs font-bold bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain"
             >
-              ◀ Previous Month
+              &lt; Previous Month
             </button>
             <h3 className="font-extrabold text-blue-600 dark:text-blue-500 text-sm md:text-base">
               {calendarQuery.data?.month_title || 'Calendar Month'}
@@ -46,7 +46,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               }}
               className="px-3 py-1.5 text-xs font-bold bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain"
             >
-              Next Month ▶
+              Next Month &gt;
             </button>
           </div>
 

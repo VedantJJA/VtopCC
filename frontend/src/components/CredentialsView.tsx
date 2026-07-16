@@ -53,7 +53,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({ credentialsQue
                           rel="noreferrer"
                           className="text-[10px] font-bold text-accentColor hover:underline"
                         >
-                          Login Portal ↗
+                          Login Portal -&gt;
                         </a>
                       )}
                     </div>

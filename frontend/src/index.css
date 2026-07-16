@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
@@ -31,6 +33,25 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+
+  /* Custom Theme Mappings */
+  --color-bgPrimary: var(--bg-primary);
+  --color-bgCard: var(--bg-card);
+  --color-bgSidebar: var(--bg-sidebar);
+  --color-textMain: var(--text-main);
+  --color-textMuted: var(--text-muted);
+  --color-accentColor: var(--accent);
+  --color-borderColor: var(--border);
+
+  /* Extra Accents */
+  --color-accentSuccess: var(--accent-success);
+  --color-bgSuccess: var(--bg-success);
+  --color-accentDanger: var(--accent-danger);
+  --color-bgDanger: var(--bg-danger);
+  --color-accentWarning: var(--accent-warning);
+  --color-bgWarning: var(--bg-warning);
+  --color-accentInfo: var(--accent-info);
+  --color-bgInfo: var(--bg-info);
 }
 
 [data-theme='light'] {
@@ -72,6 +93,8 @@
   --accent-info: #818cf8;
   --bg-info: #312e8133;
 }
+
+
 
 :root {
   --background: 0 0% 100%;

@@ -16,15 +16,16 @@ import {
   AlertTriangle,
   Sun,
   Moon,
-  Calendar as CalendarIcon,
   FileText,
-  Award,
-  Clock,
-  UserCheck,
   Eye,
   EyeOff,
   Menu,
-  LayoutDashboard
+  LayoutDashboard,
+  IdCard,
+  GraduationCap,
+  Home,
+  PlusCircle,
+  ChevronDown
 } from 'lucide-react';
 
 import { DashboardView } from './components/DashboardView';
@@ -36,6 +37,8 @@ import { GradesView } from './components/GradesView';
 import { ExamsView } from './components/ExamsView';
 import { CalendarView } from './components/CalendarView';
 import { CredentialsView } from './components/CredentialsView';
+import { HostelView } from './components/HostelView';
+import { AttendanceCalculator } from './components/AttendanceCalculator';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,7 +75,7 @@ const TIMETABLE_SLOTS = [
   { id: 12, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
-type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials';
+type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses';
 
 function VtopLoginDashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -99,6 +102,10 @@ function VtopLoginDashboard() {
 
   // Dashboard state
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
+  const [expandedNav, setExpandedNav] = useState<Record<string, boolean>>({
+    'academics': true,
+    'my-info': true
+  });
   const [activeSemester, setActiveSemester] = useState<string>('');
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
@@ -530,13 +537,16 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && activeTab === 'profile'
+    enabled: isLoggedIn && !!sessionId && (activeTab === 'profile' || activeTab === 'my-room')
   });
 
   const timetableQuery = useQuery({
     queryKey: ['timetable', activeUser, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/timetable', { semesterSubId: activeSemester });
+      const res = await api.post('/data/timetable', {
+        semesterSubId: activeSemester,
+        isSaturday: true
+      });
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem(`vtop_cache_timetable_${activeSemester}`, JSON.stringify(data));
@@ -568,7 +578,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && (activeTab === 'attendance' || activeTab === 'dashboard')
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && (activeTab === 'attendance' || activeTab === 'dashboard' || activeTab === 'calculator')
   });
 
   const attendanceDetailQuery = useQuery({
@@ -650,6 +660,11 @@ function VtopLoginDashboard() {
         semesterSubId: activeSemester,
         calDate: dateStr
       });
+      if (res.data.new_semester_id && res.data.new_semester_id !== activeSemester) {
+        setTimeout(() => {
+          setActiveSemester(res.data.new_semester_id);
+        }, 0);
+      }
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
@@ -821,6 +836,7 @@ function VtopLoginDashboard() {
 
   return (
     <div className="min-h-screen bg-bgPrimary text-textMain flex flex-col font-sans transition-colors duration-300">
+      <GlobalScrollbarStyles />
 
       {/* Global Google ReCAPTCHA element */}
       <div
@@ -839,6 +855,7 @@ function VtopLoginDashboard() {
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="absolute top-6 right-6 p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
+            title={`Switch theme (Current: ${theme})`}
           >
             {theme === 'dark' ? <Sun className="h-5 w-5 text-blue-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
           </button>
@@ -1003,180 +1020,187 @@ function VtopLoginDashboard() {
         </div>
       ) : (
         /* ================= STUDENT DASHBOARD INTERFACE ================= */
-        <div className="flex-1 flex flex-col md:flex-row min-h-0 relative bg-bgPrimary text-textMain">
+        <div className={`flex-1 flex h-screen overflow-hidden relative transition-colors duration-300 ${theme === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-gray-100 text-slate-800'}`}>
           
-          {/* Mobile Header Bar */}
-          <div className="md:hidden flex items-center justify-between px-6 py-4 bg-bgCard border-b border-borderColor shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="text-xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
-              <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
-            </div>
-            <button 
-              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-              className="p-2 text-textMuted hover:bg-bgPrimary rounded-lg outline-none cursor-pointer"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-          </div>
-
           {/* Mobile Overlay Backdrop */}
           {isMobileSidebarOpen && (
             <div
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300"
+              className="fixed inset-0 bg-black/40 z-20 md:hidden transition-opacity duration-300"
             />
           )}
 
           {/* SIDEBAR NAVIGATION */}
-          <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-bgSidebar border-r border-borderColor flex flex-col justify-between shrink-0 transform transition-transform duration-300 ease-in-out ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 md:static md:flex'}`}>
-            <div className="p-6 flex-1 overflow-y-auto min-h-0">
-              {/* App logo inside sidebar */}
-              <div className="hidden md:flex items-center gap-3 mb-8">
-                <span className="text-2xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
-                <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
+          <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            {/* Logo area */}
+            <div className="p-5 pb-4 shrink-0">
+              <div className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-black">V</div>
+                VTOP Client
               </div>
-
-              {/* Navigation Items */}
-              <nav className="space-y-1">
-                <button
-                  onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'dashboard'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <LayoutDashboard className="h-4 w-4" /> Dashboard
-                </button>
-                <button
-                  onClick={() => { setActiveTab('profile'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'profile'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <UserIcon className="h-4 w-4" /> Student Profile
-                </button>
-                <button
-                  onClick={() => { setActiveTab('timetable'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'timetable'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <Clock className="h-4 w-4" /> Timetable Grid
-                </button>
-                <button
-                  onClick={() => { setActiveTab('attendance'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'attendance'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <UserCheck className="h-4 w-4" /> Class Attendance
-                </button>
-                <button
-                  onClick={() => { setActiveTab('marks'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'marks'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <FileText className="h-4 w-4" /> Course Marks
-                </button>
-                <button
-                  onClick={() => { setActiveTab('grades'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'grades'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <Award className="h-4 w-4" /> Final Grades
-                </button>
-                <button
-                  onClick={() => { setActiveTab('exams'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'exams'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <CalendarIcon className="h-4 w-4" /> Exam Schedule
-                </button>
-                <button
-                  onClick={() => { setActiveTab('calendar'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'calendar'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <CalendarIcon className="h-4 w-4" /> Academic Calendar
-                </button>
-                <button
-                  onClick={() => { setActiveTab('credentials'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'credentials'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <Lock className="h-4 w-4" /> WiFi & Systems
-                </button>
-
-              </nav>
             </div>
 
-            {/* Semester selector at the bottom, above the profile card */}
-            {semestersQuery.data && semestersQuery.data.length > 0 && (
-              <div className="px-6 py-4 border-t border-borderColor">
-                <label className="block text-[11px] font-bold text-textMuted uppercase tracking-wider mb-2">Select Semester</label>
-                <select
-                  value={activeSemester}
-                  onChange={(e) => setActiveSemester(e.target.value)}
-                  className="w-full px-3 py-2 bg-bgPrimary border border-borderColor rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 text-textMain"
-                >
-                  {semestersQuery.data.map(sem => (
-                    <option key={sem.id} value={sem.id}>{sem.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* User Profile Card & Sign Out at the Bottom */}
-            <div className="p-4 border-t border-borderColor flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs uppercase border border-blue-200 dark:border-blue-900/60">
-                  {activeUser ? activeUser.substring(0, 2) : 'ST'}
+            {/* Student Info Card */}
+            <div className="px-4 pb-4 shrink-0">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800/50">
+                <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold shrink-0">
+                  {activeUser ? activeUser.substring(0, 1).toUpperCase() : 'S'}
                 </div>
                 <div className="overflow-hidden">
-                  <div className="text-xs font-bold truncate text-textMain">{activeUser || 'Active Session'}</div>
-                  <div className="text-[10px] text-textMuted truncate font-mono">VTOP Chennai</div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{profileQuery.data?.personal?.name || activeUser || 'Active Session'}</p>
+                  <p className="text-[11px] text-green-600 dark:text-green-400 font-medium truncate">Session Active • {profileQuery.data?.educational?.reg_no || 'Student'}</p>
                 </div>
               </div>
-              <button
+            </div>
+
+            {/* Collapsible Nav Links */}
+            <nav className="flex-1 overflow-y-auto px-3 space-y-1 pb-4 custom-scrollbar">
+              {[
+                { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+                { 
+                  id: 'my-info', label: 'My Info', icon: IdCard, 
+                  children: [
+                    { id: 'credentials', label: 'WiFi & Systems' },
+                    { id: 'profile', label: 'Student Profile' }
+                  ]
+                },
+                {
+                  id: 'academics', label: 'Academics', icon: GraduationCap,
+                  children: [
+                    { id: 'timetable', label: 'Time Table' },
+                    { id: 'attendance', label: 'Attendance' },
+                    { id: 'calendar', label: 'Calendar' }
+                  ]
+                },
+                {
+                  id: 'examinations', label: 'Examinations', icon: FileText,
+                  children: [
+                    { id: 'marks', label: 'Marks' },
+                    { id: 'grades', label: 'Grades' },
+                    { id: 'exams', label: 'Exam Schedule' }
+                  ]
+                },
+                {
+                  id: 'hostel', label: 'Hostel', icon: Home,
+                  children: [
+                    { id: 'my-room', label: 'My Room' }
+                  ]
+                },
+                {
+                  id: 'extra', label: 'Extra Options', icon: PlusCircle, divider: true,
+                  children: [
+                    { id: 'calculator', label: 'Attendance Calculator' }
+                  ]
+                }
+              ].map((item) => (
+                <div key={item.id} className={item.divider ? "pt-3 mt-3 border-t border-gray-100 dark:border-gray-700" : ""}>
+                  {item.children ? (
+                    <div className="space-y-0.5 animate-in fade-in duration-200">
+                      <button 
+                        onClick={() => setExpandedNav(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                        className="w-full flex justify-between items-center px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors font-medium text-[13px] cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <item.icon className="h-4 w-4 text-blue-500" /> {item.label}
+                        </div>
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${expandedNav[item.id] ? 'rotate-180' : ''}`} />
+                      </button>
+                      {expandedNav[item.id] && (
+                        <div className="pl-9 pr-2 py-1 space-y-0.5">
+                          {item.children.map(child => (
+                            <button
+                              key={child.id}
+                              onClick={() => { setActiveTab(child.id as any); setIsMobileSidebarOpen(false); }}
+                              className={`w-full text-left px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                                activeTab === child.id 
+                                ? 'text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-900/40 font-semibold' 
+                                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              {child.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setActiveTab(item.id as any); setIsMobileSidebarOpen(false); }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-[13px] cursor-pointer ${
+                        activeTab === item.id
+                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                      }`}
+                    >
+                      <item.icon className="h-4 w-4 text-blue-500" /> {item.label}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </nav>
+
+            {/* Bottom Actions */}
+            <div className="p-4 border-t border-gray-100 dark:border-gray-700 shrink-0 space-y-3">
+              {semestersQuery.data && semestersQuery.data.length > 0 && (
+                <div>
+                  <label htmlFor="semester-select" className="block text-[11px] font-medium text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wider">Semester</label>
+                  <div className="relative">
+                    <select
+                      id="semester-select"
+                      value={activeSemester}
+                      onChange={(e) => setActiveSemester(e.target.value)}
+                      className="block w-full p-2 pr-8 text-sm font-medium text-gray-900 border border-gray-200 rounded-lg bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-colors appearance-none cursor-pointer"
+                    >
+                      {semestersQuery.data.map(sem => (
+                        <option key={sem.id} value={sem.id}>{sem.name}</option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                      <ChevronDown className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button 
                 onClick={() => logoutMutation.mutate()}
-                title="Sign Out"
                 disabled={logoutMutation.isPending}
-                className="p-2 hover:bg-bgPrimary text-textMuted hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center justify-center w-full px-3 py-2 text-sm font-medium rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-colors cursor-pointer"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="mr-2 h-4 w-4" /> Logout
               </button>
             </div>
           </aside>
 
           {/* MAIN DASHBOARD CONTENT AREA */}
-          <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
-
+          <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Header controls (Theme switcher and title) */}
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <span className="text-xs font-bold text-textMuted uppercase tracking-widest">Dashboard Workspace</span>
-                <h2 className="text-2xl font-black capitalize text-textMain">{activeTab} View</h2>
+            <header className="flex items-center justify-between px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10 shrink-0">
+              <div className="flex items-center">
+                <button 
+                  className="md:hidden mr-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 focus:outline-none cursor-pointer"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+                <h1 className="text-lg font-bold text-gray-800 dark:text-white capitalize">
+                  {activeTab === 'my-room' ? 'My Room' : activeTab === 'calculator' ? 'Attendance Calculator' : activeTab.replace('-', ' ')}
+                </h1>
               </div>
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
-              >
-                {theme === 'dark' ? <Sun className="h-4 w-4 text-accentColor" /> : <Moon className="h-4 w-4 text-textMuted" />}
-              </button>
-            </div>
+              
+              <div className="flex items-center space-x-3">
+                <button 
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="p-2 rounded-lg text-gray-500 bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
+                  title="Toggle Light/Dark Theme"
+                >
+                  {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                </button>
+              </div>
+            </header>
+
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 relative custom-scrollbar bg-gray-100 dark:bg-gray-900">
 
             {/* TAB VIEWS */}
             {activeTab === 'dashboard' && (
@@ -1239,8 +1263,32 @@ function VtopLoginDashboard() {
               <CredentialsView credentialsQuery={credentialsQuery} />
             )}
 
+            {/* 9. MY ROOM (HOSTEL) VIEW */}
+            {activeTab === 'my-room' && (
+              <HostelView profileQuery={profileQuery} />
+            )}
+
+            {/* 10. ATTENDANCE CALCULATOR VIEW */}
+            {activeTab === 'calculator' && (
+              <AttendanceCalculator attendanceQuery={attendanceQuery} />
+            )}
+
+            {/* 11. REGISTERED COURSES (UNDER CONSTRUCTION) */}
+            {activeTab === 'courses' && (
+              <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="bg-bgPrimary rounded-full p-6 mb-4 border border-borderColor shadow-sm">
+                  <PlusCircle className="w-12 h-12 text-textMuted" />
+                </div>
+                <h2 className="text-2xl font-bold text-textMain mb-2 capitalize">{activeTab.replace('-', ' ')}</h2>
+                <p className="text-textMuted max-w-md">
+                  This section is currently under construction. Please check back later when new updates are rolled out.
+                </p>
+              </div>
+            )}
 
 
+
+            </div>
           </main>
 
         </div>
@@ -1262,7 +1310,7 @@ function VtopLoginDashboard() {
                   onClick={() => setSelectedAttendanceCourse(null)}
                   className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-bold text-lg leading-none cursor-pointer"
                 >
-                  ✕
+                  X
                 </button>
               </div>
 
@@ -1340,5 +1388,21 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <VtopLoginDashboard />
     </QueryClientProvider>
+  );
+}
+
+
+
+// Global generic styles for scrollbars
+function GlobalScrollbarStyles() {
+  return (
+    <style dangerouslySetInnerHTML={{__html: `
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    `}} />
   );
 }

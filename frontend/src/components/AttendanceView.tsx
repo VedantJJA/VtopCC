@@ -99,7 +99,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   onClick={() => setSelectedAttendanceCourse(null)}
                   className="p-1 text-textMuted hover:text-textMain font-bold text-lg leading-none cursor-pointer"
                 >
-                  ✕
+                  X
                 </button>
               </div>              {/* Attendance Log Table */}
               <div className="space-y-4">

@@ -29,7 +29,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         odCount += parseInt(course.on_duty, 10) || 0;
       }
     }
-    const percentage = totalClasses > 0 ? Math.round((totalAttended / totalClasses) * 100) : 0;
+    const percentage = totalClasses > 0 ? Math.floor((totalAttended / totalClasses) * 100) : 0;
     return { percentage, od: odCount, loading: false };
   };
 

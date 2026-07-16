@@ -43,7 +43,7 @@ export const getSemesters = async (req: Request, res: Response) => {
 };
 
 export const getTimetable = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId } = req.body;
+  const { session_id, semesterSubId, isSaturday, includeDayOrder } = req.body;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -57,7 +57,107 @@ export const getTimetable = async (req: Request, res: Response) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
 
-    const parsedData = parsers.parseCourseData(response.data);
+    const parsedData = parsers.parseCourseData(response.data) as any;
+
+    if (isSaturday || includeDayOrder) {
+      // Get all semesters for fallback switcher
+      const session = sessionService.getSession(session_id);
+      let allSemesters: any[] = [];
+      if (session) {
+        if (!session.semestersList || session.semestersList.length === 0) {
+          const semesters = await fetchSemestersList(client, authorizedId, csrfToken);
+          sessionService.updateSession(session_id, { semestersList: semesters });
+          session.semestersList = semesters;
+        }
+        allSemesters = session.semestersList || [];
+      }
+
+      // Calculate upcoming Saturday's date
+      const now = new Date();
+      const day = now.getDay();
+      const daysToAdd = (6 - day + 7) % 7;
+      const upcomingSat = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+
+      const dd = String(upcomingSat.getDate()).padStart(2, '0');
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const mmm = months[upcomingSat.getMonth()];
+      const yyyy = upcomingSat.getFullYear();
+      const satDateStr = `${dd}-${mmm}-${yyyy}`;
+
+      console.log(`[SATURDAY PATCH] Upcoming Saturday date: ${satDateStr}`);
+
+      let targetSemId = semesterSubId;
+      let selectedGroup = await getClassGroupId(client, authorizedId, csrfToken, targetSemId);
+
+      const calPayload = new URLSearchParams();
+      calPayload.append('authorizedID', authorizedId);
+      calPayload.append('_csrf', csrfToken);
+      calPayload.append('calDate', satDateStr);
+      calPayload.append('semSubId', targetSemId);
+      calPayload.append('classGroupId', selectedGroup);
+      calPayload.append('x', new Date().toUTCString());
+
+      let calRes = await client.post('processViewCalendar', calPayload, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      let calData = parsers.parseAcademicCalendar(calRes.data);
+
+      // Backend Fallback Semester Loop (Step 3)
+      if (!hasMeaningfulEvents(calData) && allSemesters.length > 0) {
+        console.log(`[SATURDAY PATCH] Calendar date ${satDateStr} empty for sem ${targetSemId}. Checking fallbacks...`);
+        for (const sem of allSemesters) {
+          if (sem.id === targetSemId) continue;
+          try {
+            const candidateGroup = await getClassGroupId(client, authorizedId, csrfToken, sem.id);
+            const retryPayload = new URLSearchParams();
+            retryPayload.append('authorizedID', authorizedId);
+            retryPayload.append('_csrf', csrfToken);
+            retryPayload.append('calDate', satDateStr);
+            retryPayload.append('semSubId', sem.id);
+            retryPayload.append('classGroupId', candidateGroup);
+            retryPayload.append('x', new Date().toUTCString());
+
+            const retryRes = await client.post('processViewCalendar', retryPayload, {
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+            const retryData = parsers.parseAcademicCalendar(retryRes.data);
+            if (hasMeaningfulEvents(retryData)) {
+              calData = retryData;
+              targetSemId = sem.id;
+              console.log(`[SATURDAY PATCH] Auto-switched to sem: ${sem.id}`);
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+
+      // Check Saturday day order in calendar events
+      let dayOrderCode: string | null = null;
+      const satDayNum = upcomingSat.getDate();
+      const satDayObj = (calData.days || []).find((d: any) => d.day === satDayNum);
+      if (satDayObj && satDayObj.events) {
+        for (const event of satDayObj.events) {
+          const text = (event.text || '').toUpperCase();
+          if (text.includes('ORDER')) {
+            if (text.includes('MON')) dayOrderCode = 'MON';
+            else if (text.includes('TUE')) dayOrderCode = 'TUE';
+            else if (text.includes('WED')) dayOrderCode = 'WED';
+            else if (text.includes('THU')) dayOrderCode = 'THU';
+            else if (text.includes('FRI')) dayOrderCode = 'FRI';
+            if (dayOrderCode) break;
+          }
+        }
+      }
+
+      if (dayOrderCode && parsedData.timetable) {
+        console.log(`[SATURDAY PATCH] Mapping Saturday timetable to ${dayOrderCode}`);
+        parsedData.timetable['SAT'] = parsedData.timetable[dayOrderCode] || {};
+        parsedData.day_order_active = dayOrderCode;
+      }
+    }
+
     return res.json({ status: 'success', raw_data: parsedData });
   } catch (error: any) {
     console.error('getTimetable failed:', error);
@@ -350,7 +450,7 @@ export const getProfile = async (req: Request, res: Response) => {
   }
 };
 
-const hasMeaningfulEvents = (calendarData: any): boolean => {
+function hasMeaningfulEvents(calendarData: any): boolean {
   if (!calendarData || !Array.isArray(calendarData.days)) {
     return false;
   }
@@ -360,9 +460,9 @@ const hasMeaningfulEvents = (calendarData: any): boolean => {
     }
   }
   return false;
-};
+}
 
-const getClassGroupId = async (client: any, authorizedId: string, csrfToken: string, semesterSubId: string): Promise<string> => {
+async function getClassGroupId(client: any, authorizedId: string, csrfToken: string, semesterSubId: string): Promise<string> {
   let selectedGroup = 'ALL';
   try {
     const ttPayload = new URLSearchParams();
@@ -382,9 +482,9 @@ const getClassGroupId = async (client: any, authorizedId: string, csrfToken: str
     console.warn('Failed to extract Class Group ID, falling back to ALL:', err);
   }
   return selectedGroup;
-};
+}
 
-const fetchSemestersList = async (client: any, authorizedId: string, csrfToken: string): Promise<any[]> => {
+async function fetchSemestersList(client: any, authorizedId: string, csrfToken: string): Promise<any[]> {
   try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -412,7 +512,7 @@ const fetchSemestersList = async (client: any, authorizedId: string, csrfToken: 
     console.error('fetchSemestersList failed:', err);
     return [];
   }
-};
+}
 
 import { sessionService } from '../services/session.service';
 
