@@ -3,7 +3,7 @@ services:
     name: vtopcc-backend
     env: node
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start
     rootDir: backend
     envVars:
@@ -14,9 +14,8 @@ services:
       - key: JWT_SECRET
         generateValue: true
 
-  - type: web
+  - type: static
     name: vtopcc
-    env: static
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     rootDir: frontend
