@@ -14,7 +14,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
 
-  - type: static
+  - type: static_site
     name: vtopcc
     buildCommand: npm install && npm run build
     staticPublishPath: dist
