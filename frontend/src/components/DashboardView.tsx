@@ -71,11 +71,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-textMain text-lg mb-4 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-accentInfo" /> Attendance Snapshot
+              <TrendingUp className="h-5 w-5 text-indigo-500" /> Attendance Snapshot
             </h3>
             {attSum.loading ? (
               <div className="h-16 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-accentColor" />
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
               </div>
             ) : (
               <div className="space-y-4">
@@ -86,7 +86,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                   <div className="w-full bg-bgPrimary rounded-full h-2">
                     <div 
-                      className={`h-2 rounded-full transition-all duration-500 ${attSum.percentage >= 75 ? 'bg-accentSuccess' : 'bg-accentDanger'}`}
+                      className={`h-2 rounded-full transition-all duration-500 ${attSum.percentage >= 75 ? 'bg-emerald-500' : 'bg-rose-500'}`}
                       style={{ width: `${attSum.percentage}%` }}
                     />
                   </div>
@@ -104,11 +104,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm md:col-span-2 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-textMain text-lg mb-4 flex items-center gap-2">
-              <Clock className="h-5 w-5 text-accentInfo" /> Today's Class Schedule
+              <Clock className="h-5 w-5 text-indigo-500" /> Today's Class Schedule
             </h3>
             {todayClasses.loading ? (
               <div className="h-24 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-accentColor" />
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
               </div>
             ) : todayClasses.list.length === 0 ? (
               <p className="text-sm text-textMuted italic py-4 text-center">No classes scheduled for today.</p>
@@ -117,10 +117,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {todayClasses.list.map((cls, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-bgPrimary rounded-xl border border-borderColor">
                     <div>
-                      <div className="font-bold text-xs text-accentColor">{cls.code} - {cls.title}</div>
+                      <div className="font-bold text-xs text-blue-600 dark:text-blue-400">{cls.code} - {cls.title}</div>
                       <div className="text-[10px] text-textMuted font-mono mt-0.5">{cls.time} | Venue: {cls.venue}</div>
                     </div>
-                    <span className="text-[10px] font-bold bg-bgPrimary text-accentColor px-2.5 py-1 rounded-md">{cls.slot}</span>
+                    <span className="text-[10px] font-bold bg-bgPrimary text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-md">{cls.slot}</span>
                   </div>
                 ))}
               </div>

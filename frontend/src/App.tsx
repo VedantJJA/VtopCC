@@ -109,7 +109,7 @@ function VtopLoginDashboard() {
   const autoLoginRetryCount = useRef(0);
   const manualLoginRetryCount = useRef(0);
   const initRef = useRef(false);
-  const lastRestorationTime = useRef(0);
+  const isRestoringSession = useRef(false);
 
   // Toggle theme
   useEffect(() => {
@@ -475,6 +475,15 @@ function VtopLoginDashboard() {
       setIsLoggedIn(false);
       setActiveUser('');
       localStorage.removeItem('vtop_session_id');
+
+      // Clear cache on logout
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('vtop_cache_')) {
+          localStorage.removeItem(key);
+        }
+      }
+
       setMessage({ text: 'Successfully logged out.', type: 'success' });
       autoLoginRetryCount.current = 0;
       manualLoginRetryCount.current = 0;
@@ -512,13 +521,12 @@ function VtopLoginDashboard() {
       const res = await api.post('/data/profile');
       const data = res.data.raw_data;
       if (data) {
-        localStorage.setItem(`vtopc_cache_profile_${activeUser}`, JSON.stringify(data));
+        localStorage.setItem('vtop_cache_profile', JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_profile_${activeUser}`);
+      const cached = localStorage.getItem('vtop_cache_profile');
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -531,13 +539,13 @@ function VtopLoginDashboard() {
       const res = await api.post('/data/timetable', { semesterSubId: activeSemester });
       const data = res.data.raw_data;
       if (data) {
-        localStorage.setItem(`vtopc_cache_timetable_${activeUser}_${activeSemester}`, JSON.stringify(data));
+        localStorage.setItem(`vtop_cache_timetable_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser || !activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_timetable_${activeUser}_${activeSemester}`);
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_timetable_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -550,13 +558,13 @@ function VtopLoginDashboard() {
       const res = await api.post('/data/attendance', { semesterSubId: activeSemester });
       const data = res.data.raw_data as any[];
       if (data) {
-        localStorage.setItem(`vtopc_cache_attendance_${activeUser}_${activeSemester}`, JSON.stringify(data));
+        localStorage.setItem(`vtop_cache_attendance_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser || !activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_attendance_${activeUser}_${activeSemester}`);
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_attendance_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -582,13 +590,13 @@ function VtopLoginDashboard() {
       const res = await api.post('/data/marks', { semesterSubId: activeSemester });
       const data = res.data.raw_data;
       if (data) {
-        localStorage.setItem(`vtopc_cache_marks_${activeUser}_${activeSemester}`, JSON.stringify(data));
+        localStorage.setItem(`vtop_cache_marks_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser || !activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_marks_${activeUser}_${activeSemester}`);
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_marks_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -601,13 +609,13 @@ function VtopLoginDashboard() {
       const res = await api.post('/data/grades', { semesterSubId: activeSemester });
       const data = res.data.raw_data;
       if (data) {
-        localStorage.setItem(`vtopc_cache_grades_${activeUser}_${activeSemester}`, JSON.stringify(data));
+        localStorage.setItem(`vtop_cache_grades_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser || !activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_grades_${activeUser}_${activeSemester}`);
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_grades_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -620,13 +628,13 @@ function VtopLoginDashboard() {
       const res = await api.post('/data/exams', { semesterSubId: activeSemester });
       const data = res.data.raw_data as any[];
       if (data) {
-        localStorage.setItem(`vtopc_cache_exams_${activeUser}_${activeSemester}`, JSON.stringify(data));
+        localStorage.setItem(`vtop_cache_exams_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser || !activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_exams_${activeUser}_${activeSemester}`);
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_exams_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -644,13 +652,13 @@ function VtopLoginDashboard() {
       });
       const data = res.data.raw_data;
       if (data) {
-        localStorage.setItem(`vtopc_cache_calendar_${activeUser}_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
+        localStorage.setItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser || !activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_calendar_${activeUser}_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -669,18 +677,95 @@ function VtopLoginDashboard() {
       const res = await api.post('/data/credentials');
       const data = res.data.raw_data;
       if (data) {
-        localStorage.setItem(`vtopc_cache_credentials_${activeUser}`, JSON.stringify(data));
+        localStorage.setItem('vtop_cache_credentials', JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeUser) return undefined;
-      const cached = localStorage.getItem(`vtopc_cache_credentials_${activeUser}`);
+      const cached = localStorage.getItem('vtop_cache_credentials');
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && activeTab === 'credentials'
   });
+
+  const silentRestoreSession = async () => {
+    let attempt = 1;
+    while (attempt <= MAX_RETRIES) {
+      try {
+        console.log(`[RESTORE] Attempt ${attempt}/${MAX_RETRIES} to restore session...`);
+        const startRes = await api.post<StartLoginResponse>('/auth/start-login');
+        if (startRes.data.status === 'captcha_ready') {
+          const currentSessionId = startRes.data.session_id;
+          const captchaImgData = startRes.data.captcha_image_data || '';
+          
+          let solvedText = '';
+          try {
+            solvedText = await solveCaptchaClient(captchaImgData);
+          } catch (solveErr) {
+            console.error("[RESTORE] Captcha solve error:", solveErr);
+            attempt++;
+            continue;
+          }
+          
+          const autoLoginRes = await api.post('/auth/auto-login', {
+            captcha: solvedText,
+            session_id: currentSessionId
+          });
+          
+          if (autoLoginRes.data.status === 'success') {
+            console.log("[RESTORE] Session restored successfully!");
+            setSessionId(currentSessionId);
+            localStorage.setItem('vtop_session_id', currentSessionId);
+            isRestoringSession.current = false;
+            
+            // Refetch active user
+            try {
+              const checkRes = await api.post('/auth/check-session', { session_id: currentSessionId });
+              if (checkRes.data.username) setActiveUser(checkRes.data.username);
+            } catch (err) {
+              console.error("[RESTORE] Check session failed:", err);
+            }
+            
+            // Re-fetch all queries
+            queryClient.invalidateQueries();
+            setMessage({ text: 'Session restored successfully.', type: 'success' });
+            setTimeout(() => setMessage(null), 3000);
+            return;
+          } else if (autoLoginRes.data.status === 'invalid_captcha') {
+            console.warn(`[RESTORE] Captcha failed. Retrying...`);
+            attempt++;
+          } else {
+            // e.g. invalid_credentials
+            throw new Error(autoLoginRes.data.message || 'Saved credentials failed.');
+          }
+        } else {
+          throw new Error('Start login returned unexpected status.');
+        }
+      } catch (err: any) {
+        console.error("[RESTORE] Critical restoration error:", err);
+        break; // break loop to fail completely
+      }
+    }
+    
+    // If it reaches here, it has failed completely
+    console.error("[RESTORE] Restoration failed completely. Dropping to manual login.");
+    isRestoringSession.current = false;
+    setSessionId(null);
+    localStorage.removeItem('vtop_session_id');
+    setIsLoggedIn(false);
+    setActiveUser('');
+    setHasSavedCreds(false);
+    setShowManualForm(true);
+    setMessage({ text: 'Session recovery failed. Please log in manually.', type: 'error' });
+    
+    // Call backend logout
+    try {
+      await api.post('/auth/logout');
+    } catch (logoutErr) {
+      console.error("[RESTORE] Backend logout failed:", logoutErr);
+    }
+  };
 
   // Handle session expiration globally on query errors
   useEffect(() => {
@@ -694,27 +779,20 @@ function VtopLoginDashboard() {
       examsQuery.isError ||
       calendarQuery.isError
     ) {
-      const now = Date.now();
-      if (now - lastRestorationTime.current < 12000) {
-        console.warn("Restoration attempt rate limit hit. Logging out...");
-        setIsLoggedIn(false);
-        setActiveUser('');
-        localStorage.removeItem('vtop_session_id');
-        setMessage({ text: 'Session expired. Please log in again.', type: 'error' });
-        setShowManualForm(true);
-        startLoginFlow();
-        return;
+      if (isRestoringSession.current) {
+        return; // Already restoring, ignore further errors
       }
-      lastRestorationTime.current = now;
 
-      console.warn("API request failed. Session likely expired. Attempting automatic restoration...");
+      console.warn("API request failed. Session likely expired. Attempting automatic restoration under lock...");
+      isRestoringSession.current = true;
       localStorage.removeItem('vtop_session_id');
       setSessionId(null);
 
       if (hasSavedCreds) {
         setMessage({ text: 'Session expired. Restoring VTOP session silently...', type: 'info' });
-        startLoginFlow(true);
+        silentRestoreSession();
       } else {
+        isRestoringSession.current = false;
         setIsLoggedIn(false);
         setActiveUser('');
         setMessage({ text: 'Session expired. Please log in again.', type: 'error' });
@@ -856,13 +934,13 @@ function VtopLoginDashboard() {
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="absolute top-6 right-6 p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
           >
-            {theme === 'dark' ? <Sun className="h-5 w-5 text-accentColor" /> : <Moon className="h-5 w-5 text-textMuted" />}
+            {theme === 'dark' ? <Sun className="h-5 w-5 text-blue-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
           </button>
 
           <div className="w-full max-w-md">
             {/* Title */}
             <div className="text-center mb-8">
-              <h1 className="text-4xl font-extrabold tracking-tight text-accentColor">
+              <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">
                 VtopC
               </h1>
               <p className="text-textMuted mt-2 text-sm">
@@ -872,10 +950,15 @@ function VtopLoginDashboard() {
 
             {/* Error/Info Banner */}
             {message && (
-              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border text-sm shadow-sm transition-all duration-300 bg-bgCard border-borderColor text-textMain`}>
-                {message.type === 'success' && <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-accentColor" />}
-                {message.type === 'error' && <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-textMuted" />}
-                {message.type === 'info' && <Loader2 className="h-5 w-5 shrink-0 mt-0.5 animate-spin text-accentColor" />}
+              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border text-sm shadow-sm transition-all duration-300 ${message.type === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-300'
+                  : message.type === 'error'
+                    ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300'
+                    : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300'
+                }`}>
+                {message.type === 'success' && <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />}
+                {message.type === 'error' && <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />}
+                {message.type === 'info' && <Loader2 className="h-5 w-5 shrink-0 mt-0.5 animate-spin text-blue-600 dark:text-blue-400" />}
                 <span>{message.text}</span>
               </div>
             )}
@@ -898,7 +981,7 @@ function VtopLoginDashboard() {
                     <button
                       type="submit"
                       disabled={isPending || isCaptchaSolving}
-                      className="w-full py-3.5 bg-accentColor hover:bg-accentColor/85 disabled:bg-accentColor/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-700/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                     >
                       {isPending || isCaptchaSolving ? (
                         <>
@@ -931,7 +1014,7 @@ function VtopLoginDashboard() {
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="e.g. 21BCE5001"
                         disabled={isPending}
-                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-accentColor focus:border-transparent outline-none transition-all"
+                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all text-textMain"
                       />
                     </div>
                   </div>
@@ -946,7 +1029,7 @@ function VtopLoginDashboard() {
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
                         disabled={isPending}
-                        className="w-full pl-12 pr-12 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-accentColor focus:border-transparent outline-none transition-all"
+                        className="w-full pl-12 pr-12 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all text-textMain"
                       />
                       <button
                         type="button"
@@ -984,7 +1067,7 @@ function VtopLoginDashboard() {
                           onChange={(e) => setCaptcha(e.target.value)}
                           placeholder="Enter CAPTCHA code"
                           disabled={isPending}
-                          className="w-full px-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-accentColor focus:border-transparent outline-none transition-all uppercase text-center font-bold tracking-widest text-lg"
+                          className="w-full px-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all uppercase text-center font-bold tracking-widest text-lg text-textMain"
                         />
                       </div>
                     </div>
@@ -994,7 +1077,7 @@ function VtopLoginDashboard() {
                     <button
                       type="submit"
                       disabled={isPending || isCaptchaSolving || !username || !password}
-                      className="w-full py-3.5 bg-accentColor hover:bg-accentColor/85 disabled:bg-accentColor/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-700/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                     >
                       {isPending || isCaptchaSolving ? (
                         <>
@@ -1019,8 +1102,8 @@ function VtopLoginDashboard() {
           {/* Mobile Header Bar */}
           <div className="md:hidden flex items-center justify-between px-6 py-4 bg-bgCard border-b border-borderColor shrink-0">
             <div className="flex items-center gap-3">
-              <span className="text-xl font-black text-accentColor">VtopC</span>
-              <span className="text-[10px] bg-bgPrimary border border-borderColor text-accentColor font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
+              <span className="text-xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
+              <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
             </div>
             <button 
               onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
@@ -1043,8 +1126,8 @@ function VtopLoginDashboard() {
             <div className="p-6 flex-1 overflow-y-auto min-h-0">
               {/* App logo inside sidebar */}
               <div className="hidden md:flex items-center gap-3 mb-8">
-                <span className="text-2xl font-black text-accentColor">VtopC</span>
-                <span className="text-[10px] bg-bgPrimary border border-borderColor text-accentColor font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
+                <span className="text-2xl font-black text-blue-600 dark:text-blue-500">VtopC</span>
+                <span className="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CC</span>
               </div>
 
               {/* Navigation Items */}
@@ -1052,7 +1135,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'dashboard'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1061,7 +1144,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('profile'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'profile'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1070,7 +1153,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('timetable'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'timetable'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1079,7 +1162,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('attendance'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'attendance'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1088,7 +1171,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('marks'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'marks'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1097,7 +1180,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('grades'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'grades'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1106,7 +1189,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('exams'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'exams'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1115,7 +1198,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('calendar'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'calendar'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1124,7 +1207,7 @@ function VtopLoginDashboard() {
                 <button
                   onClick={() => { setActiveTab('credentials'); setIsMobileSidebarOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'credentials'
-                      ? 'bg-accentColor text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-textMuted hover:bg-bgPrimary'
                     }`}
                 >
@@ -1141,7 +1224,7 @@ function VtopLoginDashboard() {
                 <select
                   value={activeSemester}
                   onChange={(e) => setActiveSemester(e.target.value)}
-                  className="w-full px-3 py-2 bg-bgPrimary border border-borderColor rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-accentColor text-textMain"
+                  className="w-full px-3 py-2 bg-bgPrimary border border-borderColor rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 text-textMain"
                 >
                   {semestersQuery.data.map(sem => (
                     <option key={sem.id} value={sem.id}>{sem.name}</option>
@@ -1153,7 +1236,7 @@ function VtopLoginDashboard() {
             {/* User Profile Card & Sign Out at the Bottom */}
             <div className="p-4 border-t border-borderColor flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <div className="h-9 w-9 rounded-full bg-bgPrimary flex items-center justify-center text-accentColor font-bold text-xs uppercase border border-borderColor">
+                <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs uppercase border border-blue-200 dark:border-blue-900/60">
                   {activeUser ? activeUser.substring(0, 2) : 'ST'}
                 </div>
                 <div className="overflow-hidden">
@@ -1165,7 +1248,7 @@ function VtopLoginDashboard() {
                 onClick={() => logoutMutation.mutate()}
                 title="Sign Out"
                 disabled={logoutMutation.isPending}
-                className="p-2 hover:bg-bgPrimary text-textMuted hover:text-accentColor rounded-lg transition-colors cursor-pointer"
+                className="p-2 hover:bg-bgPrimary text-textMuted hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
               >
                 <LogOut className="h-4 w-4" />
               </button>
