@@ -109,7 +109,7 @@ function VtopLoginDashboard() {
   const autoLoginRetryCount = useRef(0);
   const manualLoginRetryCount = useRef(0);
   const initRef = useRef(false);
-  const isRestoringSession = useRef(false);
+  const isRestoringRef = useRef(false);
 
   // Toggle theme
   useEffect(() => {
@@ -689,127 +689,33 @@ function VtopLoginDashboard() {
     enabled: isLoggedIn && !!sessionId && activeTab === 'credentials'
   });
 
-  const silentRestoreSession = async () => {
-    let attempt = 1;
-    while (attempt <= MAX_RETRIES) {
-      try {
-        console.log(`[RESTORE] Attempt ${attempt}/${MAX_RETRIES} to restore session...`);
-        const startRes = await api.post<StartLoginResponse>('/auth/start-login');
-        if (startRes.data.status === 'captcha_ready') {
-          const currentSessionId = startRes.data.session_id;
-          const captchaImgData = startRes.data.captcha_image_data || '';
-          
-          let solvedText = '';
-          try {
-            solvedText = await solveCaptchaClient(captchaImgData);
-          } catch (solveErr) {
-            console.error("[RESTORE] Captcha solve error:", solveErr);
-            attempt++;
-            continue;
-          }
-          
-          const autoLoginRes = await api.post('/auth/auto-login', {
-            captcha: solvedText,
-            session_id: currentSessionId
-          });
-          
-          if (autoLoginRes.data.status === 'success') {
-            console.log("[RESTORE] Session restored successfully!");
-            setSessionId(currentSessionId);
-            localStorage.setItem('vtop_session_id', currentSessionId);
-            isRestoringSession.current = false;
-            
-            // Refetch active user
-            try {
-              const checkRes = await api.post('/auth/check-session', { session_id: currentSessionId });
-              if (checkRes.data.username) setActiveUser(checkRes.data.username);
-            } catch (err) {
-              console.error("[RESTORE] Check session failed:", err);
-            }
-            
-            // Re-fetch all queries
-            queryClient.invalidateQueries();
-            setMessage({ text: 'Session restored successfully.', type: 'success' });
-            setTimeout(() => setMessage(null), 3000);
-            return;
-          } else if (autoLoginRes.data.status === 'invalid_captcha') {
-            console.warn(`[RESTORE] Captcha failed. Retrying...`);
-            attempt++;
-          } else {
-            // e.g. invalid_credentials
-            throw new Error(autoLoginRes.data.message || 'Saved credentials failed.');
-          }
-        } else {
-          throw new Error('Start login returned unexpected status.');
-        }
-      } catch (err: any) {
-        console.error("[RESTORE] Critical restoration error:", err);
-        break; // break loop to fail completely
-      }
-    }
-    
-    // If it reaches here, it has failed completely
-    console.error("[RESTORE] Restoration failed completely. Dropping to manual login.");
-    isRestoringSession.current = false;
-    setSessionId(null);
-    localStorage.removeItem('vtop_session_id');
-    setIsLoggedIn(false);
-    setActiveUser('');
-    setHasSavedCreds(false);
-    setShowManualForm(true);
-    setMessage({ text: 'Session recovery failed. Please log in manually.', type: 'error' });
-    
-    // Call backend logout
-    try {
-      await api.post('/auth/logout');
-    } catch (logoutErr) {
-      console.error("[RESTORE] Backend logout failed:", logoutErr);
-    }
-  };
-
-  // Handle session expiration globally on query errors
   useEffect(() => {
-    if (
-      semestersQuery.isError || 
-      profileQuery.isError || 
-      timetableQuery.isError ||
-      attendanceQuery.isError ||
-      marksQuery.isError ||
-      gradesQuery.isError ||
-      examsQuery.isError ||
-      calendarQuery.isError
-    ) {
-      if (isRestoringSession.current) {
-        return; // Already restoring, ignore further errors
-      }
-
-      console.warn("API request failed. Session likely expired. Attempting automatic restoration under lock...");
-      isRestoringSession.current = true;
+    const isAnyError = semestersQuery.isError || profileQuery.isError || timetableQuery.isError || attendanceQuery.isError || marksQuery.isError || gradesQuery.isError || examsQuery.isError || calendarQuery.isError;
+    
+    if (isAnyError) {
+      if (isRestoringRef.current) return; // If already restoring, ignore subsequent query failures
+      
+      console.warn("Session expired. Locking queries and attempting auto-restoration...");
+      isRestoringRef.current = true;
+      
       localStorage.removeItem('vtop_session_id');
       setSessionId(null);
 
       if (hasSavedCreds) {
         setMessage({ text: 'Session expired. Restoring VTOP session silently...', type: 'info' });
-        silentRestoreSession();
+        // The silent login function must set isRestoringRef.current = false in its finally block!
+        startLoginFlow(true).finally(() => {
+            setTimeout(() => { isRestoringRef.current = false; }, 2000); // Unlock after a delay
+        });
       } else {
-        isRestoringSession.current = false;
         setIsLoggedIn(false);
         setActiveUser('');
         setMessage({ text: 'Session expired. Please log in again.', type: 'error' });
         setShowManualForm(true);
-        startLoginFlow();
+        startLoginFlow().finally(() => { isRestoringRef.current = false; });
       }
     }
-  }, [
-    semestersQuery.isError, 
-    profileQuery.isError, 
-    timetableQuery.isError,
-    attendanceQuery.isError,
-    marksQuery.isError,
-    gradesQuery.isError,
-    examsQuery.isError,
-    calendarQuery.isError
-  ]);
+  }, [semestersQuery.isError, profileQuery.isError, timetableQuery.isError, attendanceQuery.isError, marksQuery.isError, gradesQuery.isError, examsQuery.isError, calendarQuery.isError]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

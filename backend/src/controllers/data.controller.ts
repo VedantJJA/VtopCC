@@ -370,7 +370,7 @@ const getClassGroupId = async (client: any, authorizedId: string, csrfToken: str
     ttPayload.append('_csrf', csrfToken);
     ttPayload.append('semesterSubId', semesterSubId);
 
-    const ttRes = await client.post('academics/common/processViewTimeTable', ttPayload, {
+    const ttRes = await client.post('processViewTimeTable', ttPayload, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
     const pattern = /[A-Z0-9\+]+-[A-Z0-9]+-[A-Z]+-[A-Z0-9\.-]+-[A-Z0-9\.-]+-([A-Z0-9]+)/;
@@ -469,7 +469,7 @@ export const getCalendar = async (req: Request, res: Response) => {
     payload.append('classGroupId', selectedGroup);
     payload.append('x', new Date().toUTCString());
 
-    let response = await client.post('academics/common/processViewCalendar', payload, {
+    let response = await client.post('processViewCalendar', payload, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
 
@@ -492,7 +492,7 @@ export const getCalendar = async (req: Request, res: Response) => {
         retryPayload.append('x', new Date().toUTCString());
 
         try {
-          const retryRes = await client.post('academics/common/processViewCalendar', retryPayload, {
+          const retryRes = await client.post('processViewCalendar', retryPayload, {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
           });
           const retryData = parsers.parseAcademicCalendar(retryRes.data);
