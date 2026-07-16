@@ -21,7 +21,6 @@ import {
   Award,
   Clock,
   UserCheck,
-  Bug,
   Eye,
   EyeOff,
   Menu,
@@ -37,7 +36,6 @@ import { GradesView } from './components/GradesView';
 import { ExamsView } from './components/ExamsView';
 import { CalendarView } from './components/CalendarView';
 import { CredentialsView } from './components/CredentialsView';
-import { DebugView } from './components/DebugView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -74,7 +72,7 @@ const TIMETABLE_SLOTS = [
   { id: 12, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
-type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'debug';
+type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials';
 
 function VtopLoginDashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -154,15 +152,15 @@ function VtopLoginDashboard() {
             setMessage(null);
           } else {
             localStorage.removeItem('vtop_session_id');
-            startLoginFlow();
+            startLoginFlow(true);
           }
         })
         .catch(() => {
           localStorage.removeItem('vtop_session_id');
-          startLoginFlow();
+          startLoginFlow(true);
         });
     } else {
-      startLoginFlow();
+      startLoginFlow(true);
     }
   }, []);
 
@@ -199,6 +197,9 @@ function VtopLoginDashboard() {
         setCaptchaType(currentCaptchaType);
         setCaptchaImg(res.data.captcha_image_data || '');
         setHasSavedCreds(credsAvailable);
+        if (credsAvailable) {
+          setShowManualForm(false);
+        }
         setCaptcha('');
         if (showCaptchaUI || manualLoginRetryCount.current === 0) {
           setMessage(null);
@@ -506,30 +507,60 @@ function VtopLoginDashboard() {
   }, [semestersQuery.data]);
 
   const profileQuery = useQuery({
-    queryKey: ['profile', sessionId],
+    queryKey: ['profile', activeUser],
     queryFn: async () => {
       const res = await api.post('/data/profile');
-      return res.data.raw_data;
+      const data = res.data.raw_data;
+      if (data) {
+        localStorage.setItem(`vtopc_cache_profile_${activeUser}`, JSON.stringify(data));
+      }
+      return data;
     },
+    initialData: () => {
+      if (!activeUser) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_profile_${activeUser}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && activeTab === 'profile'
   });
 
   const timetableQuery = useQuery({
-    queryKey: ['timetable', sessionId, activeSemester],
+    queryKey: ['timetable', activeUser, activeSemester],
     queryFn: async () => {
       const res = await api.post('/data/timetable', { semesterSubId: activeSemester });
-      return res.data.raw_data;
+      const data = res.data.raw_data;
+      if (data) {
+        localStorage.setItem(`vtopc_cache_timetable_${activeUser}_${activeSemester}`, JSON.stringify(data));
+      }
+      return data;
     },
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'timetable'
+    initialData: () => {
+      if (!activeUser || !activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_timetable_${activeUser}_${activeSemester}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && (activeTab === 'timetable' || activeTab === 'dashboard')
   });
 
   const attendanceQuery = useQuery({
-    queryKey: ['attendance', sessionId, activeSemester],
+    queryKey: ['attendance', activeUser, activeSemester],
     queryFn: async () => {
       const res = await api.post('/data/attendance', { semesterSubId: activeSemester });
-      return res.data.raw_data as any[];
+      const data = res.data.raw_data as any[];
+      if (data) {
+        localStorage.setItem(`vtopc_cache_attendance_${activeUser}_${activeSemester}`, JSON.stringify(data));
+      }
+      return data;
     },
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'attendance'
+    initialData: () => {
+      if (!activeUser || !activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_attendance_${activeUser}_${activeSemester}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && (activeTab === 'attendance' || activeTab === 'dashboard')
   });
 
   const attendanceDetailQuery = useQuery({
@@ -546,34 +577,64 @@ function VtopLoginDashboard() {
   });
 
   const marksQuery = useQuery({
-    queryKey: ['marks', sessionId, activeSemester],
+    queryKey: ['marks', activeUser, activeSemester],
     queryFn: async () => {
       const res = await api.post('/data/marks', { semesterSubId: activeSemester });
-      return res.data.raw_data;
+      const data = res.data.raw_data;
+      if (data) {
+        localStorage.setItem(`vtopc_cache_marks_${activeUser}_${activeSemester}`, JSON.stringify(data));
+      }
+      return data;
     },
+    initialData: () => {
+      if (!activeUser || !activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_marks_${activeUser}_${activeSemester}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'marks'
   });
 
   const gradesQuery = useQuery({
-    queryKey: ['grades', sessionId, activeSemester],
+    queryKey: ['grades', activeUser, activeSemester],
     queryFn: async () => {
       const res = await api.post('/data/grades', { semesterSubId: activeSemester });
-      return res.data.raw_data;
+      const data = res.data.raw_data;
+      if (data) {
+        localStorage.setItem(`vtopc_cache_grades_${activeUser}_${activeSemester}`, JSON.stringify(data));
+      }
+      return data;
     },
+    initialData: () => {
+      if (!activeUser || !activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_grades_${activeUser}_${activeSemester}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'grades'
   });
 
   const examsQuery = useQuery({
-    queryKey: ['exams', sessionId, activeSemester],
+    queryKey: ['exams', activeUser, activeSemester],
     queryFn: async () => {
       const res = await api.post('/data/exams', { semesterSubId: activeSemester });
-      return res.data.raw_data as any[];
+      const data = res.data.raw_data as any[];
+      if (data) {
+        localStorage.setItem(`vtopc_cache_exams_${activeUser}_${activeSemester}`, JSON.stringify(data));
+      }
+      return data;
     },
+    initialData: () => {
+      if (!activeUser || !activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_exams_${activeUser}_${activeSemester}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'exams'
   });
 
   const calendarQuery = useQuery({
-    queryKey: ['calendar', sessionId, activeSemester, calendarDate.getMonth(), calendarDate.getFullYear()],
+    queryKey: ['calendar', activeUser, activeSemester, calendarDate.getMonth(), calendarDate.getFullYear()],
     queryFn: async () => {
       const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
       const dateStr = `01-${months[calendarDate.getMonth()]}-${calendarDate.getFullYear()}`;
@@ -581,8 +642,18 @@ function VtopLoginDashboard() {
         semesterSubId: activeSemester,
         calDate: dateStr
       });
-      return res.data.raw_data;
+      const data = res.data.raw_data;
+      if (data) {
+        localStorage.setItem(`vtopc_cache_calendar_${activeUser}_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
+      }
+      return data;
     },
+    initialData: () => {
+      if (!activeUser || !activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_calendar_${activeUser}_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'calendar'
   });
 
@@ -593,21 +664,22 @@ function VtopLoginDashboard() {
   }, [activeSemester]);
 
   const credentialsQuery = useQuery({
-    queryKey: ['credentials', sessionId],
+    queryKey: ['credentials', activeUser],
     queryFn: async () => {
       const res = await api.post('/data/credentials');
-      return res.data.raw_data;
+      const data = res.data.raw_data;
+      if (data) {
+        localStorage.setItem(`vtopc_cache_credentials_${activeUser}`, JSON.stringify(data));
+      }
+      return data;
     },
+    initialData: () => {
+      if (!activeUser) return undefined;
+      const cached = localStorage.getItem(`vtopc_cache_credentials_${activeUser}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && activeTab === 'credentials'
-  });
-
-  const debugQuery = useQuery({
-    queryKey: ['debug', sessionId],
-    queryFn: async () => {
-      const res = await api.post('/data/debug');
-      return res.data;
-    },
-    enabled: isLoggedIn && !!sessionId && activeTab === 'debug'
   });
 
   // Handle session expiration globally on query errors
@@ -1058,15 +1130,7 @@ function VtopLoginDashboard() {
                 >
                   <Lock className="h-4 w-4" /> WiFi & Systems
                 </button>
-                <button
-                  onClick={() => { setActiveTab('debug'); setIsMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'debug'
-                      ? 'bg-accentColor text-white shadow-sm'
-                      : 'text-textMuted hover:bg-bgPrimary'
-                    }`}
-                >
-                  <Bug className="h-4 w-4" /> Debug Window
-                </button>
+
               </nav>
             </div>
 
@@ -1130,7 +1194,6 @@ function VtopLoginDashboard() {
               <DashboardView
                 attendanceQuery={attendanceQuery}
                 timetableQuery={timetableQuery}
-                profileQuery={profileQuery}
                 TIMETABLE_SLOTS={TIMETABLE_SLOTS}
               />
             )}
@@ -1187,10 +1250,7 @@ function VtopLoginDashboard() {
               <CredentialsView credentialsQuery={credentialsQuery} />
             )}
 
-            {/* 9. DEBUG WINDOW VIEW */}
-            {activeTab === 'debug' && (
-              <DebugView debugQuery={debugQuery} />
-            )}
+
 
           </main>
 

@@ -22,6 +22,17 @@ export default {
         textMuted: "var(--text-muted)",
         accentColor: "var(--accent)",
         borderColor: "var(--border)",
+        
+        // Extra accents
+        accentSuccess: "var(--accent-success)",
+        bgSuccess: "var(--bg-success)",
+        accentDanger: "var(--accent-danger)",
+        bgDanger: "var(--bg-danger)",
+        accentWarning: "var(--accent-warning)",
+        bgWarning: "var(--bg-warning)",
+        accentInfo: "var(--accent-info)",
+        bgInfo: "var(--bg-info)",
+
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

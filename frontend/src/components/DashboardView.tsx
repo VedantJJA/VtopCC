@@ -1,17 +1,15 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import { TrendingUp, Clock, User as UserIcon, Loader2 } from 'lucide-react';
+import { TrendingUp, Clock, Loader2 } from 'lucide-react';
 
 interface DashboardViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
   timetableQuery: UseQueryResult<any, any>;
-  profileQuery: UseQueryResult<any, any>;
   TIMETABLE_SLOTS: any[];
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   attendanceQuery,
   timetableQuery,
-  profileQuery,
   TIMETABLE_SLOTS
 }) => {
   // Calculate overall attendance and on-duty counts
@@ -73,11 +71,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-textMain text-lg mb-4 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-indigo-500" /> Attendance Snapshot
+              <TrendingUp className="h-5 w-5 text-accentInfo" /> Attendance Snapshot
             </h3>
             {attSum.loading ? (
               <div className="h-16 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                <Loader2 className="h-6 w-6 animate-spin text-accentColor" />
               </div>
             ) : (
               <div className="space-y-4">
@@ -88,7 +86,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                   <div className="w-full bg-bgPrimary rounded-full h-2">
                     <div 
-                      className={`h-2 rounded-full transition-all duration-500 ${attSum.percentage >= 75 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                      className={`h-2 rounded-full transition-all duration-500 ${attSum.percentage >= 75 ? 'bg-accentSuccess' : 'bg-accentDanger'}`}
                       style={{ width: `${attSum.percentage}%` }}
                     />
                   </div>
@@ -106,11 +104,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm md:col-span-2 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-textMain text-lg mb-4 flex items-center gap-2">
-              <Clock className="h-5 w-5 text-indigo-500" /> Today's Class Schedule
+              <Clock className="h-5 w-5 text-accentInfo" /> Today's Class Schedule
             </h3>
             {todayClasses.loading ? (
               <div className="h-24 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                <Loader2 className="h-6 w-6 animate-spin text-accentColor" />
               </div>
             ) : todayClasses.list.length === 0 ? (
               <p className="text-sm text-textMuted italic py-4 text-center">No classes scheduled for today.</p>
@@ -129,35 +127,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
         </div>
-      </div>
-
-      {/* Profile Quick Overview Card */}
-      <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm">
-        <h3 className="font-bold text-textMain text-lg mb-4 flex items-center gap-2">
-          <UserIcon className="h-5 w-5 text-indigo-500" /> Academic & Proctor Profile
-        </h3>
-        {profileQuery.isPending ? (
-          <div className="h-24 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-          </div>
-        ) : profileQuery.isError ? (
-          <p className="text-sm text-rose-500 italic">Failed to load profile details.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-            <div className="space-y-1">
-              <div className="text-xs text-textMuted font-bold uppercase tracking-wider">Student Name</div>
-              <div className="font-semibold text-textMain">{profileQuery.data.personal?.name || 'N/A'}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs text-textMuted font-bold uppercase tracking-wider">Proctor Name</div>
-              <div className="font-semibold text-textMain">{profileQuery.data.proctor?.['PROCTOR NAME'] || 'N/A'}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs text-textMuted font-bold uppercase tracking-wider">Proctor Contact</div>
-              <div className="font-semibold text-textMain">{profileQuery.data.proctor?.['PROCTOR MOBILE'] || 'N/A'}</div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

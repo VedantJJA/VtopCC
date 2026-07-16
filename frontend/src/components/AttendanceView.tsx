@@ -18,10 +18,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     <div className="space-y-6">
       {attendanceQuery.isPending ? (
         <div className="h-64 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-accentColor" />
         </div>
       ) : attendanceQuery.isError ? (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
+        <div className="p-4 bg-bgDanger text-accentDanger border border-accentDanger/20 rounded-2xl flex gap-2">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <span>Failed to fetch attendance data. Please verify your connection.</span>
         </div>
@@ -41,9 +41,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted">{course.course_code}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-bgPrimary border border-borderColor ${isSafe
-                          ? 'text-accentColor'
-                          : 'text-textMuted'
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isSafe
+                          ? 'text-accentSuccess bg-bgSuccess border-accentSuccess/20'
+                          : 'text-accentDanger bg-bgDanger border-accentDanger/20'
                         }`}>
                         {isSafe ? 'Attendance Safe' : 'Below 75%'}
                       </span>
@@ -58,13 +58,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         <span className="text-textMuted"> / </span>
                         <span className="font-bold text-textMain">{course.total_classes}</span>
                       </div>
-                      <div className="text-base font-black text-accentColor">{course.percentage}%</div>
+                      <div className={`text-base font-black ${isSafe ? 'text-accentSuccess' : 'text-accentDanger'}`}>{course.percentage}%</div>
                     </div>
  
                     {/* Progress bar */}
                     <div className="w-full bg-bgPrimary h-2 rounded-full overflow-hidden mt-1 border border-borderColor">
                       <div
-                        className="h-full rounded-full bg-accentColor"
+                        className={`h-full rounded-full ${isSafe ? 'bg-accentSuccess' : 'bg-accentDanger'}`}
                         style={{ width: `${percent}%` }}
                       />
                     </div>
@@ -138,9 +138,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                                   <div className="text-[10px] text-textMuted mt-0.5">{log.timing}</div>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-bgPrimary border border-borderColor ${isPresent
-                                      ? 'text-accentColor'
-                                      : 'text-textMuted'
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${isPresent
+                                      ? 'text-accentSuccess bg-bgSuccess border-accentSuccess/20'
+                                      : 'text-accentDanger bg-bgDanger border-accentDanger/20'
                                     }`}>
                                     {log.status}
                                   </span>

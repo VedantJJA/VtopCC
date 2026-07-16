@@ -16,10 +16,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     <div className="space-y-6">
       {calendarQuery.isPending ? (
         <div className="h-64 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-accentColor" />
         </div>
       ) : calendarQuery.isError ? (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
+        <div className="p-4 bg-bgDanger text-accentDanger border border-accentDanger/20 rounded-2xl flex gap-2">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <span>Failed to fetch Academic Calendar. Please retry.</span>
         </div>
@@ -70,9 +70,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 const isExam = dayObj.status === 'exam';
 
                 let bgClass = 'bg-transparent';
-                if (isHoliday || isWorking || isDayOrder || isExam) {
-                  bgClass = 'bg-bgPrimary';
-                }
+                if (isHoliday) bgClass = 'bg-bgDanger/45';
+                else if (isWorking) bgClass = 'bg-bgSuccess/45';
+                else if (isDayOrder) bgClass = 'bg-bgWarning/45';
+                else if (isExam) bgClass = 'bg-bgInfo/45';
 
                 return (
                   <div key={index} className={`p-2 flex flex-col justify-between overflow-hidden text-left relative ${bgClass}`}>
@@ -80,23 +81,30 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       <>
                         <div className="flex justify-between items-center">
                           <span className={`text-xs font-extrabold ${
-                              isHoliday ? 'text-textMuted' : 'text-accentColor'
+                              isHoliday ? 'text-accentDanger' :
+                              isWorking ? 'text-accentSuccess' :
+                              isDayOrder ? 'text-accentWarning' : 
+                              isExam ? 'text-accentInfo' : 'text-textMuted'
                             }`}>
                             {dayObj.day}
                           </span>
                           {isDayOrder && (
-                            <span className="text-[8px] font-bold text-accentColor uppercase">Day Ord</span>
+                            <span className="text-[8px] font-bold text-accentWarning uppercase">Day Ord</span>
                           )}
                           {isExam && (
-                            <span className="text-[8px] font-bold text-accentColor uppercase font-mono">Exam</span>
+                            <span className="text-[8px] font-bold text-accentInfo uppercase font-mono">Exam</span>
                           )}
                         </div>
                         <div className="flex-1 mt-1 flex flex-col justify-end space-y-0.5 max-h-[50px] overflow-y-auto">
                           {dayObj.events?.map((e: any, eIdx: number) => (
                             <div
                               key={eIdx}
-                              className={`text-[9px] truncate px-1 py-0.5 rounded-sm font-semibold bg-bgCard border border-borderColor ${
-                                  isHoliday ? 'text-textMuted' : 'text-accentColor'
+                              className={`text-[9px] truncate px-1 py-0.5 rounded-sm font-semibold bg-bgCard border ${
+                                  isHoliday ? 'border-accentDanger/25 text-accentDanger' :
+                                  isWorking ? 'border-accentSuccess/25 text-accentSuccess' :
+                                  isDayOrder ? 'border-accentWarning/25 text-accentWarning' :
+                                  isExam ? 'border-accentInfo/25 text-accentInfo' :
+                                  'border-borderColor text-textMain'
                                 }`}
                               title={e.text}
                             >
