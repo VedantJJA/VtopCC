@@ -6,7 +6,7 @@ export const getSemesters = async (req: Request, res: Response) => {
   const { session_id } = req.body;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -17,7 +17,8 @@ export const getSemesters = async (req: Request, res: Response) => {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/content',
+        'Cookie': cookieString
       }
     });
 
@@ -51,7 +52,7 @@ export const getTimetable = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -59,7 +60,10 @@ export const getTimetable = async (req: Request, res: Response) => {
     payload.append('semesterSubId', semesterSubId);
 
     const response = await client.post('processViewTimeTable', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
 
     const parsedData = parsers.parseCourseData(response.data) as any;
@@ -70,7 +74,7 @@ export const getTimetable = async (req: Request, res: Response) => {
       let allSemesters: any[] = [];
       if (session) {
         if (!session.semestersList || session.semestersList.length === 0) {
-          const semesters = await fetchSemestersList(client, authorizedId, csrfToken);
+          const semesters = await fetchSemestersList(client, authorizedId, csrfToken, cookieString);
           sessionService.updateSession(session_id, { semestersList: semesters });
           session.semestersList = semesters;
         }
@@ -92,7 +96,7 @@ export const getTimetable = async (req: Request, res: Response) => {
       console.log(`[SATURDAY PATCH] Upcoming Saturday date: ${satDateStr}`);
 
       let targetSemId = semesterSubId;
-      let selectedGroup = await getClassGroupId(client, authorizedId, csrfToken, targetSemId);
+      let selectedGroup = await getClassGroupId(client, authorizedId, csrfToken, targetSemId, cookieString);
 
       const calPayload = new URLSearchParams();
       calPayload.append('authorizedID', authorizedId);
@@ -103,7 +107,10 @@ export const getTimetable = async (req: Request, res: Response) => {
       calPayload.append('x', new Date().toUTCString());
 
       let calRes = await client.post('processViewCalendar', calPayload, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': cookieString
+        }
       });
       let calData = parsers.parseAcademicCalendar(calRes.data);
 
@@ -113,7 +120,7 @@ export const getTimetable = async (req: Request, res: Response) => {
         for (const sem of allSemesters) {
           if (sem.id === targetSemId) continue;
           try {
-            const candidateGroup = await getClassGroupId(client, authorizedId, csrfToken, sem.id);
+            const candidateGroup = await getClassGroupId(client, authorizedId, csrfToken, sem.id, cookieString);
             const retryPayload = new URLSearchParams();
             retryPayload.append('authorizedID', authorizedId);
             retryPayload.append('_csrf', csrfToken);
@@ -123,7 +130,10 @@ export const getTimetable = async (req: Request, res: Response) => {
             retryPayload.append('x', new Date().toUTCString());
 
             const retryRes = await client.post('processViewCalendar', retryPayload, {
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+              headers: { 
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Cookie': cookieString
+              }
             });
             const retryData = parsers.parseAcademicCalendar(retryRes.data);
             if (hasMeaningfulEvents(retryData)) {
@@ -175,7 +185,7 @@ export const getAttendance = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -183,7 +193,10 @@ export const getAttendance = async (req: Request, res: Response) => {
     payload.append('semesterSubId', semesterSubId);
 
     const response = await client.post('processViewStudentAttendance', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
 
     const parsedData = parsers.parseAttendanceSummary(response.data);
@@ -199,7 +212,7 @@ export const getAttendanceDetail = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -209,7 +222,10 @@ export const getAttendanceDetail = async (req: Request, res: Response) => {
     payload.append('slotName', slot);
 
     const response = await client.post('processViewAttendanceDetail', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
 
     const parsedData = parsers.parseAttendanceDetail(response.data);
@@ -225,7 +241,7 @@ export const getMarks = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -233,7 +249,10 @@ export const getMarks = async (req: Request, res: Response) => {
     payload.append('semesterSubId', semesterSubId);
 
     const response = await client.post('examinations/doStudentMarkView', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
     const parsedMarks = parsers.parseMarks(response.data);
 
@@ -364,7 +383,7 @@ export const getGrades = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -374,7 +393,10 @@ export const getGrades = async (req: Request, res: Response) => {
     }
 
     const response = await client.post('examinations/examGradeView/doStudentGradeView', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
 
     const parsedData = parsers.parseGrades(response.data);
@@ -396,7 +418,10 @@ export const getGrades = async (req: Request, res: Response) => {
           statsPayload.append('_csrf', csrfToken);
 
           const statsRes = await client.post('examinations/examGradeView/getGradeViewDetails', statsPayload, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            headers: { 
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Cookie': cookieString
+            }
           });
           item.grade_statistics = parsers.parseGradeStatistics(statsRes.data);
         } catch (err) {
@@ -417,7 +442,7 @@ export const getExams = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -425,7 +450,10 @@ export const getExams = async (req: Request, res: Response) => {
     payload.append('semesterSubId', semesterSubId);
 
     const response = await client.post('examinations/doSearchExamScheduleForStudent', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
 
     const parsedData = parsers.parseExamSchedule(response.data);
@@ -472,7 +500,7 @@ function hasMeaningfulEvents(calendarData: any): boolean {
   return false;
 }
 
-async function getClassGroupId(client: any, authorizedId: string, csrfToken: string, semesterSubId: string): Promise<string> {
+async function getClassGroupId(client: any, authorizedId: string, csrfToken: string, semesterSubId: string, cookieString: string): Promise<string> {
   let selectedGroup = 'ALL';
   try {
     const ttPayload = new URLSearchParams();
@@ -481,7 +509,10 @@ async function getClassGroupId(client: any, authorizedId: string, csrfToken: str
     ttPayload.append('semesterSubId', semesterSubId);
 
     const ttRes = await client.post('processViewTimeTable', ttPayload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
     const pattern = /[A-Z0-9\+]+-[A-Z0-9]+-[A-Z]+-[A-Z0-9\.-]+-[A-Z0-9\.-]+-([A-Z0-9]+)/;
     const match = pattern.exec(ttRes.data);
@@ -494,7 +525,7 @@ async function getClassGroupId(client: any, authorizedId: string, csrfToken: str
   return selectedGroup;
 }
 
-async function fetchSemestersList(client: any, authorizedId: string, csrfToken: string): Promise<any[]> {
+async function fetchSemestersList(client: any, authorizedId: string, csrfToken: string, cookieString: string): Promise<any[]> {
   try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -505,7 +536,8 @@ async function fetchSemestersList(client: any, authorizedId: string, csrfToken: 
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/content',
+        'Cookie': cookieString
       }
     });
 
@@ -535,7 +567,7 @@ export const getCalendar = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const session = sessionService.getSession(session_id);
     if (!session) {
@@ -544,7 +576,7 @@ export const getCalendar = async (req: Request, res: Response) => {
 
     // --- 0. Fetch & Cache Semester List ---
     if (!session.semestersList || session.semestersList.length === 0) {
-      const semesters = await fetchSemestersList(client, authorizedId, csrfToken);
+      const semesters = await fetchSemestersList(client, authorizedId, csrfToken, cookieString);
       sessionService.updateSession(session_id, { semestersList: semesters });
       session.semestersList = semesters;
     }
@@ -574,7 +606,7 @@ export const getCalendar = async (req: Request, res: Response) => {
     }
 
     // --- 2. Fetch Calendar ---
-    let selectedGroup = await getClassGroupId(client, authorizedId, csrfToken, targetSemId);
+    let selectedGroup = await getClassGroupId(client, authorizedId, csrfToken, targetSemId, cookieString);
     
     let payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -585,7 +617,10 @@ export const getCalendar = async (req: Request, res: Response) => {
     payload.append('x', new Date().toUTCString());
 
     let response = await client.post('processViewCalendar', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
 
     let parsedData = parsers.parseAcademicCalendar(response.data);
@@ -597,7 +632,7 @@ export const getCalendar = async (req: Request, res: Response) => {
       for (const sem of allSemesters) {
         if (sem.id === targetSemId) continue;
 
-        const candidateGroup = await getClassGroupId(client, authorizedId, csrfToken, sem.id);
+        const candidateGroup = await getClassGroupId(client, authorizedId, csrfToken, sem.id, cookieString);
         const retryPayload = new URLSearchParams();
         retryPayload.append('authorizedID', authorizedId);
         retryPayload.append('_csrf', csrfToken);
@@ -608,7 +643,10 @@ export const getCalendar = async (req: Request, res: Response) => {
 
         try {
           const retryRes = await client.post('processViewCalendar', retryPayload, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            headers: { 
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Cookie': cookieString
+            }
           });
           const retryData = parsers.parseAcademicCalendar(retryRes.data);
           if (hasMeaningfulEvents(retryData)) {
@@ -767,7 +805,7 @@ export const getODSnapshot = async (req: Request, res: Response) => {
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    const { client, authorizedId, csrfToken, cookieString } = details;
 
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
@@ -775,7 +813,10 @@ export const getODSnapshot = async (req: Request, res: Response) => {
     payload.append('semesterSubId', semesterSubId);
 
     const summaryRes = await client.post('processViewStudentAttendance', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieString
+      }
     });
 
     const courses = parsers.parseAttendanceSummary(summaryRes.data);
@@ -784,7 +825,7 @@ export const getODSnapshot = async (req: Request, res: Response) => {
     for (const course of courses) {
       if (!course.class_id || !course.slot_param) continue;
       const isLab = course.course_type?.toUpperCase().includes('LAB');
-
+      
       const detailPayload = new URLSearchParams();
       detailPayload.append('authorizedID', authorizedId);
       detailPayload.append('_csrf', csrfToken);
@@ -794,7 +835,10 @@ export const getODSnapshot = async (req: Request, res: Response) => {
 
       try {
         const detailRes = await client.post('processViewAttendanceDetail', detailPayload, {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Cookie': cookieString
+          }
         });
         const detailsList = parsers.parseAttendanceDetail(detailRes.data);
         for (const d of detailsList) {
