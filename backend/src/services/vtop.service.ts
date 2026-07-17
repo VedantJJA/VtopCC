@@ -16,7 +16,7 @@ function createClient(jar: CookieJar) {
     },
     jar,
     withCredentials: true,
-    maxRedirects: 0 // Prevent silent redirects to login/error pages on data scrape endpoints
+    maxRedirects: 5 // Default redirect following for standard login/redirection flow
   }));
 }
 
@@ -70,7 +70,7 @@ export async function performVtopLogin(sessionId: string, username: string, pass
     payload.append('captchaStr', captchaText);
   }
 
-  const loginRes = await client.post('login', payload, { maxRedirects: 5 });
+  const loginRes = await client.post('login', payload);
   const $ = cheerio.load(loginRes.data);
   const loginForm = $('#vtopLoginForm');
 
@@ -118,13 +118,11 @@ export async function getSessionDetails(sessionId: string) {
     }
   );
 
-  const cookieString = session.cookieJar.getCookieStringSync(VTOP_BASE_URL);
-
   // Optimize: Reuse CSRF token and authorized ID if already parsed
   if (session.csrfToken && session.authorizedId) {
     client.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
     client.defaults.headers.common['Referer'] = `${VTOP_BASE_URL}content`;
-    return { client, authorizedId: session.authorizedId, csrfToken: session.csrfToken, cookieString };
+    return { client, authorizedId: session.authorizedId, csrfToken: session.csrfToken };
   }
   
   // FIX: Remove the slash in `${baseUrl}content`
@@ -145,5 +143,5 @@ export async function getSessionDetails(sessionId: string) {
   client.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
   client.defaults.headers.common['Referer'] = `${VTOP_BASE_URL}content`;
   
-  return { client, authorizedId: session.authorizedId || '', csrfToken, cookieString };
+  return { client, authorizedId: session.authorizedId || '', csrfToken };
 }
