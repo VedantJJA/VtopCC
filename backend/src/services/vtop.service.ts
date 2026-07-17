@@ -77,7 +77,7 @@ export async function performVtopLogin(sessionId: string, username: string, pass
   if (loginForm.length === 0) {
     // SUCCESS
     let authorizedId = $('input[name="authorizedID"]').val() || $('input[id="authorizedIDX"]').val() || username;
-    sessionService.updateSession(sessionId, { username, authorizedId: authorizedId as string });
+    sessionService.updateSession(sessionId, { username, authorizedId: authorizedId as string, csrfToken: undefined });
     return { success: true, authorizedId, code: 'success' };
   } else {
     // PARSE ERROR MESSAGES LIKE THE FLASK APP
