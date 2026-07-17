@@ -18,6 +18,7 @@ export default {
         bgPrimary: "var(--bg-primary)",
         bgCard: "var(--bg-card)",
         bgSidebar: "var(--bg-sidebar)",
+        bgInput: "var(--bg-input)",
         textMain: "var(--text-main)",
         textMuted: "var(--text-muted)",
         accentColor: "var(--accent)",

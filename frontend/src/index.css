@@ -38,6 +38,7 @@
   --color-bgPrimary: var(--bg-primary);
   --color-bgCard: var(--bg-card);
   --color-bgSidebar: var(--bg-sidebar);
+  --color-bgInput: var(--bg-input);
   --color-textMain: var(--text-main);
   --color-textMuted: var(--text-muted);
   --color-accentColor: var(--accent);
@@ -58,9 +59,10 @@
   --bg-primary: #f3f4f6; /* Mockup light grey-blue background */
   --bg-card: #ffffff;    /* Pure white for cards */
   --bg-sidebar: #ffffff; /* Mockup sidebar background */
+  --bg-input: #f3f4f6;
   --text-main: #111827;
   --text-muted: #707584; /* Mockup text muted */
-  --accent: #0f5cf5;     /* Mockup active button background */
+  --accent: #1A62FF;     /* Accent blue */
   --border: #e5e7eb;
   
   /* Extra Accents */
@@ -75,13 +77,14 @@
 }
 
 [data-theme='dark'] {
-  --bg-primary: #12151c; /* Neutral dark off-black page background */
-  --bg-card: #1d2129;    /* Mockup card background */
-  --bg-sidebar: #1d2129; /* Mockup sidebar background */
-  --text-main: #f3f4f6;
-  --text-muted: #707584; /* Mockup text muted */
-  --accent: #0f5cf5;     /* Mockup active button background */
-  --border: #262a35;     /* Matching border color */
+  --bg-primary: #0E0E11; /* --bg-main */
+  --bg-sidebar: #18181C; /* --bg-sidebar */
+  --bg-card: #16161A;    /* --bg-card */
+  --bg-input: #101014;   /* --bg-input */
+  --accent: #1A62FF;     /* --accent-blue */
+  --text-main: #FFFFFF;  /* --text-primary */
+  --text-muted: #8A8B91; /* --text-secondary */
+  --border: #222228;     /* Clean mockup matching border */
   
   /* Extra Accents */
   --accent-success: #34d399;

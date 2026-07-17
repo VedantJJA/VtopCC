@@ -14,7 +14,11 @@ export const getSemesters = async (req: Request, res: Response) => {
     payload.append('verifyMenu', 'true');
 
     const response = await client.post('academics/common/StudentTimeTableChn', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+      }
     });
 
     console.log('[DEBUG] getSemesters response length:', response.data.length);
@@ -43,7 +47,8 @@ export const getSemesters = async (req: Request, res: Response) => {
 };
 
 export const getTimetable = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId, isSaturday, includeDayOrder } = req.body;
+  const { session_id, isSaturday, includeDayOrder } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -166,7 +171,8 @@ export const getTimetable = async (req: Request, res: Response) => {
 };
 
 export const getAttendance = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId } = req.body;
+  const { session_id } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -189,7 +195,8 @@ export const getAttendance = async (req: Request, res: Response) => {
 };
 
 export const getAttendanceDetail = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId, classId, slot } = req.body;
+  const { session_id, classId, slot } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -214,7 +221,8 @@ export const getAttendanceDetail = async (req: Request, res: Response) => {
 };
 
 export const getMarks = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId } = req.body;
+  const { session_id } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -352,7 +360,8 @@ export const getMarks = async (req: Request, res: Response) => {
 };
 
 export const getGrades = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId } = req.body;
+  const { session_id } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -404,7 +413,8 @@ export const getGrades = async (req: Request, res: Response) => {
 };
 
 export const getExams = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId } = req.body;
+  const { session_id } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -492,7 +502,11 @@ async function fetchSemestersList(client: any, authorizedId: string, csrfToken: 
     payload.append('verifyMenu', 'true');
 
     const response = await client.post('academics/common/StudentTimeTableChn', payload, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+      }
     });
 
     const cheerio = require('cheerio');
@@ -517,7 +531,8 @@ async function fetchSemestersList(client: any, authorizedId: string, csrfToken: 
 import { sessionService } from '../services/session.service';
 
 export const getCalendar = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId, calDate } = req.body;
+  const { session_id, calDate } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;
@@ -748,7 +763,8 @@ export const getDebugData = async (req: Request, res: Response) => {
 };
 
 export const getODSnapshot = async (req: Request, res: Response) => {
-  const { session_id, semesterSubId } = req.body;
+  const { session_id } = req.body;
+  const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
   try {
     const details = await getSessionDetails(session_id);
     const { client, authorizedId, csrfToken } = details;

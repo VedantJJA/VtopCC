@@ -5,7 +5,19 @@ import {
   useMutation,
   useQuery
 } from '@tanstack/react-query';
-import api from './lib/api';
+import api, {
+  getSemesters,
+  getProfile,
+  getCredentials,
+  getTimetable,
+  getAttendance,
+  getODSnapshot,
+  getAttendanceDetail,
+  getMarks,
+  getGrades,
+  getExams,
+  getCalendar
+} from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
 import {
   Lock,
@@ -505,7 +517,7 @@ function VtopLoginDashboard() {
   const semestersQuery = useQuery({
     queryKey: ['semesters', sessionId],
     queryFn: async () => {
-      const res = await api.post('/data/semesters');
+      const res = await getSemesters();
       return res.data.semesters || [];
     },
     enabled: isLoggedIn && !!sessionId
@@ -513,17 +525,18 @@ function VtopLoginDashboard() {
 
   // Set default active semester when semesters list loads
   useEffect(() => {
-    if (semestersQuery.data && semestersQuery.data.length && !activeSemester) {
-      // Find currently selected semester or fallback to first option
-      const currentSem = semestersQuery.data[0];
-      setActiveSemester(currentSem.id);
+    if (semestersQuery.data && semestersQuery.data.length > 0) {
+      const defaultSem = semestersQuery.data[0];
+      if (defaultSem && !activeSemester) {
+        setActiveSemester(defaultSem.id);
+      }
     }
   }, [semestersQuery.data]);
 
   const profileQuery = useQuery({
     queryKey: ['profile', activeUser],
     queryFn: async () => {
-      const res = await api.post('/data/profile');
+      const res = await getProfile();
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem('vtop_cache_profile', JSON.stringify(data));
@@ -541,10 +554,7 @@ function VtopLoginDashboard() {
   const timetableQuery = useQuery({
     queryKey: ['timetable', activeUser, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/timetable', {
-        semesterSubId: activeSemester,
-        isSaturday: true
-      });
+      const res = await getTimetable(activeSemester);
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem(`vtop_cache_timetable_${activeSemester}`, JSON.stringify(data));
@@ -563,7 +573,7 @@ function VtopLoginDashboard() {
   const attendanceQuery = useQuery({
     queryKey: ['attendance', activeUser, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/attendance', { semesterSubId: activeSemester });
+      const res = await getAttendance(activeSemester);
       const data = res.data.raw_data as any[];
       if (data) {
         localStorage.setItem(`vtop_cache_attendance_${activeSemester}`, JSON.stringify(data));
@@ -582,7 +592,7 @@ function VtopLoginDashboard() {
   const odSnapshotQuery = useQuery({
     queryKey: ['od-snapshot', activeUser, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/get-od-snapshot', { semesterSubId: activeSemester });
+      const res = await getODSnapshot(activeSemester);
       const data = res.data;
       if (data) {
         localStorage.setItem(`vtop_cache_od_${activeSemester}`, JSON.stringify(data));
@@ -601,11 +611,7 @@ function VtopLoginDashboard() {
   const attendanceDetailQuery = useQuery({
     queryKey: ['attendance-detail', sessionId, activeSemester, selectedAttendanceCourse?.class_id, selectedAttendanceCourse?.slot_param],
     queryFn: async () => {
-      const res = await api.post('/data/attendance-detail', {
-        semesterSubId: activeSemester,
-        classId: selectedAttendanceCourse.class_id,
-        slot: selectedAttendanceCourse.slot_param
-      });
+      const res = await getAttendanceDetail(activeSemester, selectedAttendanceCourse.class_id, selectedAttendanceCourse.slot_param);
       return res.data.raw_data as any[];
     },
     enabled: isLoggedIn && !!sessionId && !!activeSemester && !!selectedAttendanceCourse
@@ -614,7 +620,7 @@ function VtopLoginDashboard() {
   const marksQuery = useQuery({
     queryKey: ['marks', activeUser, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/marks', { semesterSubId: activeSemester });
+      const res = await getMarks(activeSemester);
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem(`vtop_cache_marks_${activeSemester}`, JSON.stringify(data));
@@ -633,7 +639,7 @@ function VtopLoginDashboard() {
   const gradesQuery = useQuery({
     queryKey: ['grades', activeUser, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/grades', { semesterSubId: activeSemester });
+      const res = await getGrades(activeSemester);
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem(`vtop_cache_grades_${activeSemester}`, JSON.stringify(data));
@@ -652,7 +658,7 @@ function VtopLoginDashboard() {
   const examsQuery = useQuery({
     queryKey: ['exams', activeUser, activeSemester],
     queryFn: async () => {
-      const res = await api.post('/data/exams', { semesterSubId: activeSemester });
+      const res = await getExams(activeSemester);
       const data = res.data.raw_data as any[];
       if (data) {
         localStorage.setItem(`vtop_cache_exams_${activeSemester}`, JSON.stringify(data));
@@ -673,10 +679,7 @@ function VtopLoginDashboard() {
     queryFn: async () => {
       const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
       const dateStr = `01-${months[calendarDate.getMonth()]}-${calendarDate.getFullYear()}`;
-      const res = await api.post('/data/calendar', {
-        semesterSubId: activeSemester,
-        calDate: dateStr
-      });
+      const res = await getCalendar(activeSemester, dateStr);
       if (res.data.new_semester_id && res.data.new_semester_id !== activeSemester) {
         setTimeout(() => {
           setActiveSemester(res.data.new_semester_id);
@@ -706,7 +709,7 @@ function VtopLoginDashboard() {
   const credentialsQuery = useQuery({
     queryKey: ['credentials', activeUser],
     queryFn: async () => {
-      const res = await api.post('/data/credentials');
+      const res = await getCredentials();
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem('vtop_cache_credentials', JSON.stringify(data));
@@ -1037,7 +1040,7 @@ function VtopLoginDashboard() {
         </div>
       ) : (
         /* ================= STUDENT DASHBOARD INTERFACE ================= */
-        <div className={`flex-1 flex h-screen overflow-hidden relative transition-colors duration-300 ${theme === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-gray-100 text-slate-800'}`}>
+        <div className={`flex-1 flex h-screen overflow-hidden relative transition-colors duration-300 bg-bgPrimary text-textMain`}>
           
           {/* Mobile Overlay Backdrop */}
           {isMobileSidebarOpen && (
@@ -1048,19 +1051,19 @@ function VtopLoginDashboard() {
           )}
 
           {/* SIDEBAR NAVIGATION */}
-          <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-bgSidebar border-r border-borderColor flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             {/* Logo area */}
             <div className="p-5 pb-4 shrink-0">
-              <div className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#0f5cf5] flex items-center justify-center text-white font-black">V</div>
+              <div className="text-xl font-bold text-textMain flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-accentColor flex items-center justify-center text-white font-black">V</div>
                 VTOP Client
               </div>
             </div>
 
             {/* Student Info Card */}
             <div className="px-4 pb-4 shrink-0">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30">
-                <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold shrink-0 overflow-hidden">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-bgPrimary border border-borderColor">
+                <div className="h-10 w-10 rounded-full bg-bgCard border border-borderColor flex items-center justify-center text-accentColor font-bold shrink-0 overflow-hidden">
                   {profileQuery.data?.personal?.photo_url ? (
                     <img src={profileQuery.data.personal.photo_url} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
@@ -1068,8 +1071,8 @@ function VtopLoginDashboard() {
                   )}
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{profileQuery.data?.personal?.name || activeUser || 'Active Session'}</p>
-                  <p className="text-[11px] text-green-600 dark:text-green-400 font-medium truncate">Session Active</p>
+                  <p className="text-sm font-semibold text-textMain truncate">{profileQuery.data?.personal?.name || activeUser || 'Active Session'}</p>
+                  <p className="text-[11px] text-emerald-500 font-medium truncate">Session Active</p>
                 </div>
               </div>
             </div>
@@ -1114,15 +1117,15 @@ function VtopLoginDashboard() {
                   ]
                 }
               ].map((item) => (
-                <div key={item.id} className={item.divider ? "pt-3 mt-3 border-t border-gray-100 dark:border-gray-700" : ""}>
+                <div key={item.id} className={item.divider ? "pt-3 mt-3 border-t border-borderColor" : ""}>
                   {item.children ? (
                     <div className="space-y-0.5 animate-in fade-in duration-200">
                       <button 
                         onClick={() => setExpandedNav(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                        className="w-full flex justify-between items-center px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors font-medium text-[13px] cursor-pointer"
+                        className="w-full flex justify-between items-center px-3 py-2 rounded-lg text-textMuted hover:bg-bgPrimary/40 hover:text-textMain transition-colors font-medium text-[13px] cursor-pointer"
                       >
                         <div className="flex items-center gap-2.5">
-                          <item.icon className="h-4 w-4 text-[#0f5cf5]" /> {item.label}
+                          <item.icon className="h-4 w-4 text-accentColor" /> {item.label}
                         </div>
                         <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${expandedNav[item.id] ? 'rotate-180' : ''}`} />
                       </button>
@@ -1134,8 +1137,8 @@ function VtopLoginDashboard() {
                               onClick={() => { setActiveTab(child.id as any); setIsMobileSidebarOpen(false); }}
                               className={`w-full text-left px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                                 activeTab === child.id 
-                                ? 'bg-[#0f5cf5] text-white shadow-sm' 
-                                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/40 hover:text-gray-900 dark:hover:text-gray-200'
+                                ? 'bg-accentColor text-textMain shadow-sm font-bold' 
+                                : 'text-textMuted hover:bg-bgPrimary/40 hover:text-textMain'
                               }`}
                             >
                               {child.label}
@@ -1149,11 +1152,11 @@ function VtopLoginDashboard() {
                       onClick={() => { setActiveTab(item.id as any); setIsMobileSidebarOpen(false); }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-[13px] cursor-pointer ${
                         activeTab === item.id
-                        ? 'bg-[#0f5cf5] text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-850/40'
+                        ? 'bg-accentColor text-textMain shadow-sm font-bold'
+                        : 'text-textMuted hover:bg-bgPrimary/40 hover:text-textMain'
                       }`}
                     >
-                      <item.icon className={`h-4 w-4 ${activeTab === item.id ? 'text-white' : 'text-[#0f5cf5]'}`} /> {item.label}
+                      <item.icon className={`h-4 w-4 ${activeTab === item.id ? 'text-textMain' : 'text-accentColor'}`} /> {item.label}
                     </button>
                   )}
                 </div>
@@ -1169,7 +1172,7 @@ function VtopLoginDashboard() {
                     id="semester-select"
                     value={activeSemester}
                     onChange={(e) => setActiveSemester(e.target.value)}
-                    className="block w-full p-2 pr-8 text-sm font-semibold text-textMain border border-borderColor rounded-lg bg-bgPrimary focus:ring-1 focus:ring-[#0f5cf5] focus:outline-none transition-colors appearance-none cursor-pointer"
+                    className="block w-full p-2 pr-8 text-sm font-semibold text-textMain border border-borderColor rounded-lg bg-bgPrimary focus:ring-1 focus:ring-accentColor focus:outline-none transition-colors appearance-none cursor-pointer"
                     disabled={semestersQuery.isPending}
                   >
                     {semestersQuery.isPending ? (
@@ -1189,7 +1192,7 @@ function VtopLoginDashboard() {
               <button 
                 onClick={() => logoutMutation.mutate()}
                 disabled={logoutMutation.isPending}
-                className="flex items-center justify-center w-full px-3 py-2.5 text-sm font-bold rounded-lg text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/45 transition-colors cursor-pointer"
+                className="flex items-center justify-center w-full px-3 py-2.5 text-sm font-bold rounded-lg text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
               >
                 <LogOut className="mr-2 h-4 w-4" /> Logout
               </button>
@@ -1197,17 +1200,17 @@ function VtopLoginDashboard() {
           </aside>
 
           {/* MAIN DASHBOARD CONTENT AREA */}
-          <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-bgPrimary">
             {/* Header controls (Theme switcher and title) */}
-            <header className="flex items-center justify-between px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10 shrink-0">
+            <header className="flex items-center justify-between px-6 py-4 bg-bgCard border-b border-borderColor text-textMain z-10 shrink-0">
               <div className="flex items-center">
                 <button 
-                  className="md:hidden mr-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 focus:outline-none cursor-pointer"
+                  className="md:hidden mr-4 text-textMuted hover:text-textMain focus:outline-none cursor-pointer"
                   onClick={() => setIsMobileSidebarOpen(true)}
                 >
                   <Menu className="h-5 w-5" />
                 </button>
-                <h1 className="text-lg font-bold text-gray-800 dark:text-white capitalize">
+                <h1 className="text-lg font-bold text-textMain capitalize">
                   {activeTab === 'my-room' ? 'My Room' : activeTab === 'calculator' ? 'Attendance Calculator' : activeTab.replace('-', ' ')}
                 </h1>
               </div>
@@ -1215,7 +1218,7 @@ function VtopLoginDashboard() {
               <div className="flex items-center space-x-3">
                 <button 
                   onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  className="p-2 rounded-lg text-gray-500 bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
+                  className="p-2 rounded-lg text-textMuted bg-bgPrimary hover:bg-bgPrimary/60 border border-borderColor transition-colors cursor-pointer"
                   title="Toggle Light/Dark Theme"
                 >
                   {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
@@ -1224,7 +1227,7 @@ function VtopLoginDashboard() {
             </header>
 
             {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 relative custom-scrollbar bg-gray-100 dark:bg-gray-900">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 relative custom-scrollbar bg-bgPrimary text-textMain">
 
             {/* 1. DASHBOARD VIEW */}
             {activeTab === 'dashboard' && (
