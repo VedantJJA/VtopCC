@@ -568,9 +568,11 @@ export const getCalendar = async (req: Request, res: Response) => {
     }
 
     const cachedSem = session.calendarCache[monthKey];
-    if (cachedSem) {
+    if (cachedSem && (!semesterSubId || semesterSubId === cachedSem)) {
       console.log(`[DEBUG] Cache Hit: Using semester ${cachedSem} for ${monthKey}`);
       targetSemId = cachedSem;
+    } else {
+      targetSemId = semesterSubId;
     }
 
     // --- 2. Fetch Calendar ---

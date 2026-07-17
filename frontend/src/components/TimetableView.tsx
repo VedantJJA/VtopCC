@@ -1,5 +1,6 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, BookOpen } from 'lucide-react';
+import { getSubjectColor } from '../lib/utils';
 
 interface TimetableViewProps {
   timetableQuery: UseQueryResult<any, any>;
@@ -118,12 +119,17 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
                             className="p-2 border-r border-borderColor text-center align-middle"
                           >
                             {cellData ? (
-                              <div className="bg-bgPrimary border border-borderColor p-2 rounded-xl space-y-1">
-                                <div className="font-extrabold text-[10px] text-accentColor">{cellData.code}</div>
-                                <div className="text-[9px] text-textMain font-bold truncate" title={cellData.title}>{cellData.title}</div>
-                                <div className="text-[9px] text-textMuted font-mono">{cellData.venue}</div>
-                                <div className="text-[8px] text-textMuted font-mono mt-0.5 bg-bgCard px-1 py-0.5 rounded inline-block">{activeTime}</div>
-                              </div>
+                              (() => {
+                                const color = getSubjectColor(cellData.code);
+                                return (
+                                  <div className={`${color.bg} border ${color.border} p-2 rounded-xl space-y-1`}>
+                                    <div className={`font-extrabold text-[10px] ${color.text}`}>{cellData.code}</div>
+                                    <div className="text-[9px] text-textMain font-bold truncate" title={cellData.title}>{cellData.title}</div>
+                                    <div className="text-[9px] text-textMuted font-mono">{cellData.venue}</div>
+                                    <div className="text-[8px] text-textMuted font-mono mt-0.5 bg-bgCard/60 dark:bg-bgCard/20 px-1 py-0.5 rounded inline-block">{activeTime}</div>
+                                  </div>
+                                );
+                              })()
                             ) : (
                               <span className="text-textMuted font-bold">-</span>
                             )}

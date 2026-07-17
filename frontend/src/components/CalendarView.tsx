@@ -1,17 +1,110 @@
-import type { UseQueryResult } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Loader2, AlertTriangle } from 'lucide-react';
+import { getCalendar } from '../lib/api';
 
 interface CalendarViewProps {
-  calendarQuery: UseQueryResult<any, any>;
-  calendarDate: Date;
-  setCalendarDate: (date: Date) => void;
+  semesters: any[];
+  activeUser: string;
 }
 
-export const CalendarView: React.FC<CalendarViewProps> = ({
-  calendarQuery,
-  calendarDate,
-  setCalendarDate
-}) => {
+function findBestSemesterForDate(date: Date, semesters: any[]): string | null {
+  if (semesters.length === 0) return null;
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0 = Jan, 11 = Dec
+
+  // Fall: July (6) to Dec (11)
+  // Winter: Jan (0) to June (5)
+  const isFall = month >= 6 && month <= 11;
+
+  let targetYearStart: number;
+  let targetYearEnd: number;
+  let semType: 'Fall' | 'Winter' | 'Summer';
+
+  if (isFall) {
+    targetYearStart = year;
+    targetYearEnd = year + 1;
+    semType = 'Fall';
+  } else {
+    targetYearStart = year - 1;
+    targetYearEnd = year;
+    semType = 'Winter';
+  }
+
+  const targetYearString = `${targetYearStart}-${String(targetYearEnd).substring(2)}`;
+  
+  // 1. Precise Match (Year and Type)
+  let bestMatch = semesters.find(sem => {
+    const name = sem.name.toUpperCase();
+    return name.includes(targetYearString) && name.includes(semType.toUpperCase());
+  });
+
+  // 2. Fallback: target year
+  if (!bestMatch) {
+    bestMatch = semesters.find(sem => {
+      return sem.name.includes(targetYearString);
+    });
+  }
+
+  // 3. Last fallback: return the first semester
+  return bestMatch ? bestMatch.id : semesters[0].id;
+}
+
+export const CalendarView: React.FC<CalendarViewProps> = ({ semesters, activeUser }) => {
+  const [activeSemester, setActiveSemester] = useState<string>(() => {
+    return semesters[0]?.id || '';
+  });
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
+
+  // Initialize activeSemester on load
+  useEffect(() => {
+    if (semesters.length > 0 && !activeSemester) {
+      setActiveSemester(semesters[0].id);
+    }
+  }, [semesters]);
+
+  // Auto-switch active semester based on currently viewed calendar month
+  useEffect(() => {
+    if (semesters.length > 0) {
+      const bestSemId = findBestSemesterForDate(calendarDate, semesters);
+      if (bestSemId && bestSemId !== activeSemester) {
+        console.log(`[Calendar Auto-Switch] Month ${calendarDate.getMonth() + 1}/${calendarDate.getFullYear()} outside active semester. Auto-switching to: ${bestSemId}`);
+        setActiveSemester(bestSemId);
+      }
+    }
+  }, [calendarDate, semesters]);
+
+  // Calendar query
+  const calendarQuery = useQuery({
+    queryKey: ['calendar', activeUser, activeSemester, calendarDate.getMonth(), calendarDate.getFullYear()],
+    queryFn: async () => {
+      if (!activeSemester) return null;
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const dateStr = `01-${months[calendarDate.getMonth()]}-${calendarDate.getFullYear()}`;
+      const res = await getCalendar(activeSemester, dateStr);
+      
+      // Handle backend auto-switch
+      if (res.data.new_semester_id && res.data.new_semester_id !== activeSemester) {
+        setTimeout(() => {
+          setActiveSemester(res.data.new_semester_id);
+        }, 0);
+      }
+      
+      const data = res.data.raw_data;
+      if (data) {
+        localStorage.setItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
+      }
+      return data;
+    },
+    initialData: () => {
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
+    enabled: !!activeSemester && !!activeUser
+  });
+
   return (
     <div className="space-y-6">
       {calendarQuery.isPending ? (
@@ -25,8 +118,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Header Controls for Month */}
-          <div className="flex items-center justify-between bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm">
+          {/* Header Controls for Month Selection */}
+          <div className="flex justify-between items-center bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm">
             <button
               onClick={() => {
                 const prev = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
@@ -34,9 +127,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               }}
               className="px-3 py-1.5 text-xs font-bold bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all"
             >
-              &lt; Previous Month
+              &lt; Previous
             </button>
-            <h3 className="font-extrabold text-blue-600 dark:text-blue-500 text-sm md:text-base">
+            <h3 className="font-extrabold text-blue-600 dark:text-blue-500 text-xs sm:text-sm md:text-base text-center min-w-[120px]">
               {calendarQuery.data?.month_title || 'Calendar Month'}
             </h3>
             <button
@@ -46,7 +139,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               }}
               className="px-3 py-1.5 text-xs font-bold bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all"
             >
-              Next Month &gt;
+              Next &gt;
             </button>
           </div>
 

@@ -15,8 +15,7 @@ import api, {
   getAttendanceDetail,
   getMarks,
   getGrades,
-  getExams,
-  getCalendar
+  getExams
 } from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
 import {
@@ -120,7 +119,6 @@ function VtopLoginDashboard() {
     'my-info': true
   });
   const [activeSemester, setActiveSemester] = useState<string>('');
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
   // Attendance detail state (for modal)
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<any | null>(null);
@@ -161,23 +159,42 @@ function VtopLoginDashboard() {
     initRef.current = true;
 
     const localSessionId = localStorage.getItem('vtop_session_id');
+    const localUsername = localStorage.getItem('vtop_username');
     if (localSessionId) {
-      setMessage({ text: 'Verifying active session...', type: 'info' });
+      // Optimistically log in instantly to show cached data
+      setSessionId(localSessionId);
+      setIsLoggedIn(true);
+      if (localUsername) {
+        setActiveUser(localUsername);
+      }
+      
+      // Verify in background
       api.post('/auth/check-session', { session_id: localSessionId })
         .then((res) => {
           if (res.data.status === 'success') {
-            setSessionId(localSessionId);
-            setIsLoggedIn(true);
-            setActiveUser(res.data.username);
-            setMessage(null);
+            if (res.data.username) {
+              setActiveUser(res.data.username);
+              localStorage.setItem('vtop_username', res.data.username);
+            }
           } else {
+            // Explicit auth failure, clear active session
             localStorage.removeItem('vtop_session_id');
+            localStorage.removeItem('vtop_username');
+            setIsLoggedIn(false);
+            setSessionId(null);
             startLoginFlow(true);
           }
         })
-        .catch(() => {
-          localStorage.removeItem('vtop_session_id');
-          startLoginFlow(true);
+        .catch((err) => {
+          // If we got an explicit 401/403 auth error, discard session.
+          // Otherwise (e.g. network offline), KEEP active session using cached data!
+          if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+            localStorage.removeItem('vtop_session_id');
+            localStorage.removeItem('vtop_username');
+            setIsLoggedIn(false);
+            setSessionId(null);
+            startLoginFlow(true);
+          }
         });
     } else {
       startLoginFlow(true);
@@ -397,6 +414,7 @@ function VtopLoginDashboard() {
         if (variables.currentSessionId) {
           setSessionId(variables.currentSessionId);
           localStorage.setItem('vtop_session_id', variables.currentSessionId);
+          localStorage.setItem('vtop_username', username);
         }
         setTimeout(() => setMessage(null), 3000);
       } else if (data.status === 'invalid_captcha') {
@@ -450,7 +468,10 @@ function VtopLoginDashboard() {
           localStorage.setItem('vtop_session_id', variables.currentSessionId);
           api.post('/auth/check-session', { session_id: variables.currentSessionId })
             .then(res => {
-              if (res.data.username) setActiveUser(res.data.username);
+              if (res.data.username) {
+                setActiveUser(res.data.username);
+                localStorage.setItem('vtop_username', res.data.username);
+              }
             });
         }
         setTimeout(() => setMessage(null), 3000);
@@ -495,6 +516,7 @@ function VtopLoginDashboard() {
       setIsLoggedIn(false);
       setActiveUser('');
       localStorage.removeItem('vtop_session_id');
+      localStorage.removeItem('vtop_username');
 
       // Clear cache on logout
       for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -674,37 +696,7 @@ function VtopLoginDashboard() {
     enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'exams'
   });
 
-  const calendarQuery = useQuery({
-    queryKey: ['calendar', activeUser, activeSemester, calendarDate.getMonth(), calendarDate.getFullYear()],
-    queryFn: async () => {
-      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-      const dateStr = `01-${months[calendarDate.getMonth()]}-${calendarDate.getFullYear()}`;
-      const res = await getCalendar(activeSemester, dateStr);
-      if (res.data.new_semester_id && res.data.new_semester_id !== activeSemester) {
-        setTimeout(() => {
-          setActiveSemester(res.data.new_semester_id);
-        }, 0);
-      }
-      const data = res.data.raw_data;
-      if (data) {
-        localStorage.setItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
-      }
-      return data;
-    },
-    initialData: () => {
-      if (!activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
-      return cached ? JSON.parse(cached) : undefined;
-    },
-    initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'calendar'
-  });
-
-  useEffect(() => {
-    if (activeSemester) {
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
-    }
-  }, [activeSemester]);
+  // Calendar state and query moved locally to CalendarView.tsx
 
   const credentialsQuery = useQuery({
     queryKey: ['credentials', activeUser],
@@ -725,7 +717,7 @@ function VtopLoginDashboard() {
   });
 
   useEffect(() => {
-    const isAnyError = semestersQuery.isError || profileQuery.isError || timetableQuery.isError || attendanceQuery.isError || marksQuery.isError || gradesQuery.isError || examsQuery.isError || calendarQuery.isError;
+    const isAnyError = semestersQuery.isError || profileQuery.isError || timetableQuery.isError || attendanceQuery.isError || marksQuery.isError || gradesQuery.isError || examsQuery.isError;
     
     if (isAnyError) {
       if (isRestoringRef.current) return; // If already restoring, ignore subsequent query failures
@@ -734,6 +726,7 @@ function VtopLoginDashboard() {
       isRestoringRef.current = true;
       
       localStorage.removeItem('vtop_session_id');
+      localStorage.removeItem('vtop_username');
       setSessionId(null);
 
       if (hasSavedCreds) {
@@ -750,7 +743,7 @@ function VtopLoginDashboard() {
         startLoginFlow().finally(() => { isRestoringRef.current = false; });
       }
     }
-  }, [semestersQuery.isError, profileQuery.isError, timetableQuery.isError, attendanceQuery.isError, marksQuery.isError, gradesQuery.isError, examsQuery.isError, calendarQuery.isError]);
+  }, [semestersQuery.isError, profileQuery.isError, timetableQuery.isError, attendanceQuery.isError, marksQuery.isError, gradesQuery.isError, examsQuery.isError]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1280,9 +1273,8 @@ function VtopLoginDashboard() {
             {/* 7. CALENDAR VIEW */}
             {activeTab === 'calendar' && (
               <CalendarView
-                calendarQuery={calendarQuery}
-                calendarDate={calendarDate}
-                setCalendarDate={setCalendarDate}
+                semesters={semestersQuery.data || []}
+                activeUser={activeUser}
               />
             )}
 
