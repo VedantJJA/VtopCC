@@ -44,7 +44,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: false
+      retry: false,
+      staleTime: 10 * 60 * 1000 // 10 minutes cache freshness
     }
   }
 });
@@ -504,11 +505,8 @@ function VtopLoginDashboard() {
   const semestersQuery = useQuery({
     queryKey: ['semesters', sessionId],
     queryFn: async () => {
-      return [
-        { id: 'CH20262701', name: 'Fall Semester 2026-27' },
-        { id: 'CH20252605', name: 'Winter Semester 2025-26' },
-        { id: 'CH20252601', name: 'Fall Semester 2025-26' }
-      ];
+      const res = await api.post('/data/semesters');
+      return res.data.semesters || [];
     },
     enabled: isLoggedIn && !!sessionId
   });
@@ -579,6 +577,25 @@ function VtopLoginDashboard() {
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId && !!activeSemester && (activeTab === 'attendance' || activeTab === 'dashboard' || activeTab === 'calculator')
+  });
+
+  const odSnapshotQuery = useQuery({
+    queryKey: ['od-snapshot', activeUser, activeSemester],
+    queryFn: async () => {
+      const res = await api.post('/data/get-od-snapshot', { semesterSubId: activeSemester });
+      const data = res.data;
+      if (data) {
+        localStorage.setItem(`vtop_cache_od_${activeSemester}`, JSON.stringify(data));
+      }
+      return data;
+    },
+    initialData: () => {
+      if (!activeSemester) return undefined;
+      const cached = localStorage.getItem(`vtop_cache_od_${activeSemester}`);
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'dashboard'
   });
 
   const attendanceDetailQuery = useQuery({
@@ -1035,20 +1052,24 @@ function VtopLoginDashboard() {
             {/* Logo area */}
             <div className="p-5 pb-4 shrink-0">
               <div className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-black">V</div>
+                <div className="w-8 h-8 rounded-lg bg-[#0f5cf5] flex items-center justify-center text-white font-black">V</div>
                 VTOP Client
               </div>
             </div>
 
             {/* Student Info Card */}
             <div className="px-4 pb-4 shrink-0">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800/50">
-                <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold shrink-0">
-                  {activeUser ? activeUser.substring(0, 1).toUpperCase() : 'S'}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30">
+                <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold shrink-0 overflow-hidden">
+                  {profileQuery.data?.personal?.photo_url ? (
+                    <img src={profileQuery.data.personal.photo_url} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    activeUser ? activeUser.substring(0, 1).toUpperCase() : 'S'
+                  )}
                 </div>
                 <div className="overflow-hidden">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{profileQuery.data?.personal?.name || activeUser || 'Active Session'}</p>
-                  <p className="text-[11px] text-green-600 dark:text-green-400 font-medium truncate">Session Active • {profileQuery.data?.educational?.reg_no || 'Student'}</p>
+                  <p className="text-[11px] text-green-600 dark:text-green-400 font-medium truncate">Session Active</p>
                 </div>
               </div>
             </div>
@@ -1101,7 +1122,7 @@ function VtopLoginDashboard() {
                         className="w-full flex justify-between items-center px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors font-medium text-[13px] cursor-pointer"
                       >
                         <div className="flex items-center gap-2.5">
-                          <item.icon className="h-4 w-4 text-blue-500" /> {item.label}
+                          <item.icon className="h-4 w-4 text-[#0f5cf5]" /> {item.label}
                         </div>
                         <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${expandedNav[item.id] ? 'rotate-180' : ''}`} />
                       </button>
@@ -1111,10 +1132,10 @@ function VtopLoginDashboard() {
                             <button
                               key={child.id}
                               onClick={() => { setActiveTab(child.id as any); setIsMobileSidebarOpen(false); }}
-                              className={`w-full text-left px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                              className={`w-full text-left px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                                 activeTab === child.id 
-                                ? 'text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-900/40 font-semibold' 
-                                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-200'
+                                ? 'bg-[#0f5cf5] text-white shadow-sm' 
+                                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/40 hover:text-gray-900 dark:hover:text-gray-200'
                               }`}
                             >
                               {child.label}
@@ -1128,11 +1149,11 @@ function VtopLoginDashboard() {
                       onClick={() => { setActiveTab(item.id as any); setIsMobileSidebarOpen(false); }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-[13px] cursor-pointer ${
                         activeTab === item.id
-                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        ? 'bg-[#0f5cf5] text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-850/40'
                       }`}
                     >
-                      <item.icon className="h-4 w-4 text-blue-500" /> {item.label}
+                      <item.icon className={`h-4 w-4 ${activeTab === item.id ? 'text-white' : 'text-[#0f5cf5]'}`} /> {item.label}
                     </button>
                   )}
                 </div>
@@ -1140,32 +1161,35 @@ function VtopLoginDashboard() {
             </nav>
 
             {/* Bottom Actions */}
-            <div className="p-4 border-t border-gray-100 dark:border-gray-700 shrink-0 space-y-3">
-              {semestersQuery.data && semestersQuery.data.length > 0 && (
-                <div>
-                  <label htmlFor="semester-select" className="block text-[11px] font-medium text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wider">Semester</label>
-                  <div className="relative">
-                    <select
-                      id="semester-select"
-                      value={activeSemester}
-                      onChange={(e) => setActiveSemester(e.target.value)}
-                      className="block w-full p-2 pr-8 text-sm font-medium text-gray-900 border border-gray-200 rounded-lg bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-colors appearance-none cursor-pointer"
-                    >
-                      {semestersQuery.data.map(sem => (
+            <div className="p-4 border-t border-borderColor shrink-0 space-y-3 mt-auto">
+              <div>
+                <label htmlFor="semester-select" className="block text-[11px] font-medium text-textMuted mb-1.5 uppercase tracking-wider">Semester</label>
+                <div className="relative">
+                  <select
+                    id="semester-select"
+                    value={activeSemester}
+                    onChange={(e) => setActiveSemester(e.target.value)}
+                    className="block w-full p-2 pr-8 text-sm font-semibold text-textMain border border-borderColor rounded-lg bg-bgPrimary focus:ring-1 focus:ring-[#0f5cf5] focus:outline-none transition-colors appearance-none cursor-pointer"
+                    disabled={semestersQuery.isPending}
+                  >
+                    {semestersQuery.isPending ? (
+                      <option>Loading...</option>
+                    ) : (
+                      semestersQuery.data?.map((sem: any) => (
                         <option key={sem.id} value={sem.id}>{sem.name}</option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
-                      <ChevronDown className="h-4 w-4" />
-                    </div>
+                      ))
+                    )}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-textMuted">
+                    <ChevronDown className="h-4 w-4" />
                   </div>
                 </div>
-              )}
+              </div>
 
               <button 
                 onClick={() => logoutMutation.mutate()}
                 disabled={logoutMutation.isPending}
-                className="flex items-center justify-center w-full px-3 py-2 text-sm font-medium rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-colors cursor-pointer"
+                className="flex items-center justify-center w-full px-3 py-2.5 text-sm font-bold rounded-lg text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/45 transition-colors cursor-pointer"
               >
                 <LogOut className="mr-2 h-4 w-4" /> Logout
               </button>
@@ -1202,11 +1226,12 @@ function VtopLoginDashboard() {
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 relative custom-scrollbar bg-gray-100 dark:bg-gray-900">
 
-            {/* TAB VIEWS */}
+            {/* 1. DASHBOARD VIEW */}
             {activeTab === 'dashboard' && (
               <DashboardView
                 attendanceQuery={attendanceQuery}
                 timetableQuery={timetableQuery}
+                odSnapshotQuery={odSnapshotQuery}
                 TIMETABLE_SLOTS={TIMETABLE_SLOTS}
               />
             )}
@@ -1270,7 +1295,10 @@ function VtopLoginDashboard() {
 
             {/* 10. ATTENDANCE CALCULATOR VIEW */}
             {activeTab === 'calculator' && (
-              <AttendanceCalculator attendanceQuery={attendanceQuery} />
+              <AttendanceCalculator 
+                attendanceQuery={attendanceQuery} 
+                timetableQuery={timetableQuery}
+              />
             )}
 
             {/* 11. REGISTERED COURSES (UNDER CONSTRUCTION) */}

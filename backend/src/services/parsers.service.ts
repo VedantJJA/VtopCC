@@ -241,16 +241,45 @@ export function parseCourseData(htmlContent: string) {
     rows.each((i, row) => {
       if (i === 0 || i === rows.length - 1) return;
       const cells = $(row).find('td');
-      if (cells.length < 8) return;
+      if (cells.length < 12) return;
+
+      const coursePs = $(cells[2]).find('p');
+      if (coursePs.length < 1) return;
+      const codeTitle = $(coursePs[0]).text().trim().split(' - ');
+      if (codeTitle.length < 2) return;
+      const code = codeTitle[0].trim();
+      const title = codeTitle[1].trim();
+
+      let courseType = 'Theory';
+      if (coursePs.length > 1) {
+        courseType = $(coursePs[1]).text().trim().replace(/[()]/g, '').trim();
+      }
+
+      const credits = $(cells[3]).text().trim().split(/\s+/).pop() || '0.0';
+
+      const slotVenuePs = $(cells[7]).find('p');
+      const slot = slotVenuePs.length > 0 ? $(slotVenuePs[0]).text().trim().replace(/\s+/g, '') : 'N/A';
+      let venue = 'N/A';
+      if (slotVenuePs.length > 1) {
+        venue = $(slotVenuePs[1]).text().trim();
+      }
+
+      const facultyPs = $(cells[8]).find('p');
+      const facultyName = facultyPs.length > 0 ? $(facultyPs[0]).text().trim().replace(/\s+/g, ' ') : 'N/A';
+      let facultySchool = '';
+      if (facultyPs.length > 1) {
+        facultySchool = $(facultyPs[1]).text().trim();
+      }
+      const faculty = facultySchool ? `${facultyName} (${facultySchool})` : facultyName;
 
       courses.push({
-        course_code: $(cells[1]).text().trim(),
-        course_title: $(cells[2]).text().trim(),
-        course_type: $(cells[3]).text().trim(),
-        credits: $(cells[4]).text().trim(),
-        faculty: $(cells[6]).text().trim(),
-        slot: $(cells[5]).text().trim().replace(' -', ''),
-        venue: 'N/A'
+        course_code: code,
+        course_title: title,
+        course_type: courseType,
+        credits: credits,
+        faculty: faculty,
+        slot: slot,
+        venue: venue
       });
     });
   } else {
@@ -268,7 +297,7 @@ export function parseCourseData(htmlContent: string) {
 
       const courseTypeVal = courseInfoPs.length > 1 ? $(courseInfoPs[1]).text().trim() : 'Theory';
       const slotVenuePs = $(cells[7]).find('p');
-      const slot = slotVenuePs.length > 0 ? $(slotVenuePs[0]).text().trim().replace(' -', '') : 'N/A';
+      const slot = slotVenuePs.length > 0 ? $(slotVenuePs[0]).text().trim().replace(' -', '').trim() : 'N/A';
       const venue = slotVenuePs.length > 1 ? $(slotVenuePs[1]).text().trim() : 'N/A';
       
       const facultyPs = $(cells[8]).find('p');
@@ -279,13 +308,13 @@ export function parseCourseData(htmlContent: string) {
       });
 
       courses.push({
-        course_code: codeTitle[0],
-        course_title: codeTitle[1],
+        course_code: codeTitle[0].trim(),
+        course_title: codeTitle[1].trim(),
         course_type: courseTypeVal.replace(/[()]/g, '').trim(),
         credits: $(cells[3]).text().trim().split(/\s+/).pop(),
-        faculty: facultyArr.join(' ').replace(' - ', ' '),
-        slot,
-        venue
+        faculty: facultyArr.join(' ').replace(' - ', ' ').trim(),
+        slot: slot,
+        venue: venue
       });
     });
   }
@@ -395,9 +424,9 @@ function parseGridNewFormat($: cheerio.CheerioAPI, courseTitleMap: Map<string, s
       if (text && text !== '-') {
         const parts = text.split('-');
         if (parts.length >= 4) {
-          const courseCode = parts[1];
-          const courseTypeShort = parts[2];
-          const venue = parts.slice(3, -1).join('-');
+          const courseCode = parts[1].trim();
+          const courseTypeShort = parts[2].trim();
+          const venue = parts.slice(3, -1).join('-').trim();
           const classInfo = {
             code: courseCode,
             type: courseTypeShort,
@@ -506,9 +535,9 @@ function parseGridOldFormat($: cheerio.CheerioAPI, courseTitleMap: Map<string, s
       if (text && text !== '-' && !/^[A-Z]{1,3}\d{1,2}$/.test(text)) {
         const parts = text.split('-');
         if (parts.length > 2) {
-          const courseCode = parts[1];
-          const courseTypeShort = parts[2];
-          const venue = parts.slice(3, -1).join('-');
+          const courseCode = parts[1].trim();
+          const courseTypeShort = parts[2].trim();
+          const venue = parts.slice(3, -1).join('-').trim();
           const classInfo = {
             code: courseCode,
             type: courseTypeShort,

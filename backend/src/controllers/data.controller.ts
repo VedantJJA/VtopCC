@@ -746,3 +746,57 @@ export const getDebugData = async (req: Request, res: Response) => {
     return res.status(500).json({ status: 'error', message: error.message || 'Session expired or invalid.' });
   }
 };
+
+export const getODSnapshot = async (req: Request, res: Response) => {
+  const { session_id, semesterSubId } = req.body;
+  try {
+    const details = await getSessionDetails(session_id);
+    const { client, authorizedId, csrfToken } = details;
+
+    const payload = new URLSearchParams();
+    payload.append('authorizedID', authorizedId);
+    payload.append('_csrf', csrfToken);
+    payload.append('semesterSubId', semesterSubId);
+
+    const summaryRes = await client.post('processViewStudentAttendance', payload, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+
+    const courses = parsers.parseAttendanceSummary(summaryRes.data);
+    let totalOd = 0;
+
+    for (const course of courses) {
+      if (!course.class_id || !course.slot_param) continue;
+      const isLab = course.course_type?.toUpperCase().includes('LAB');
+
+      const detailPayload = new URLSearchParams();
+      detailPayload.append('authorizedID', authorizedId);
+      detailPayload.append('_csrf', csrfToken);
+      detailPayload.append('lSemesterSubId', semesterSubId);
+      detailPayload.append('classId', course.class_id);
+      detailPayload.append('slotName', course.slot_param);
+
+      try {
+        const detailRes = await client.post('processViewAttendanceDetail', detailPayload, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+        const detailsList = parsers.parseAttendanceDetail(detailRes.data);
+        for (const d of detailsList) {
+          if (d.status === 'On Duty') {
+            totalOd += isLab ? 2 : 1;
+          }
+        }
+      } catch (err) {
+        // Ignore individual failures
+      }
+    }
+
+    return res.json({ status: 'success', total_od_count: totalOd });
+  } catch (error: any) {
+    console.error('getODSnapshot failed:', error);
+    return res.status(error.message === 'Session expired or invalid.' ? 401 : 500).json({
+      status: 'error',
+      message: error.message || 'Failed to fetch OD count'
+    });
+  }
+};

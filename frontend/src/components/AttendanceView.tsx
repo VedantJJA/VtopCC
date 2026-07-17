@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronRight, X, Clock } from 'lucide-react';
 
 interface AttendanceViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
@@ -26,60 +26,81 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           <span>Failed to fetch attendance data. Please verify your connection.</span>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Main Summary cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {attendanceQuery.data.map((course: any, idx: number) => {
-              const percent = parseFloat(course.percentage) || 0;
-              const isSafe = percent >= 75;
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {attendanceQuery.data.map((course: any, idx: number) => {
+            const percent = parseFloat(course.percentage) || 0;
+            const isSafe = percent >= 75;
 
-              return (
-                <div
-                  key={idx}
-                  className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm flex flex-col justify-between"
-                >
+            return (
+              <div
+                key={idx}
+                className="bg-bgCard border border-borderColor rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex justify-between items-stretch"
+              >
+                {/* Left Side: Course Info */}
+                <div className="flex-1 flex flex-col justify-between pr-4 space-y-4">
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted">{course.course_code}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isSafe
-                          ? 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30'
-                          : 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-900/30'
-                        }`}>
-                        {isSafe ? 'Attendance Safe' : 'Below 75%'}
+                    <h4 
+                      className="text-base font-bold text-textMain leading-snug line-clamp-2" 
+                      title={course.course_title}
+                    >
+                      {course.course_title}
+                    </h4>
+                    
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="text-[10px] bg-blue-50 dark:bg-blue-900/25 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30 font-bold px-2 py-0.5 rounded uppercase">
+                        {course.course_code}
+                      </span>
+                      <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-textMuted border border-borderColor font-semibold px-2 py-0.5 rounded">
+                        {course.slot}
+                      </span>
+                      <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-textMuted border border-borderColor font-semibold px-2 py-0.5 rounded">
+                        {course.course_type}
                       </span>
                     </div>
-                    <h4 className="text-sm font-bold line-clamp-1 text-textMain" title={course.course_title}>{course.course_title}</h4>
-                    <p className="text-xs text-textMuted">{course.faculty}</p>
- 
-                    <div className="pt-2 flex justify-between items-end text-xs">
-                      <div>
-                        <span className="text-textMuted">Class Hours: </span>
-                        <span className="font-bold text-textMain">{course.attended_classes}</span>
-                        <span className="text-textMuted"> / </span>
-                        <span className="font-bold text-textMain">{course.total_classes}</span>
-                      </div>
-                      <div className={`text-base font-black ${isSafe ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{course.percentage}%</div>
-                    </div>
- 
-                    {/* Progress bar */}
-                    <div className="w-full bg-bgPrimary h-2 rounded-full overflow-hidden mt-1 border border-borderColor">
-                      <div
-                        className={`h-full rounded-full ${isSafe ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
+
+                    <p className="text-xs text-textMuted line-clamp-1 mt-1" title={course.faculty}>
+                      {course.faculty}
+                    </p>
                   </div>
 
                   <button
                     onClick={() => setSelectedAttendanceCourse(course)}
-                    className="w-full py-2.5 mt-4 text-xs font-semibold bg-bgPrimary hover:bg-borderColor text-textMain border border-borderColor rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-[#0f5cf5] hover:underline flex items-center gap-0.5 self-start cursor-pointer transition-colors"
                   >
-                    View Attendance Log <ChevronRight className="h-3.5 w-3.5" />
+                    View Details <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Right Side: Vertical Progress Bar */}
+                <div className="flex flex-col items-center justify-center pl-4 border-l border-dashed border-borderColor shrink-0 w-20">
+                  <div 
+                    className={`relative h-24 w-3.5 rounded-full overflow-hidden flex items-end border border-borderColor/50 ${
+                      isSafe ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-rose-50 dark:bg-rose-950/20'
+                    }`}
+                    title={`${course.percentage}%`}
+                  >
+                    <div
+                      className={`w-full rounded-full transition-all duration-1000 ease-out ${
+                        isSafe ? 'bg-emerald-500' : 'bg-rose-500'
+                      }`}
+                      style={{ height: `${percent}%` }}
+                    />
+                  </div>
+                  
+                  <div className="text-center mt-2.5">
+                    <span className={`block font-bold text-sm leading-none ${
+                      isSafe ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                    }`}>
+                      {course.percentage}%
+                    </span>
+                    <span className="block text-[10px] text-textMuted font-mono font-medium mt-1.5 whitespace-nowrap">
+                      {course.attended_classes} / {course.total_classes}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -91,20 +112,30 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               {/* Header */}
               <div className="flex justify-between items-start border-b border-borderColor pb-4">
                 <div>
-                  <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted uppercase">{selectedAttendanceCourse.course_code}</span>
-                  <h3 className="text-lg font-bold text-textMain mt-1">{selectedAttendanceCourse.course_title}</h3>
-                  <p className="text-xs text-textMuted mt-0.5">{selectedAttendanceCourse.faculty}</p>
+                  <span className="text-[10px] bg-blue-50 dark:bg-blue-900/25 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30 font-bold px-2 py-0.5 rounded uppercase">
+                    {selectedAttendanceCourse.course_code}
+                  </span>
+                  <h3 className="text-lg font-bold text-textMain mt-2 leading-snug">
+                    {selectedAttendanceCourse.course_title}
+                  </h3>
+                  <p className="text-xs text-textMuted mt-1">
+                    {selectedAttendanceCourse.faculty}
+                  </p>
                 </div>
                 <button
                   onClick={() => setSelectedAttendanceCourse(null)}
-                  className="p-1 text-textMuted hover:text-textMain font-bold text-lg leading-none cursor-pointer"
+                  className="p-1.5 text-textMuted hover:text-textMain border border-borderColor hover:bg-bgPrimary rounded-lg transition-colors cursor-pointer"
                 >
-                  X
+                  <X className="h-4 w-4" />
                 </button>
-              </div>              {/* Attendance Log Table */}
+              </div>
+
+              {/* Attendance Log Table */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold text-blue-600 dark:text-blue-500">Hourly Lecture History</h4>
- 
+                <h4 className="text-sm font-bold text-[#0f5cf5] flex items-center gap-1.5">
+                  <Clock className="h-4 w-4" /> Hourly Lecture History
+                </h4>
+
                 {attendanceDetailQuery.isPending ? (
                   <div className="h-32 flex items-center justify-center">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
@@ -115,8 +146,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                     <span>Failed to retrieve lecture history log.</span>
                   </div>
                 ) : (
-                  <div className="border border-borderColor rounded-2xl overflow-hidden text-xs">
-                    <div className="max-h-[400px] overflow-y-auto">
+                  <div className="border border-borderColor rounded-xl overflow-hidden text-xs">
+                    <div className="max-h-[450px] overflow-y-auto custom-scrollbar">
                       <table className="w-full border-collapse text-left">
                         <thead>
                           <tr className="bg-bgPrimary border-b border-borderColor text-[10px] font-bold text-textMuted uppercase">
@@ -129,8 +160,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         <tbody>
                           {attendanceDetailQuery.data?.map((log: any, logIdx: number) => {
                             const isPresent = log.status.toLowerCase() === 'present';
+                            const isOd = log.status.toLowerCase() === 'on duty' || log.status === 'On Duty';
+                            
+                            let badgeStyle = '';
+                            if (isPresent) {
+                              badgeStyle = 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400';
+                            } else if (isOd) {
+                              badgeStyle = 'bg-purple-50 dark:bg-purple-950/25 text-purple-600 dark:text-purple-400';
+                            } else {
+                              badgeStyle = 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400';
+                            }
+
                             return (
-                              <tr key={logIdx} className="border-b border-borderColor hover:bg-bgPrimary/55">
+                              <tr key={logIdx} className="border-b border-borderColor hover:bg-bgPrimary/30 transition-colors">
                                 <td className="p-3 font-semibold text-textMuted">{log.sl_no}</td>
                                 <td className="p-3 font-bold text-textMain">{log.date}</td>
                                 <td className="p-3 text-textMain">
@@ -138,10 +180,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                                   <div className="text-[10px] text-textMuted mt-0.5">{log.timing}</div>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${isPresent
-                                      ? 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400'
-                                      : 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400'
-                                    }`}>
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeStyle}`}>
                                     {log.status}
                                   </span>
                                 </td>
@@ -155,12 +194,12 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 )}
               </div>
             </div>
- 
+
             <button
               onClick={() => setSelectedAttendanceCourse(null)}
-              className="w-full py-3 mt-6 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-black text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              className="w-full py-3 mt-6 bg-[#0f5cf5] hover:bg-[#0d52db] text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer shadow-sm"
             >
-              Close History Drawer
+              Close History Log
             </button>
           </div>
         </div>

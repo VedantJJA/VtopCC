@@ -1,11 +1,21 @@
+import React, { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, ExternalLink, Eye, EyeOff, CalendarRange, KeyRound } from 'lucide-react';
 
 interface CredentialsViewProps {
   credentialsQuery: UseQueryResult<any, any>;
 }
 
 export const CredentialsView: React.FC<CredentialsViewProps> = ({ credentialsQuery }) => {
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<number, boolean>>({});
+
+  const togglePassword = (idx: number) => {
+    setShowPasswordMap(prev => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
+  const accounts = credentialsQuery.data?.accounts || [];
+  const exams = credentialsQuery.data?.exams || [];
+
   return (
     <div className="space-y-6">
       {credentialsQuery.isPending ? (
@@ -18,135 +28,123 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({ credentialsQue
           <span>Failed to fetch WiFi and Proctor System credentials from VTOP.</span>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Intro text */}
-          <div className="p-5 bg-bgCard border border-borderColor rounded-3xl shadow-sm space-y-1.5">
-            <h3 className="text-sm font-bold text-accentColor">VTOP Stored System Logins</h3>
-            <p className="text-xs text-textMuted leading-relaxed">
-              These credentials are automatically registered by Chennai Campus for your official lab computers, hostel WiFi access, and related university networks.
-            </p>
-          </div>
+        <div className="space-y-8">
+          {/* Saved Credentials Table */}
+          {accounts.length > 0 && (
+            <div className="bg-bgCard border border-borderColor rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 bg-bgPrimary/25 border-b border-borderColor">
+                <h4 className="text-sm font-bold text-textMain flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-indigo-500" /> Saved System Logins
+                </h4>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-textMain">
+                  <thead className="text-xs text-textMuted uppercase bg-bgPrimary border-b border-borderColor font-bold">
+                    <tr>
+                      <th className="px-6 py-3.5">Service / Account</th>
+                      <th className="px-6 py-3.5">Username</th>
+                      <th className="px-6 py-3.5 w-48">Password</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-borderColor/60">
+                    {accounts.map((acc: any, index: number) => (
+                      <tr key={index} className="hover:bg-bgPrimary/30 transition-colors">
+                        <td className="px-6 py-4 font-semibold text-textMain">
+                          {acc.url && acc.url !== '#' ? (
+                            <a 
+                              href={acc.url} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="text-[#0f5cf5] hover:underline flex items-center gap-1"
+                            >
+                              {acc.account} <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                            </a>
+                          ) : (
+                            acc.account
+                          )}
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs select-all">{acc.username}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center bg-bgPrimary rounded px-2.5 py-1.5 w-fit border border-borderColor">
+                            <span 
+                              onClick={() => togglePassword(index)}
+                              className={`font-mono text-xs text-textMain mr-3 select-all min-w-[90px] cursor-pointer transition-all ${
+                                !showPasswordMap[index] ? 'blur-[3px] select-none' : ''
+                              }`}
+                            >
+                              {acc.password}
+                            </span>
+                            <button 
+                              onClick={() => togglePassword(index)} 
+                              className="text-textMuted hover:text-textMain transition-colors focus:outline-none cursor-pointer"
+                              title="Toggle visibility"
+                            >
+                              {showPasswordMap[index] ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-          {/* WiFi / Account Credentials */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-black text-textMain">WiFi & System Accounts</h4>
-            {credentialsQuery.data?.accounts?.length === 0 ? (
-              <div className="text-xs text-textMuted bg-bgCard border border-borderColor rounded-2xl p-4 text-center">
-                No general system accounts found.
+          {/* Special Exam Credentials Table */}
+          {exams.length > 0 && (
+            <div className="bg-bgCard border border-borderColor rounded-xl shadow-sm overflow-hidden border-t-4 border-t-indigo-500">
+              <div className="px-6 py-4 bg-indigo-50/40 dark:bg-indigo-950/10 border-b border-borderColor">
+                <h4 className="text-sm font-bold text-[#0f5cf5] flex items-center gap-2">
+                  <CalendarRange className="w-4 h-4" /> Upcoming Exam Schedule
+                </h4>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {credentialsQuery.data?.accounts?.map((acc: any, index: number) => (
-                  <div
-                    key={index}
-                    className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4 relative overflow-hidden"
-                  >
-                    <div className="flex justify-between items-start border-b border-borderColor pb-3">
-                      <div>
-                        <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted uppercase">Account</span>
-                        <h4 className="text-sm font-bold mt-1 text-textMain">{acc.account}</h4>
-                      </div>
-                      {acc.url && acc.url !== '#' && (
-                        <a
-                          href={acc.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] font-bold text-accentColor hover:underline"
-                        >
-                          Login Portal -&gt;
-                        </a>
-                      )}
-                    </div>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex justify-between items-center text-textMain">
-                        <span className="text-textMuted">Username</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold select-all">{acc.username}</span>
-                          <button
-                            onClick={() => navigator.clipboard.writeText(acc.username)}
-                            className="text-[10px] text-accentColor hover:underline active:text-accentColor/80 cursor-pointer"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center text-textMain">
-                        <span className="text-textMuted">Password</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold select-all">{acc.password}</span>
-                          <button
-                            onClick={() => navigator.clipboard.writeText(acc.password)}
-                            className="text-[10px] text-accentColor hover:underline active:text-accentColor/80 cursor-pointer"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-textMain">
+                  <thead className="text-xs text-textMuted uppercase bg-bgPrimary border-b border-borderColor font-bold">
+                    <tr>
+                      <th className="px-6 py-3.5">Course / Exam</th>
+                      <th className="px-6 py-3.5">Venue & Time</th>
+                      <th className="px-6 py-3.5 text-center">Seat</th>
+                      <th className="px-6 py-3.5 text-center">Password</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-borderColor/60">
+                    {exams.map((ex: any, index: number) => (
+                      <tr key={index} className="hover:bg-bgPrimary/30 transition-colors">
+                        <td className="px-6 py-4 font-semibold text-textMain">
+                          {ex.account}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center text-xs font-semibold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded border border-amber-200 dark:border-amber-900/40 w-fit">
+                            {ex.venue_date}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center font-bold text-textMain">{ex.seat}</td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="font-mono text-xs text-red-600 dark:text-red-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/30 px-3 py-1.5 rounded select-all inline-block font-bold">
+                            {ex.password}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Special Exam Credentials */}
-          <div className="space-y-4 pt-2">
-            <h4 className="text-sm font-black text-textMain">Exam Network Credentials</h4>
-            {credentialsQuery.data?.exams?.length === 0 ? (
-              <div className="text-xs text-textMuted bg-bgCard border border-borderColor rounded-2xl p-4 text-center">
-                No active exam credentials found.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {credentialsQuery.data?.exams?.map((ex: any, index: number) => (
-                  <div
-                    key={index}
-                    className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4"
-                  >
-                    <div className="flex justify-between items-start border-b border-borderColor pb-3">
-                      <div>
-                        <span className="text-[10px] bg-bgPrimary border border-borderColor text-textMuted font-bold px-2 py-0.5 rounded uppercase">Exam Seat</span>
-                        <h4 className="text-sm font-bold mt-1 text-textMain">{ex.account}</h4>
-                      </div>
-                      <div className="text-right text-[10px] text-textMuted">
-                        Seat Number: <strong className="text-textMain font-mono">{ex.seat}</strong>
-                      </div>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex justify-between items-center text-textMain">
-                        <span className="text-textMuted">Venue & Date</span>
-                        <span className="font-bold">{ex.venue_date}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-textMain">
-                        <span className="text-textMuted">Username</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold select-all">{ex.username}</span>
-                          <button
-                            onClick={() => navigator.clipboard.writeText(ex.username)}
-                            className="text-[10px] text-accentColor hover:underline cursor-pointer"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center text-textMain">
-                        <span className="text-textMuted">Password</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold select-all">{ex.password}</span>
-                          <button
-                            onClick={() => navigator.clipboard.writeText(ex.password)}
-                            className="text-[10px] text-accentColor hover:underline cursor-pointer"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {accounts.length === 0 && exams.length === 0 && (
+            <div className="bg-bgCard border border-borderColor rounded-xl p-8 text-center text-textMuted italic shadow-sm">
+              No credentials or exam schedules found.
+            </div>
+          )}
         </div>
       )}
     </div>

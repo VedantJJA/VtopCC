@@ -10,7 +10,8 @@ import {
   getProfile,
   getCalendar,
   getCredentials,
-  getDebugData
+  getDebugData,
+  getODSnapshot
 } from '../controllers/data.controller';
 
 const router = Router();
@@ -35,5 +36,6 @@ router.post('/profile', getProfile);
 router.post('/calendar', getCalendar);
 router.post('/credentials', getCredentials);
 router.post('/debug', getDebugData);
+router.post('/get-od-snapshot', getODSnapshot);
 
 export default router;

@@ -103,6 +103,27 @@ export async function getSessionDetails(sessionId: string) {
   if (!session) throw new Error('Session expired.');
 
   const client = createClient(session.cookieJar);
+
+  // Auto-detect expired session if login form HTML is returned
+  client.interceptors.response.use(
+    (response) => {
+      if (typeof response.data === 'string' && response.data.includes('vtopLoginForm')) {
+        sessionService.deleteSession(sessionId);
+        return Promise.reject(new Error('Session expired or invalid.'));
+      }
+      return response;
+    },
+    (error) => {
+      return Promise.reject(error);
+    }
+  );
+
+  // Optimize: Reuse CSRF token and authorized ID if already parsed
+  if (session.csrfToken && session.authorizedId) {
+    client.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+    client.defaults.headers.common['Referer'] = `${VTOP_BASE_URL}content`;
+    return { client, authorizedId: session.authorizedId, csrfToken: session.csrfToken };
+  }
   
   // FIX: Remove the slash in `${baseUrl}content`
   const contentRes = await client.get('content', {
