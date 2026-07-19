@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, BookOpen } from 'lucide-react';
+import { Loader2, BookOpen } from 'lucide-react';
 import { getSubjectColor } from '../lib/utils';
 
 interface TimetableViewProps {
@@ -47,10 +47,11 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : timetableQuery.isError ? (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-          <AlertTriangle className="h-5 w-5 shrink-0" />
-          <span>Failed to load student timetable. Please select another semester or check connection.</span>
+      ) : timetableQuery.isError || !timetableQuery.data || !timetableQuery.data.timetable ? (
+        <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
+          <BookOpen className="h-12 w-12 text-textMuted mx-auto" />
+          <h4 className="font-bold text-textMain">Timetable Not Available</h4>
+          <p className="text-xs text-textMuted">No timetable data could be found for this semester.</p>
         </div>
       ) : (
         <div className="space-y-6">

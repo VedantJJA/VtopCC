@@ -20,10 +20,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : attendanceQuery.isError ? (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
-          <AlertTriangle className="h-5 w-5 shrink-0" />
-          <span>Failed to fetch attendance data. Please verify your connection.</span>
+      ) : attendanceQuery.isError || !attendanceQuery.data || attendanceQuery.data.length === 0 ? (
+        <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
+          <Clock className="h-12 w-12 text-textMuted mx-auto" />
+          <h4 className="font-bold text-textMain">Attendance Not Available</h4>
+          <p className="text-xs text-textMuted">No attendance record found for this semester.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

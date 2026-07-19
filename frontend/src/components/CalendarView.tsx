@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCalendar } from '../lib/api';
 
 interface CalendarViewProps {
@@ -102,12 +102,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters, activeUse
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: !!activeSemester && !!activeUser
+    enabled: !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!activeUser
   });
 
   return (
     <div className="space-y-6">
-      {calendarQuery.isPending ? (
+      {!activeSemester || activeSemester === 'UNAVAILABLE' ? (
+        <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
+          <AlertTriangle className="h-12 w-12 text-textMuted mx-auto" />
+          <h4 className="font-bold text-textMain">Calendar Not Available</h4>
+          <p className="text-xs text-textMuted">No academic calendar can be loaded without an active semester selection.</p>
+        </div>
+      ) : calendarQuery.isPending ? (
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
@@ -119,27 +125,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters, activeUse
       ) : (
         <div className="space-y-6">
           {/* Header Controls for Month Selection */}
-          <div className="flex justify-between items-center bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm">
+          <div className="flex justify-center items-center bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm space-x-6">
             <button
               onClick={() => {
                 const prev = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
                 setCalendarDate(prev);
               }}
-              className="px-3 py-1.5 text-xs font-bold bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all"
+              className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
+              title="Previous Month"
             >
-              &lt; Previous
+              <ChevronLeft className="h-4 w-4" />
             </button>
-            <h3 className="font-extrabold text-blue-600 dark:text-blue-500 text-xs sm:text-sm md:text-base text-center min-w-[120px]">
+            
+            <h3 className="font-extrabold text-textMain text-sm sm:text-base md:text-lg text-center min-w-[150px] uppercase tracking-wide">
               {calendarQuery.data?.month_title || 'Calendar Month'}
             </h3>
+            
             <button
               onClick={() => {
                 const next = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
                 setCalendarDate(next);
               }}
-              className="px-3 py-1.5 text-xs font-bold bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all"
+              className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
+              title="Next Month"
             >
-              Next &gt;
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
 

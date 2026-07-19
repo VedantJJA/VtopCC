@@ -32,7 +32,6 @@ import {
   EyeOff,
   Menu,
   LayoutDashboard,
-  IdCard,
   GraduationCap,
   Home,
   PlusCircle,
@@ -540,17 +539,30 @@ function VtopLoginDashboard() {
     queryKey: ['semesters', sessionId],
     queryFn: async () => {
       const res = await getSemesters();
-      return res.data.semesters || [];
+      const sems = res.data.semesters || [];
+      if (sems.length > 0) {
+        localStorage.setItem('vtop_cache_semesters', JSON.stringify(sems));
+      }
+      return sems;
     },
+    initialData: () => {
+      const cached = localStorage.getItem('vtop_cache_semesters');
+      return cached ? JSON.parse(cached) : undefined;
+    },
+    initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!sessionId
   });
 
   // Set default active semester when semesters list loads
   useEffect(() => {
-    if (semestersQuery.data && semestersQuery.data.length > 0) {
-      const defaultSem = semestersQuery.data[0];
-      if (defaultSem && !activeSemester) {
-        setActiveSemester(defaultSem.id);
+    if (semestersQuery.data) {
+      if (semestersQuery.data.length > 0) {
+        const defaultSem = semestersQuery.data[0];
+        if (defaultSem && (!activeSemester || activeSemester === 'UNAVAILABLE')) {
+          setActiveSemester(defaultSem.id);
+        }
+      } else {
+        setActiveSemester('UNAVAILABLE');
       }
     }
   }, [semestersQuery.data]);
@@ -589,7 +601,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && (activeTab === 'timetable' || activeTab === 'dashboard')
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && (activeTab === 'timetable' || activeTab === 'dashboard')
   });
 
   const attendanceQuery = useQuery({
@@ -608,7 +620,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && (activeTab === 'attendance' || activeTab === 'dashboard' || activeTab === 'calculator')
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && (activeTab === 'attendance' || activeTab === 'dashboard' || activeTab === 'calculator')
   });
 
   const odSnapshotQuery = useQuery({
@@ -627,7 +639,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'dashboard'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && activeTab === 'dashboard'
   });
 
   const attendanceDetailQuery = useQuery({
@@ -636,7 +648,7 @@ function VtopLoginDashboard() {
       const res = await getAttendanceDetail(activeSemester, selectedAttendanceCourse.class_id, selectedAttendanceCourse.slot_param);
       return res.data.raw_data as any[];
     },
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && !!selectedAttendanceCourse
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!selectedAttendanceCourse
   });
 
   const marksQuery = useQuery({
@@ -655,7 +667,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'marks'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
 
   const gradesQuery = useQuery({
@@ -674,7 +686,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'grades'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
 
   const examsQuery = useQuery({
@@ -693,8 +705,12 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeTab === 'exams'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
+
+  const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
+  const isGradesLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !gradesQuery.isPending && (!gradesQuery.data || !gradesQuery.data.grades || gradesQuery.data.grades.length === 0));
+  const isExamsLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !examsQuery.isPending && (!examsQuery.data || examsQuery.data.length === 0));
 
   // Calendar state and query moved locally to CalendarView.tsx
 
@@ -848,7 +864,7 @@ function VtopLoginDashboard() {
   const isPending = loginMutation.isPending || autoLoginMutation.isPending;
 
   return (
-    <div className="min-h-screen bg-bgPrimary text-textMain flex flex-col font-sans transition-colors duration-300">
+    <div className={`${isLoggedIn ? 'h-screen overflow-hidden' : 'min-h-screen'} bg-bgPrimary text-textMain flex flex-col font-sans transition-colors duration-300`}>
       <GlobalScrollbarStyles />
 
       {/* Global Google ReCAPTCHA element */}
@@ -1055,7 +1071,10 @@ function VtopLoginDashboard() {
 
             {/* Student Info Card */}
             <div className="px-4 pb-4 shrink-0">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-bgPrimary border border-borderColor">
+              <button 
+                onClick={() => setActiveTab('profile')}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-bgPrimary border border-borderColor hover:bg-bgPrimary/60 transition-colors text-left focus:outline-none cursor-pointer"
+              >
                 <div className="h-10 w-10 rounded-full bg-bgCard border border-borderColor flex items-center justify-center text-accentColor font-bold shrink-0 overflow-hidden">
                   {profileQuery.data?.personal?.photo_url ? (
                     <img src={profileQuery.data.personal.photo_url} alt="Profile" className="w-full h-full object-cover" />
@@ -1063,24 +1082,19 @@ function VtopLoginDashboard() {
                     activeUser ? activeUser.substring(0, 1).toUpperCase() : 'S'
                   )}
                 </div>
-                <div className="overflow-hidden">
+                <div className="overflow-hidden flex-1">
                   <p className="text-sm font-semibold text-textMain truncate">{profileQuery.data?.personal?.name || activeUser || 'Active Session'}</p>
-                  <p className="text-[11px] text-emerald-500 font-medium truncate">Session Active</p>
+                  {profileQuery.data?.personal?.name && (
+                    <p className="text-[11px] text-textMuted font-medium truncate font-mono">{activeUser}</p>
+                  )}
                 </div>
-              </div>
+              </button>
             </div>
 
             {/* Collapsible Nav Links */}
             <nav className="flex-1 overflow-y-auto px-3 space-y-1 pb-4 custom-scrollbar">
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-                { 
-                  id: 'my-info', label: 'My Info', icon: IdCard, 
-                  children: [
-                    { id: 'credentials', label: 'WiFi & Systems' },
-                    { id: 'profile', label: 'Student Profile' }
-                  ]
-                },
                 {
                   id: 'academics', label: 'Academics', icon: GraduationCap,
                   children: [
@@ -1124,19 +1138,30 @@ function VtopLoginDashboard() {
                       </button>
                       {expandedNav[item.id] && (
                         <div className="pl-9 pr-2 py-1 space-y-0.5">
-                          {item.children.map(child => (
-                            <button
-                              key={child.id}
-                              onClick={() => { setActiveTab(child.id as any); setIsMobileSidebarOpen(false); }}
-                              className={`w-full text-left px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                                activeTab === child.id 
-                                ? 'bg-accentColor text-textMain shadow-sm font-bold' 
-                                : 'text-textMuted hover:bg-bgPrimary/40 hover:text-textMain'
-                              }`}
-                            >
-                              {child.label}
-                            </button>
-                          ))}
+                          {item.children.map(child => {
+                            const isLocked = child.id === 'marks' ? isMarksLocked : child.id === 'grades' ? isGradesLocked : child.id === 'exams' ? isExamsLocked : false;
+                            return (
+                              <button
+                                key={child.id}
+                                disabled={isLocked}
+                                onClick={() => { setActiveTab(child.id as any); setIsMobileSidebarOpen(false); }}
+                                className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                                  isLocked 
+                                  ? 'opacity-40 cursor-not-allowed text-textMuted' 
+                                  : activeTab === child.id 
+                                    ? 'bg-accentColor text-textMain shadow-sm font-bold cursor-pointer' 
+                                    : 'text-textMuted hover:bg-bgPrimary/40 hover:text-textMain cursor-pointer'
+                                }`}
+                              >
+                                <span>{child.label}</span>
+                                {isLocked && (
+                                  <span className="text-[8px] bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wider scale-90 origin-right">
+                                    NOT AVAILABLE
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1165,11 +1190,13 @@ function VtopLoginDashboard() {
                     id="semester-select"
                     value={activeSemester}
                     onChange={(e) => setActiveSemester(e.target.value)}
-                    className="block w-full p-2 pr-8 text-sm font-semibold text-textMain border border-borderColor rounded-lg bg-bgPrimary focus:ring-1 focus:ring-accentColor focus:outline-none transition-colors appearance-none cursor-pointer"
-                    disabled={semestersQuery.isPending}
+                    className="block w-full p-2 pr-8 text-sm font-semibold text-textMain border border-borderColor rounded-lg bg-bgPrimary focus:ring-1 focus:ring-accentColor focus:outline-none transition-colors appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={semestersQuery.isPending || !semestersQuery.data || semestersQuery.data.length === 0}
                   >
                     {semestersQuery.isPending ? (
                       <option>Loading...</option>
+                    ) : !semestersQuery.data || semestersQuery.data.length === 0 ? (
+                      <option value="UNAVAILABLE">Unavailable</option>
                     ) : (
                       semestersQuery.data?.map((sem: any) => (
                         <option key={sem.id} value={sem.id}>{sem.name}</option>
@@ -1234,7 +1261,11 @@ function VtopLoginDashboard() {
 
             {/* 1. PROFILE VIEW */}
             {activeTab === 'profile' && (
-              <ProfileView profileQuery={profileQuery} />
+              <ProfileView 
+                profileQuery={profileQuery} 
+                setActiveTab={setActiveTab}
+                activeUser={activeUser}
+              />
             )}
 
             {/* 2. TIMETABLE VIEW */}
@@ -1350,8 +1381,12 @@ function VtopLoginDashboard() {
                     <AlertTriangle className="h-4 w-4 shrink-0" />
                     <span>Failed to retrieve lecture history log.</span>
                   </div>
+                ) : !attendanceDetailQuery.data || attendanceDetailQuery.data.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-textMuted bg-bgPrimary/30 rounded-2xl border border-borderColor/60 border-dashed">
+                    No history log entries recorded.
+                  </div>
                 ) : (
-                  <div className="border border-slate-200 dark:border-neutral-800 rounded-2xl overflow-hidden text-xs">
+                  <div className="border border-slate-200 dark:border-neutral-800 rounded-2xl overflow-hidden text-xs bg-bgCard">
                     <div className="max-h-[400px] overflow-y-auto">
                       <table className="w-full border-collapse text-left">
                         <thead>
@@ -1364,20 +1399,24 @@ function VtopLoginDashboard() {
                         </thead>
                         <tbody>
                           {attendanceDetailQuery.data.map((log: any, logIdx: number) => {
-                            const isPresent = log.status.toLowerCase() === 'present';
+                            const statusLower = (log.status || '').toLowerCase();
+                            const isPresent = statusLower === 'present';
+                            const isOnDuty = statusLower === 'on duty' || statusLower === 'onduty' || statusLower === 'on-duty';
+                            const badgeClass = isOnDuty
+                              ? 'bg-yellow-50 dark:bg-yellow-950/25 text-yellow-600 dark:text-yellow-400'
+                              : isPresent
+                                ? 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400';
                             return (
                               <tr key={logIdx} className="border-b border-slate-100 dark:border-neutral-800/40 hover:bg-slate-50/50 dark:hover:bg-neutral-800/20">
                                 <td className="p-3 font-semibold text-slate-400">{log.sl_no}</td>
-                                <td className="p-3 font-bold">{log.date}</td>
-                                <td className="p-3">
+                                <td className="p-3 font-bold text-textMain">{log.date}</td>
+                                <td className="p-3 text-textMain">
                                   <div>{log.slot}</div>
                                   <div className="text-[10px] text-slate-400 mt-0.5">{log.timing}</div>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${isPresent
-                                      ? 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400'
-                                      : 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400'
-                                    }`}>
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${badgeClass}`}>
                                     {log.status}
                                   </span>
                                 </td>

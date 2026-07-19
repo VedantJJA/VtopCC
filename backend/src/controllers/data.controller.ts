@@ -25,6 +25,10 @@ export const getSemesters = async (req: Request, res: Response) => {
     console.log('[DEBUG] Contains select#semesterSubId:', response.data.includes('semesterSubId'));
     console.log('[DEBUG] Contains vtopLoginForm:', response.data.includes('vtopLoginForm'));
 
+    if (response.data.includes('vtopLoginForm') || response.data.includes('Login') || response.data.includes('login')) {
+      return res.status(401).json({ status: 'error', message: 'Session expired or invalid.' });
+    }
+
     const cheerio = require('cheerio');
     const $ = cheerio.load(response.data);
     const semSelect = $('select#semesterSubId');
@@ -508,6 +512,10 @@ async function fetchSemestersList(client: any, authorizedId: string, csrfToken: 
         'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
       }
     });
+
+    if (response.data.includes('vtopLoginForm') || response.data.includes('Login') || response.data.includes('login')) {
+      throw new Error('Session expired or invalid.');
+    }
 
     const cheerio = require('cheerio');
     const $ = cheerio.load(response.data);

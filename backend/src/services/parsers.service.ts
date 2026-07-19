@@ -2,7 +2,6 @@ import * as cheerio from 'cheerio';
 
 export interface ProfileData {
   personal: Record<string, string>;
-  educational: Record<string, string>;
   family: {
     father: Record<string, string>;
     mother: Record<string, string>;
@@ -15,7 +14,6 @@ export function parseProfile(htmlContent: string): ProfileData {
   const $ = cheerio.load(htmlContent || '');
   const profileData: ProfileData = {
     personal: {},
-    educational: {},
     family: { father: {}, mother: {} },
     proctor: {},
     hostel: {}
@@ -55,17 +53,7 @@ export function parseProfile(htmlContent: string): ProfileData {
     }
   }
 
-  // Educational Info
-  const $collapseTwo = $('#collapseTwo');
-  if ($collapseTwo.length) {
-    profileData.educational = {
-      reg_no: getRowValue($collapseTwo, 'REGISTER NO'),
-      school: getRowValue($collapseTwo, 'SCHOOL NAME'),
-      board: getRowValue($collapseTwo, 'BOARD'),
-      medium: getRowValue($collapseTwo, 'MEDIUM'),
-      year_passing: getRowValue($collapseTwo, 'YEAR OF PASSING')
-    };
-  }
+
 
   // Family Info
   const $collapseThree = $('#collapseThree');
