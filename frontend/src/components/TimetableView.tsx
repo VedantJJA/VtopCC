@@ -96,7 +96,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
                       {TIMETABLE_SLOTS.map((slot, slotIdx) => {
                         if (slot.id === 'break') {
                           return (
-                            <td key={slot.key} className="p-2 text-center bg-bgPrimary text-textMuted font-semibold border-r border-borderColor">
+                            <td key={slot.key} className="p-2 text-center bg-neutral-100 dark:bg-neutral-800/40 text-neutral-500 dark:text-neutral-400 font-extrabold border-r border-borderColor">
                               LUNCH
                             </td>
                           );

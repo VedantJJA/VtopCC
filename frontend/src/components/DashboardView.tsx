@@ -1,5 +1,6 @@
+import React, { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Activity, CalendarDays, Loader2 } from 'lucide-react';
+import { Activity, CalendarDays, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface DashboardViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
@@ -13,6 +14,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   timetableQuery,
   odSnapshotQuery
 }) => {
+  const [selectedDayOffset, setSelectedDayOffset] = useState(0);
+
   // Calculate overall attendance and on-duty counts
   const getAttendanceSummary = () => {
     if (!attendanceQuery.data || !Array.isArray(attendanceQuery.data)) {
@@ -32,14 +35,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return { percentage, loading: false };
   };
 
-  // Compute classes scheduled for today
+  const getSelectedDayInfo = () => {
+    const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const d = new Date();
+    d.setDate(d.getDate() + selectedDayOffset);
+    const dayName = daysOfWeek[d.getDay()];
+    const dateString = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    
+    let displayTitle = dateString;
+    if (selectedDayOffset === 0) {
+      displayTitle = `Today (${dateString})`;
+    } else if (selectedDayOffset === 1) {
+      displayTitle = `Tomorrow (${dateString})`;
+    } else if (selectedDayOffset === -1) {
+      displayTitle = `Yesterday (${dateString})`;
+    }
+    
+    return { dayName, displayTitle };
+  };
+
+  const { dayName, displayTitle } = getSelectedDayInfo();
+
+  // Compute classes scheduled for selected day
   const getTodayClassesList = () => {
     if (!timetableQuery.data || !timetableQuery.data.timetable) {
       return { list: [], loading: timetableQuery.isPending };
     }
-    const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    const todayName = daysOfWeek[new Date().getDay()];
-    const todaySchedule = timetableQuery.data.timetable[todayName] || {};
+    const todaySchedule = timetableQuery.data.timetable[dayName] || {};
     
     const time_slot_keys = [
       "08:00 - 08:50", "08:55 - 09:45", "09:50 - 10:40", "10:45 - 11:35",
@@ -125,11 +147,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm md:col-span-2 flex flex-col h-fit">
           <div>
             <div className="flex justify-between items-center mb-6 border-b border-borderColor pb-3">
-              <h3 className="font-bold text-textMain text-base flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-indigo-500" /> Today's Schedule
-              </h3>
-              <span className="px-2.5 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-900/30">
-                Live
+              <div className="flex items-center space-x-3">
+                <h3 className="font-bold text-textMain text-base flex items-center gap-2">
+                  <CalendarDays className="h-5 w-5 text-indigo-500" /> Schedule
+                </h3>
+                
+                {/* Arrow switchers */}
+                <div className="flex items-center bg-bgPrimary border border-borderColor rounded-lg overflow-hidden shrink-0">
+                  <button
+                    onClick={() => setSelectedDayOffset(prev => prev - 1)}
+                    className="p-1 hover:bg-borderColor text-textMuted hover:text-textMain transition-colors cursor-pointer"
+                    title="Previous Day"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setSelectedDayOffset(0)}
+                    className="px-2 py-0.5 text-[10px] font-bold border-x border-borderColor hover:bg-borderColor text-textMuted hover:text-textMain transition-colors cursor-pointer"
+                    title="Jump to Today"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => setSelectedDayOffset(prev => prev + 1)}
+                    className="p-1 hover:bg-borderColor text-textMuted hover:text-textMain transition-colors cursor-pointer"
+                    title="Next Day"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              
+              <span className="px-2.5 py-1 text-xs font-extrabold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-900/30 tracking-wide">
+                {displayTitle}
               </span>
             </div>
 
@@ -139,7 +189,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             ) : todayClasses.list.length === 0 ? (
               <p className="text-sm text-textMuted italic py-8 text-center bg-bgPrimary/30 rounded-xl border border-dashed border-borderColor">
-                No classes scheduled for today.
+                No classes scheduled for this day.
               </p>
             ) : (
               <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">

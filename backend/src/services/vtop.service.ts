@@ -1,23 +1,24 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import { sessionService } from './session.service';
 import crypto from 'crypto';
+import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 
 const VTOP_BASE_URL = 'https://vtopcc.vit.ac.in/vtop/';
 
 // Helper to create a cookie-aware axios client per user
 function createClient(jar: CookieJar) {
-  return wrapper(axios.create({
+  return axios.create({
     baseURL: VTOP_BASE_URL,
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36'
     },
-    jar,
+    httpAgent: new HttpCookieAgent({ cookies: { jar }, keepAlive: true, keepAliveMsecs: 60000 }),
+    httpsAgent: new HttpsCookieAgent({ cookies: { jar }, keepAlive: true, keepAliveMsecs: 60000 }),
     withCredentials: true,
     maxRedirects: 5 // Default redirect following for standard login/redirection flow
-  }));
+  });
 }
 
 export async function startLogin() {
@@ -26,8 +27,8 @@ export async function startLogin() {
 
   // 1. GET open/page
   const openPageRes = await client.get('open/page');
-  let $ = cheerio.load(openPageRes.data);
-  const csrfPrelogin = $('input[name="_csrf"]').val() as string;
+  const csrfPreloginMatch = openPageRes.data.match(/name="_csrf"\s+value="([^"]+)"/) || openPageRes.data.match(/value="([^"]+)"\s+name="_csrf"/);
+  const csrfPrelogin = csrfPreloginMatch ? csrfPreloginMatch[1] : (cheerio.load(openPageRes.data)('input[name="_csrf"]').val() as string);
 
   // 2. POST prelogin/setup
   const preloginPayload = new URLSearchParams();
@@ -35,16 +36,16 @@ export async function startLogin() {
   preloginPayload.append('flag', 'VTOP');
   
   const preloginRes = await client.post('prelogin/setup', preloginPayload);
-  $ = cheerio.load(preloginRes.data);
-  const csrfLogin = $('input[name="_csrf"]').val() as string;
+  const csrfLoginMatch = preloginRes.data.match(/name="_csrf"\s+value="([^"]+)"/) || preloginRes.data.match(/value="([^"]+)"\s+name="_csrf"/);
+  const csrfLogin = csrfLoginMatch ? csrfLoginMatch[1] : (cheerio.load(preloginRes.data)('input[name="_csrf"]').val() as string);
 
   // 3. Get CAPTCHA
   const captchaRes = await client.get('get/new/captcha');
-  const captchaImg = cheerio.load(captchaRes.data)('img');
-  const captchaSrc = captchaImg.attr('src') || '';
+  const captchaSrcMatch = captchaRes.data.match(/img\s+src="([^"]+)"/);
+  const captchaSrc = captchaSrcMatch ? captchaSrcMatch[1] : (cheerio.load(captchaRes.data)('img').attr('src') || '');
 
   // Save Jar in session
-  const sessionId = crypto.randomUUID(); // Import crypto
+  const sessionId = crypto.randomUUID();
   sessionService.sessions.set(sessionId, {
     cookieJar: jar,
     csrfToken: csrfLogin,

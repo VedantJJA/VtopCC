@@ -1,43 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  QueryClient,
-  QueryClientProvider,
-  useMutation,
-  useQuery
+import { 
+  QueryClient, 
+  QueryClientProvider, 
+  useMutation, 
+  useQuery 
 } from '@tanstack/react-query';
-import api, {
-  getSemesters,
-  getProfile,
-  getCredentials,
-  getTimetable,
-  getAttendance,
-  getODSnapshot,
-  getAttendanceDetail,
-  getMarks,
-  getGrades,
-  getExams
+import api, { 
+  getSemesters, 
+  getProfile, 
+  getCredentials, 
+  getTimetable, 
+  getAttendance, 
+  getODSnapshot, 
+  getAttendanceDetail, 
+  getMarks, 
+  getGrades, 
+  getExams 
 } from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
-import {
-  Lock,
-  User as UserIcon,
-  Loader2,
-  LogOut,
-  CheckCircle2,
-  AlertTriangle,
-  Sun,
-  Moon,
-  FileText,
-  Eye,
-  EyeOff,
-  Menu,
-  LayoutDashboard,
-  GraduationCap,
-  Home,
-  PlusCircle,
-  ChevronDown
+import { 
+  Menu, Sun, Moon, Loader2, AlertTriangle
 } from 'lucide-react';
 
+import { Sidebar } from './components/Sidebar';
+import { LoginView } from './components/LoginView';
 import { DashboardView } from './components/DashboardView';
 import { ProfileView } from './components/ProfileView';
 import { TimetableView } from './components/TimetableView';
@@ -55,79 +41,77 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: false,
-      staleTime: 10 * 60 * 1000 // 10 minutes cache freshness
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutes
     }
   }
 });
 
-interface StartLoginResponse {
-  status: string;
-  session_id: string;
-  captcha_type: number; // 1 = built-in text, 2 = google invisible recaptcha
-  captcha_image_data: string;
-  has_saved_creds: boolean;
-}
-
-const MAX_RETRIES = 5;
-
 const TIMETABLE_SLOTS = [
   { id: 1, name: 'Slot 1', theoryTime: '08:00 - 08:50', labTime: '08:00 - 08:45', key: '08:00 - 08:50' },
   { id: 2, name: 'Slot 2', theoryTime: '08:55 - 09:45', labTime: '08:50 - 09:35', key: '08:55 - 09:45' },
-  { id: 3, name: 'Slot 3', theoryTime: '09:50 - 10:40', labTime: '09:40 - 10:25', key: '09:50 - 10:40' },
-  { id: 4, name: 'Slot 4', theoryTime: '10:45 - 11:35', labTime: '10:30 - 11:15', key: '10:45 - 11:35' },
-  { id: 5, name: 'Slot 5', theoryTime: '11:40 - 12:30', labTime: '11:20 - 12:05', key: '11:40 - 12:30' },
-  { id: 6, name: 'Slot 6', theoryTime: '12:35 - 13:25', labTime: '12:10 - 12:55', key: '12:35 - 13:25' },
-  { id: 'break', name: 'LUNCH', theoryTime: '13:25 - 14:00', labTime: '12:55 - 14:00', key: 'LUNCH' },
-  { id: 7, name: 'Slot 7', theoryTime: '14:00 - 14:50', labTime: '14:00 - 14:45', key: '14:00 - 14:50' },
-  { id: 8, name: 'Slot 8', theoryTime: '14:55 - 15:45', labTime: '14:50 - 15:35', key: '14:55 - 15:45' },
-  { id: 9, name: 'Slot 9', theoryTime: '15:50 - 16:40', labTime: '15:40 - 16:25', key: '15:50 - 16:40' },
-  { id: 10, name: 'Slot 10', theoryTime: '16:45 - 17:35', labTime: '16:30 - 17:15', key: '16:45 - 17:35' },
-  { id: 11, name: 'Slot 11', theoryTime: '17:40 - 18:30', labTime: '17:20 - 18:05', key: '17:40 - 18:30' },
-  { id: 12, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
+  { id: 3, name: 'Slot 3', theoryTime: '09:50 - 10:40', labTime: '09:50 - 10:35', key: '09:50 - 10:40' },
+  { id: 4, name: 'Slot 4', theoryTime: '10:45 - 11:35', labTime: '10:40 - 11:25', key: '10:45 - 11:35' },
+  { id: 5, name: 'Slot 5', theoryTime: '11:40 - 12:30', labTime: '11:40 - 12:25', key: '11:40 - 12:30' },
+  { id: 6, name: 'Slot 6', theoryTime: '12:35 - 13:25', labTime: '12:30 - 13:15', key: '12:35 - 13:25' },
+  { id: 'break', name: 'Lunch', theoryTime: '13:25 - 14:00', labTime: '13:15 - 14:00', key: 'LUNCH' },
+  { id: 8, name: 'Slot 7', theoryTime: '14:00 - 14:50', labTime: '14:00 - 14:45', key: '14:00 - 14:50' },
+  { id: 9, name: 'Slot 8', theoryTime: '14:55 - 15:45', labTime: '14:50 - 15:35', key: '14:55 - 15:45' },
+  { id: 10, name: 'Slot 9', theoryTime: '15:50 - 16:40', labTime: '15:50 - 16:35', key: '15:50 - 16:40' },
+  { id: 11, name: 'Slot 10', theoryTime: '16:45 - 17:35', labTime: '16:40 - 17:25', key: '16:45 - 17:35' },
+  { id: 12, name: 'Slot 11', theoryTime: '17:40 - 18:30', labTime: '17:40 - 18:25', key: '17:40 - 18:30' },
+  { id: 13, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
 type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses' | 'faculty';
+type StartLoginResponse = {
+  status: 'captcha_ready';
+  session_id: string;
+  captcha_type?: number;
+  captcha_image_data?: string;
+  has_saved_creds: boolean;
+};
+
+const MAX_RETRIES = 5;
 
 function VtopLoginDashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('theme');
-    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    return (localStorage.getItem('theme') as any) || 'dark';
   });
+
+  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
+  const [activeSemester, setActiveSemester] = useState<string>('');
+  
+  // Auth state
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return !!localStorage.getItem('vtop_session_id');
+  });
+  const [activeUser, setActiveUser] = useState(() => {
+    return localStorage.getItem('vtop_username') || '';
+  });
+  const [isRestoringSession, setIsRestoringSession] = useState(false);
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [captcha, setCaptcha] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Auth states
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [captchaType, setCaptchaType] = useState<number>(1);
-  const [_captchaImg, setCaptchaImg] = useState<string>('');
-  const [hasSavedCreds, setHasSavedCreds] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: 'info' | 'success' | 'error' } | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [activeUser, setActiveUser] = useState('');
-  const [showManualForm, setShowManualForm] = useState(true);
-  const [isCaptchaSolving, setIsCaptchaSolving] = useState(false);
-  const [showCaptchaUI, setShowCaptchaUI] = useState(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-
-  // Dashboard state
-  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
-  const [expandedNav, setExpandedNav] = useState<Record<string, boolean>>({
-    'academics': true,
-    'my-info': true
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    return localStorage.getItem('vtop_session_id');
   });
-  const [activeSemester, setActiveSemester] = useState<string>('');
-
-  // Attendance detail state (for modal)
+  
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [showCaptchaUI, setShowCaptchaUI] = useState(false);
+  const [captchaImg, setCaptchaImg] = useState<string | null>(null);
+  const [captchaType, setCaptchaType] = useState<number>(1);
+  const [isCaptchaSolving, setIsCaptchaSolving] = useState(false);
+  const [hasSavedCreds, setHasSavedCreds] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<any | null>(null);
 
-  // Keep track of retry count across renders
+  const recaptchaRef = useRef<HTMLDivElement>(null);
   const autoLoginRetryCount = useRef(0);
   const manualLoginRetryCount = useRef(0);
   const initRef = useRef(false);
-  const isRestoringRef = useRef(false);
 
   // Toggle theme
   useEffect(() => {
@@ -147,28 +131,34 @@ function VtopLoginDashboard() {
       console.log("[ReCAPTCHA] Solved, token received:", token);
       handleRecaptchaCallback(token);
     };
-
     return () => {
       delete (window as any).onRecaptchaSolved;
     };
   }, [sessionId, username, password, showManualForm, hasSavedCreds]);
 
-  // Check if session already exists on mount
+  // Check session on mount
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
     const localSessionId = localStorage.getItem('vtop_session_id');
     const localUsername = localStorage.getItem('vtop_username');
+    const explicitLogout = localStorage.getItem('vtop_explicit_logout') === 'true';
+
+    if (explicitLogout) {
+      setIsLoggedIn(false);
+      startLoginFlow(false);
+      return;
+    }
+
     if (localSessionId) {
-      // Optimistically log in instantly to show cached data
       setSessionId(localSessionId);
       setIsLoggedIn(true);
       if (localUsername) {
         setActiveUser(localUsername);
       }
       
-      // Verify in background
+      // Verify session integrity
       api.post('/auth/check-session', { session_id: localSessionId })
         .then((res) => {
           if (res.data.status === 'success') {
@@ -177,51 +167,75 @@ function VtopLoginDashboard() {
               localStorage.setItem('vtop_username', res.data.username);
             }
           } else {
-            // Explicit auth failure, clear active session
-            localStorage.removeItem('vtop_session_id');
-            localStorage.removeItem('vtop_username');
-            setIsLoggedIn(false);
-            setSessionId(null);
-            startLoginFlow(true);
+            console.log("Session verification failed, attempting silent background autologin...");
+            setIsRestoringSession(true);
+            triggerSilentAutoLoginAttempt();
           }
         })
         .catch((err) => {
-          // If we got an explicit 401/403 auth error, discard session.
-          // Otherwise (e.g. network offline), KEEP active session using cached data!
           if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-            localStorage.removeItem('vtop_session_id');
-            localStorage.removeItem('vtop_username');
-            setIsLoggedIn(false);
-            setSessionId(null);
-            startLoginFlow(true);
+            console.log("Session expired on server (401), restoring silently...");
+            setIsRestoringSession(true);
+            triggerSilentAutoLoginAttempt();
           }
         });
     } else {
+      setIsRestoringSession(true);
       startLoginFlow(true);
     }
   }, []);
 
-  // Load dev credentials on mount
+  // Axios interceptor for live 401 recovery
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+        if (
+          error.response &&
+          (error.response.status === 401 || error.response.status === 403) &&
+          !originalRequest._retry &&
+          isLoggedIn &&
+          !isRestoringSession
+        ) {
+          originalRequest._retry = true;
+          console.log("[Interceptor] VTOP session dropped. Recovering session in background...");
+          setIsRestoringSession(true);
+          try {
+            await triggerSilentAutoLoginAttempt();
+            return api(originalRequest);
+          } catch (retryErr) {
+            return Promise.reject(retryErr);
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      api.interceptors.response.eject(interceptor);
+    };
+  }, [isLoggedIn, isRestoringSession]);
+
+  // Load dev credentials
   useEffect(() => {
     api.post('/auth/dev-creds')
       .then(res => {
         if (res.data.status === 'success') {
           setUsername(res.data.username || '');
           setPassword(res.data.password || '');
-          console.log('[Dev] Credentials auto-loaded from .idpass successfully.');
+          console.log('[Dev] Local credentials loaded.');
         }
       })
       .catch(err => {
-        console.warn('[Dev] Failed to load local .idpass credentials:', err);
+        console.warn('[Dev] Local credentials load bypassed:', err);
       });
   }, []);
 
   // Fetch CSRF & CAPTCHA
   const startLoginFlow = async (autoTriggerAfterInit = false) => {
-    console.log("[VTOP] Initializing session, showCaptchaUI:", showCaptchaUI);
-    // Only show loading message if we aren't silently retrying in background
     if (showCaptchaUI || manualLoginRetryCount.current === 0) {
-      setMessage({ text: 'Initializing secure connection to VTOP...', type: 'info' });
+      setMessage({ text: 'Initializing secure VTOP portal handshake...', type: 'info' });
     }
     try {
       const res = await api.post<StartLoginResponse>('/auth/start-login');
@@ -242,39 +256,42 @@ function VtopLoginDashboard() {
           setMessage(null);
         }
 
-        console.log(`[VTOP] Session initialized. Captcha type: ${currentCaptchaType === 2 ? 'Google ReCAPTCHA' : 'Text CAPTCHA'}`);
-
         if (currentCaptchaType === 1) {
           setIsCaptchaSolving(true);
           try {
-            console.log("Running built-in CAPTCHA solver in background...");
             const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
             setCaptcha(solvedText);
-            console.log("CAPTCHA solved successfully:", solvedText);
-
             if (autoTriggerAfterInit && credsAvailable) {
-              console.log("[AUTO-RESTORE] Restoring VTOP session automatically...");
               autoLoginMutation.mutate({
                 captchaText: solvedText,
                 currentSessionId: currentSessionId
               });
             }
           } catch (solveError: any) {
-            console.error("CAPTCHA solve failed:", solveError);
+            console.error("CAPTCHA solve error:", solveError);
             setCaptcha('');
             if (autoTriggerAfterInit && credsAvailable) {
               triggerSilentAutoLoginAttempt();
+            } else {
+              setIsRestoringSession(false);
             }
           } finally {
             setIsCaptchaSolving(false);
+          }
+        } else {
+          // If captcha is not type 1 (or recaptcha) and we have no saved creds, stop loader
+          if (!credsAvailable) {
+            setIsRestoringSession(false);
+            setIsLoggedIn(false);
           }
         }
       }
     } catch (err: any) {
       setMessage({
-        text: err.response?.data?.message || 'Failed to connect to VTOP server.',
+        text: err.response?.data?.message || 'Failed to initialize connection.',
         type: 'error'
       });
+      setIsRestoringSession(false);
     }
   };
 
@@ -285,24 +302,22 @@ function VtopLoginDashboard() {
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready') {
         setSessionId(res.data.session_id);
-        setCaptchaImg(res.data.captcha_image_data);
+        setCaptchaImg(res.data.captcha_image_data || null);
 
         try {
           const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
           setCaptcha(solvedText);
-
           loginMutation.mutate({
             captchaText: solvedText,
             currentSessionId: res.data.session_id
           });
         } catch (solveErr) {
-          console.error("Silent solve failed, checking retries...");
           if (manualLoginRetryCount.current < MAX_RETRIES) {
             manualLoginRetryCount.current++;
             triggerSilentLoginAttempt();
           } else {
             setShowCaptchaUI(true);
-            setMessage({ text: 'Automated CAPTCHA verification failed. Please enter the code manually.', type: 'error' });
+            setMessage({ text: 'CAPTCHA auto-verification failed. Please solve manually.', type: 'error' });
             setIsCaptchaSolving(false);
           }
         }
@@ -320,36 +335,35 @@ function VtopLoginDashboard() {
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready') {
         setSessionId(res.data.session_id);
-        setCaptchaImg(res.data.captcha_image_data);
+        setCaptchaImg(res.data.captcha_image_data || null);
 
         try {
           const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
           setCaptcha(solvedText);
-
           autoLoginMutation.mutate({
             captchaText: solvedText,
             currentSessionId: res.data.session_id
           });
         } catch (solveErr) {
-          console.error("Silent auto-solve failed, checking retries...");
           if (autoLoginRetryCount.current < MAX_RETRIES) {
             autoLoginRetryCount.current++;
             triggerSilentAutoLoginAttempt();
           } else {
+            setIsRestoringSession(false);
+            setIsLoggedIn(false);
             setShowManualForm(true);
             setShowCaptchaUI(true);
-            setMessage({ text: 'Automated CAPTCHA verification failed. Please enter the code manually.', type: 'error' });
+            setMessage({ text: 'Background CAPTCHA solving failed. Sign in manually.', type: 'error' });
             setIsCaptchaSolving(false);
           }
         }
       }
     } catch (err) {
       console.error("Silent auto start-login failed:", err);
-      setIsCaptchaSolving(false);
+      setIsRestoringSession(false);
     }
   };
 
-  // Helper to trigger Google ReCAPTCHA verification
   const triggerGoogleReCAPTCHA = () => {
     if ((window as any).grecaptcha) {
       try {
@@ -374,7 +388,6 @@ function VtopLoginDashboard() {
     }
   };
 
-  // Callback triggered when invisible recaptcha solves successfully
   const handleRecaptchaCallback = (token: string) => {
     if (!sessionId) return;
     if (hasSavedCreds && !showManualForm) {
@@ -395,7 +408,7 @@ function VtopLoginDashboard() {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async ({ captchaText, gResponse, currentSessionId }: { captchaText: string; gResponse?: string; currentSessionId: string }) => {
-      setMessage({ text: 'Logging into VTOP...', type: 'info' });
+      setMessage({ text: 'Authenticating with VTOP...', type: 'info' });
       const res = await api.post('/auth/login-attempt', {
         username,
         password,
@@ -407,6 +420,7 @@ function VtopLoginDashboard() {
     },
     onSuccess: (data, variables) => {
       if (data.status === 'success') {
+        localStorage.removeItem('vtop_explicit_logout');
         setIsLoggedIn(true);
         setActiveUser(username);
         manualLoginRetryCount.current = 0;
@@ -421,16 +435,13 @@ function VtopLoginDashboard() {
         safeResetRecaptcha();
         if (!showCaptchaUI && manualLoginRetryCount.current < MAX_RETRIES) {
           manualLoginRetryCount.current++;
-          console.log(`Manual login CAPTCHA failed. Retrying silently (${manualLoginRetryCount.current}/${MAX_RETRIES})...`);
           triggerSilentLoginAttempt();
         } else {
-          // Exceeded silent retries, or already in manual mode
           setShowCaptchaUI(true);
-          setMessage({ text: 'Automated CAPTCHA verification failed. Please enter the code manually.', type: 'error' });
+          setMessage({ text: 'Verification failed. Solve the CAPTCHA manually.', type: 'error' });
           startLoginFlow();
         }
       } else {
-        // e.g. invalid_credentials (wrong username or password)
         setShowCaptchaUI(true);
         setMessage({ text: data.message || 'Login failed.', type: 'error' });
         safeResetRecaptcha();
@@ -439,7 +450,7 @@ function VtopLoginDashboard() {
     },
     onError: (err: any) => {
       setMessage({
-        text: err.response?.data?.message || 'An error occurred during login.',
+        text: err.response?.data?.message || 'Connection failure.',
         type: 'error'
       });
       safeResetRecaptcha();
@@ -450,7 +461,7 @@ function VtopLoginDashboard() {
   // Auto Login mutation
   const autoLoginMutation = useMutation({
     mutationFn: async ({ captchaText, gResponse, currentSessionId }: { captchaText: string; gResponse?: string; currentSessionId: string }) => {
-      setMessage({ text: 'Logging in with saved credentials...', type: 'info' });
+      setMessage({ text: 'Performing background autologin...', type: 'info' });
       const res = await api.post('/auth/auto-login', {
         captcha: captchaText,
         gResponse,
@@ -460,7 +471,9 @@ function VtopLoginDashboard() {
     },
     onSuccess: (data, variables) => {
       if (data.status === 'success') {
+        localStorage.removeItem('vtop_explicit_logout');
         setIsLoggedIn(true);
+        setIsRestoringSession(false);
         autoLoginRetryCount.current = 0;
         setMessage({ text: data.message, type: 'success' });
         if (variables.currentSessionId) {
@@ -475,35 +488,39 @@ function VtopLoginDashboard() {
             });
         }
         setTimeout(() => setMessage(null), 3000);
+        
+        // Refresh queries on dynamic session restore success!
+        queryClient.refetchQueries();
       } else if (data.status === 'invalid_captcha') {
         safeResetRecaptcha();
         if (autoLoginRetryCount.current < MAX_RETRIES) {
           autoLoginRetryCount.current++;
-          console.log(`Auto-login CAPTCHA failed. Retrying silently (${autoLoginRetryCount.current}/${MAX_RETRIES})...`);
           triggerSilentAutoLoginAttempt();
         } else {
-          logoutMutation.mutate();
+          setIsRestoringSession(false);
+          setIsLoggedIn(false);
           setShowManualForm(true);
           setShowCaptchaUI(true);
-          setMessage({ text: 'Auto-login CAPTCHA failed. Please sign in manually.', type: 'error' });
+          setMessage({ text: 'Auto-login CAPTCHA solver failed. Sign in manually.', type: 'error' });
         }
       } else {
-        // e.g. invalid_credentials (wrong credentials saved)
-        logoutMutation.mutate();
+        setIsRestoringSession(false);
+        setIsLoggedIn(false);
         setShowManualForm(true);
         setShowCaptchaUI(true);
-        setMessage({ text: data.message || 'Auto-login failed. Please sign in again.', type: 'error' });
+        setMessage({ text: data.message || 'Auto-login expired.', type: 'error' });
         safeResetRecaptcha();
       }
     },
     onError: (err: any) => {
-      logoutMutation.mutate();
+      setIsRestoringSession(false);
+      setIsLoggedIn(false);
+      setShowManualForm(true);
       setMessage({
-        text: err.response?.data?.message || 'An error occurred during auto-login.',
+        text: err.response?.data?.message || 'Auto-login network error.',
         type: 'error'
       });
       safeResetRecaptcha();
-      setShowManualForm(true);
     }
   });
 
@@ -514,7 +531,9 @@ function VtopLoginDashboard() {
     },
     onSuccess: () => {
       setIsLoggedIn(false);
+      setIsRestoringSession(false);
       setActiveUser('');
+      localStorage.setItem('vtop_explicit_logout', 'true');
       localStorage.removeItem('vtop_session_id');
       localStorage.removeItem('vtop_username');
 
@@ -531,9 +550,35 @@ function VtopLoginDashboard() {
       manualLoginRetryCount.current = 0;
       setShowCaptchaUI(false);
       setShowManualForm(true);
-      startLoginFlow();
+      startLoginFlow(false);
     }
   });
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (captchaType === 2) {
+      triggerGoogleReCAPTCHA();
+    } else {
+      if (!captcha) return;
+      loginMutation.mutate({
+        captchaText: captcha,
+        currentSessionId: sessionId || ''
+      });
+    }
+  };
+
+  const handleAutoLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (captchaType === 2) {
+      triggerGoogleReCAPTCHA();
+    } else {
+      if (isCaptchaSolving) return;
+      autoLoginMutation.mutate({
+        captchaText: captcha,
+        currentSessionId: sessionId || ''
+      });
+    }
+  };
 
   // Data Queries (Student Information)
   const semestersQuery = useQuery({
@@ -551,7 +596,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId
+    enabled: isLoggedIn && !!sessionId && !isRestoringSession
   });
 
   // Set default active semester when semesters list loads
@@ -583,11 +628,11 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && (activeTab === 'profile' || activeTab === 'my-room')
+    enabled: isLoggedIn && !isRestoringSession
   });
 
   const timetableQuery = useQuery({
-    queryKey: ['timetable', activeUser, activeSemester],
+    queryKey: ['timetable', sessionId, activeSemester],
     queryFn: async () => {
       const res = await getTimetable(activeSemester);
       const data = res.data.raw_data;
@@ -597,50 +642,29 @@ function VtopLoginDashboard() {
       return data;
     },
     initialData: () => {
-      if (!activeSemester) return undefined;
       const cached = localStorage.getItem(`vtop_cache_timetable_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && (activeTab === 'timetable' || activeTab === 'dashboard')
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const attendanceQuery = useQuery({
-    queryKey: ['attendance', activeUser, activeSemester],
+    queryKey: ['attendance', sessionId, activeSemester],
     queryFn: async () => {
       const res = await getAttendance(activeSemester);
-      const data = res.data.raw_data as any[];
-      if (data) {
+      const data = res.data.raw_data || [];
+      if (data.length > 0) {
         localStorage.setItem(`vtop_cache_attendance_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeSemester) return undefined;
       const cached = localStorage.getItem(`vtop_cache_attendance_${activeSemester}`);
-      return cached ? JSON.parse(cached) : undefined;
+      return cached ? JSON.parse(cached) : [];
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && (activeTab === 'attendance' || activeTab === 'dashboard' || activeTab === 'calculator')
-  });
-
-  const odSnapshotQuery = useQuery({
-    queryKey: ['od-snapshot', activeUser, activeSemester],
-    queryFn: async () => {
-      const res = await getODSnapshot(activeSemester);
-      const data = res.data;
-      if (data) {
-        localStorage.setItem(`vtop_cache_od_${activeSemester}`, JSON.stringify(data));
-      }
-      return data;
-    },
-    initialData: () => {
-      if (!activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtop_cache_od_${activeSemester}`);
-      return cached ? JSON.parse(cached) : undefined;
-    },
-    initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && activeTab === 'dashboard'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const attendanceDetailQuery = useQuery({
@@ -649,11 +673,11 @@ function VtopLoginDashboard() {
       const res = await getAttendanceDetail(activeSemester, selectedAttendanceCourse.class_id, selectedAttendanceCourse.slot_param);
       return res.data.raw_data as any[];
     },
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!selectedAttendanceCourse
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!selectedAttendanceCourse && !isRestoringSession
   });
 
   const marksQuery = useQuery({
-    queryKey: ['marks', activeUser, activeSemester],
+    queryKey: ['marks', sessionId, activeSemester],
     queryFn: async () => {
       const res = await getMarks(activeSemester);
       const data = res.data.raw_data;
@@ -663,16 +687,15 @@ function VtopLoginDashboard() {
       return data;
     },
     initialData: () => {
-      if (!activeSemester) return undefined;
       const cached = localStorage.getItem(`vtop_cache_marks_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const gradesQuery = useQuery({
-    queryKey: ['grades', activeUser, activeSemester],
+    queryKey: ['grades', sessionId, activeSemester],
     queryFn: async () => {
       const res = await getGrades(activeSemester);
       const data = res.data.raw_data;
@@ -682,38 +705,30 @@ function VtopLoginDashboard() {
       return data;
     },
     initialData: () => {
-      if (!activeSemester) return undefined;
       const cached = localStorage.getItem(`vtop_cache_grades_${activeSemester}`);
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const examsQuery = useQuery({
-    queryKey: ['exams', activeUser, activeSemester],
+    queryKey: ['exams', sessionId, activeSemester],
     queryFn: async () => {
       const res = await getExams(activeSemester);
-      const data = res.data.raw_data as any[];
-      if (data) {
+      const data = res.data.raw_data || [];
+      if (data.length > 0) {
         localStorage.setItem(`vtop_cache_exams_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeSemester) return undefined;
       const cached = localStorage.getItem(`vtop_cache_exams_${activeSemester}`);
-      return cached ? JSON.parse(cached) : undefined;
+      return cached ? JSON.parse(cached) : [];
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE'
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
-
-  const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
-  const isGradesLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !gradesQuery.isPending && (!gradesQuery.data || !gradesQuery.data.grades || gradesQuery.data.grades.length === 0));
-  const isExamsLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !examsQuery.isPending && (!examsQuery.data || examsQuery.data.length === 0));
-
-  // Calendar state and query moved locally to CalendarView.tsx
 
   const credentialsQuery = useQuery({
     queryKey: ['credentials', activeUser],
@@ -730,328 +745,69 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && activeTab === 'credentials'
+    enabled: isLoggedIn && !isRestoringSession
   });
 
-  useEffect(() => {
-    const isAnyError = semestersQuery.isError || profileQuery.isError || timetableQuery.isError || attendanceQuery.isError || marksQuery.isError || gradesQuery.isError || examsQuery.isError;
-    
-    if (isAnyError) {
-      if (isRestoringRef.current) return; // If already restoring, ignore subsequent query failures
-      
-      console.warn("Session expired. Locking queries and attempting auto-restoration...");
-      isRestoringRef.current = true;
-      
-      localStorage.removeItem('vtop_session_id');
-      localStorage.removeItem('vtop_username');
-      setSessionId(null);
+  const odSnapshotQuery = useQuery({
+    queryKey: ['od-snapshot', sessionId, activeSemester],
+    queryFn: async () => {
+      const res = await getODSnapshot(activeSemester);
+      const count = res.data.total_od_count;
+      localStorage.setItem(`vtop_cache_od_snapshot_${activeSemester}`, JSON.stringify(count));
+      return { total_od_count: count };
+    },
+    initialData: () => {
+      const cached = localStorage.getItem(`vtop_cache_od_snapshot_${activeSemester}`);
+      return cached ? { total_od_count: JSON.parse(cached) } : undefined;
+    },
+    initialDataUpdatedAt: 0,
+    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+  });
 
-      if (hasSavedCreds) {
-        setMessage({ text: 'Session expired. Restoring VTOP session silently...', type: 'info' });
-        // The silent login function must set isRestoringRef.current = false in its finally block!
-        startLoginFlow(true).finally(() => {
-            setTimeout(() => { isRestoringRef.current = false; }, 2000); // Unlock after a delay
-        });
-      } else {
-        setIsLoggedIn(false);
-        setActiveUser('');
-        setMessage({ text: 'Session expired. Please log in again.', type: 'error' });
-        setShowManualForm(true);
-        startLoginFlow().finally(() => { isRestoringRef.current = false; });
-      }
-    }
-  }, [semestersQuery.isError, profileQuery.isError, timetableQuery.isError, attendanceQuery.isError, marksQuery.isError, gradesQuery.isError, examsQuery.isError]);
+  const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
+  const isGradesLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !gradesQuery.isPending && (!gradesQuery.data || !gradesQuery.data.grades || gradesQuery.data.grades.length === 0));
+  const isExamsLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !examsQuery.isPending && (!examsQuery.data || examsQuery.data.length === 0));
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username || !password) {
-      setMessage({ text: 'All fields are required.', type: 'error' });
-      return;
-    }
-
-    if (showCaptchaUI) {
-      // Manual mode submission
-      if (!captcha) {
-        setMessage({ text: 'Please enter the CAPTCHA code.', type: 'error' });
-        return;
-      }
-      if (sessionId) {
-        loginMutation.mutate({
-          captchaText: captcha,
-          currentSessionId: sessionId
-        });
-      }
-    } else {
-      // Start silent login workflow
-      manualLoginRetryCount.current = 1;
-      setMessage({ text: 'Preparing secure VTOP session...', type: 'info' });
-
-      // Auto-solve the current CAPTCHA
-      if (captcha) {
-        // If already solved (or pre-filled), submit it
-        if (sessionId) {
-          loginMutation.mutate({
-            captchaText: captcha,
-            currentSessionId: sessionId
-          });
-        }
-      } else {
-        // Solve and submit
-        try {
-          setIsCaptchaSolving(true);
-          const solvedText = await solveCaptchaClient(_captchaImg);
-          setCaptcha(solvedText);
-          if (sessionId) {
-            loginMutation.mutate({
-              captchaText: solvedText,
-              currentSessionId: sessionId
-            });
-          }
-        } catch (err) {
-          console.error("Initial solver failed. Retrying silently...", err);
-          triggerSilentLoginAttempt();
-        } finally {
-          setIsCaptchaSolving(false);
-        }
-      }
-    }
-  };
-
-  const handleAutoLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (showCaptchaUI) {
-      if (!captcha) {
-        setMessage({ text: 'Please enter the CAPTCHA code.', type: 'error' });
-        return;
-      }
-      if (sessionId) {
-        autoLoginMutation.mutate({
-          captchaText: captcha,
-          currentSessionId: sessionId
-        });
-      }
-    } else {
-      autoLoginRetryCount.current = 1;
-      setMessage({ text: 'Preparing secure VTOP session...', type: 'info' });
-
-      if (captcha) {
-        if (sessionId) {
-          autoLoginMutation.mutate({
-            captchaText: captcha,
-            currentSessionId: sessionId
-          });
-        }
-      } else {
-        try {
-          setIsCaptchaSolving(true);
-          const solvedText = await solveCaptchaClient(_captchaImg);
-          setCaptcha(solvedText);
-          if (sessionId) {
-            autoLoginMutation.mutate({
-              captchaText: solvedText,
-              currentSessionId: sessionId
-            });
-          }
-        } catch (err) {
-          console.error("Initial auto-solver failed. Retrying silently...", err);
-          triggerSilentAutoLoginAttempt();
-        } finally {
-          setIsCaptchaSolving(false);
-        }
-      }
-    }
-  };
-
-  const isPending = loginMutation.isPending || autoLoginMutation.isPending;
+  const isFormPending = loginMutation.isPending || autoLoginMutation.isPending;
 
   return (
-    <div className={`${isLoggedIn ? 'h-screen overflow-hidden' : 'min-h-screen'} bg-bgPrimary text-textMain flex flex-col font-sans transition-colors duration-300`}>
-      <GlobalScrollbarStyles />
-
-      {/* Global Google ReCAPTCHA element */}
-      <div
-        id="recaptcha"
-        className="g-recaptcha"
-        data-sitekey="6Ld1VmQaAAAAAGQCz6k_jbG4l1s-ncpVHzS_F5iy"
-        data-size="invisible"
-        data-callback="onRecaptchaSolved"
-      />
-
-      {!isLoggedIn ? (
-        /* ================= AUTHENTICATION CONTAINER ================= */
-        <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
-
-          {/* Theme Toggle */}
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="absolute top-6 right-6 p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
-            title={`Switch theme (Current: ${theme})`}
-          >
-            {theme === 'dark' ? <Sun className="h-5 w-5 text-blue-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
-          </button>
-
-          <div className="w-full max-w-md">
-            {/* Title */}
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">
-                VtopC
-              </h1>
-              <p className="text-textMuted mt-2 text-sm">
-                Decoupled VTOP Chennai Portal Dashboard
-              </p>
-            </div>
-
-            {/* Error/Info Banner */}
-            {message && (
-              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border text-sm shadow-sm transition-all duration-300 ${message.type === 'success'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-300'
-                  : message.type === 'error'
-                    ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300'
-                    : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300'
-                }`}>
-                {message.type === 'success' && <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />}
-                {message.type === 'error' && <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />}
-                {message.type === 'info' && <Loader2 className="h-5 w-5 shrink-0 mt-0.5 animate-spin text-blue-600 dark:text-blue-400" />}
-                <span>{message.text}</span>
-              </div>
-            )}
-
-            {/* Form Box */}
-            <div className="bg-bgCard border border-borderColor rounded-3xl p-8 shadow-md">
-
-              <h2 className="text-2xl font-bold mb-6 text-textMain">
-                {hasSavedCreds && !showManualForm ? 'Auto-Login Available' : 'Student Credentials'}
-              </h2>
-
-              {hasSavedCreds && !showManualForm ? (
-                /* Auto login flow (CAPTCHA details are completely hidden) */
-                <form onSubmit={handleAutoLoginSubmit} className="space-y-6">
-                  <p className="text-sm text-textMuted leading-relaxed">
-                    VTOP is initializing securely. The built-in solver is decoding the captcha silently. Click below to enter your workspace.
-                  </p>
-
-                  <div className="flex flex-col gap-2">
-                    <button
-                      type="submit"
-                      disabled={isPending || isCaptchaSolving}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-700/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                    >
-                      {isPending || isCaptchaSolving ? (
-                        <>
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          {isCaptchaSolving ? 'Preparing CAPTCHA...' : 'Logging in...'}
-                        </>
-                      ) : (
-                        'Unlock & Enter Dashboard'
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowManualForm(true)}
-                      className="w-full py-3 text-sm text-textMuted hover:text-textMain transition-colors cursor-pointer"
-                    >
-                      Sign In with Another Account
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                /* Standard manual login flow (CAPTCHA is completely hidden!) */
-                <form onSubmit={handleLoginSubmit} className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-semibold mb-1.5 text-textMain">Registration Number</label>
-                    <div className="relative">
-                      <UserIcon className="absolute left-4 top-3.5 h-5 w-5 text-textMuted" />
-                      <input
-                        type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        placeholder="e.g. 21BCE5001"
-                        disabled={isPending}
-                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all text-textMain"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold mb-1.5 text-textMain">Password</label>
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-3.5 h-5 w-5 text-textMuted" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••"
-                        disabled={isPending}
-                        className="w-full pl-12 pr-12 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all text-textMain"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(prev => !prev)}
-                        className="absolute right-4 top-3.5 text-textMuted hover:text-textMain cursor-pointer outline-none"
-                        title={showPassword ? 'Hide Password' : 'Show Password'}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-5 w-5" />
-                        ) : (
-                          <Eye className="h-5 w-5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {showCaptchaUI && captchaType === 1 && (
-                    <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-textMain">CAPTCHA Verification</label>
-                      <div className="flex flex-col gap-3">
-                        <div className="flex justify-center bg-bgPrimary p-3 rounded-2xl border border-borderColor">
-                          {_captchaImg ? (
-                            <img
-                              src={_captchaImg}
-                              alt="CAPTCHA"
-                              className="h-12 object-contain"
-                            />
-                          ) : (
-                            <div className="h-12 w-32 animate-pulse bg-bgPrimary rounded-xl" />
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          value={captcha}
-                          onChange={(e) => setCaptcha(e.target.value)}
-                          placeholder="Enter CAPTCHA code"
-                          disabled={isPending}
-                          className="w-full px-4 py-3 rounded-xl border border-borderColor bg-transparent focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all uppercase text-center font-bold tracking-widest text-lg text-textMain"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-col gap-2 pt-2">
-                    <button
-                      type="submit"
-                      disabled={isPending || isCaptchaSolving || !username || !password}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-700/50 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                    >
-                      {isPending || isCaptchaSolving ? (
-                        <>
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          {isCaptchaSolving ? 'Preparing VTOP Session...' : 'Logging in...'}
-                        </>
-                      ) : (
-                        'Sign In to VTOP'
-                      )}
-                    </button>
-                  </div>
-                </form>
-              )}
-
-            </div>
+    <div className="flex h-screen w-screen overflow-hidden bg-bgPrimary select-none">
+      {/* Background restore loader */}
+      {isRestoringSession && (
+        <div className="fixed top-4 right-4 bg-bgCard border border-borderColor rounded-2xl shadow-xl px-4 py-3 z-50 flex items-center gap-3 animate-in slide-in-from-top duration-300">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+          <div className="text-xs">
+            <p className="font-bold text-textMain">Restoring VTOP Session</p>
+            <p className="text-[10px] text-textMuted mt-0.5">Please wait, logging in silently...</p>
           </div>
         </div>
+      )}
+
+      {!isLoggedIn && !isRestoringSession ? (
+        <LoginView
+          theme={theme}
+          setTheme={setTheme}
+          message={message}
+          hasSavedCreds={hasSavedCreds}
+          showManualForm={showManualForm}
+          setShowManualForm={setShowManualForm}
+          username={username}
+          setUsername={setUsername}
+          password={password}
+          setPassword={setPassword}
+          captcha={captcha}
+          setCaptcha={setCaptcha}
+          showCaptchaUI={showCaptchaUI}
+          captchaType={captchaType}
+          captchaImg={captchaImg}
+          isPending={isFormPending}
+          isCaptchaSolving={isCaptchaSolving}
+          handleAutoLoginSubmit={handleAutoLoginSubmit}
+          handleLoginSubmit={handleLoginSubmit}
+          recaptchaRef={recaptchaRef}
+        />
       ) : (
-        /* ================= STUDENT DASHBOARD INTERFACE ================= */
-        <div className={`flex-1 flex h-screen overflow-hidden relative transition-colors duration-300 bg-bgPrimary text-textMain`}>
-          
+        <div className="flex-1 flex h-screen overflow-hidden relative bg-bgPrimary text-textMain">
           {/* Mobile Overlay Backdrop */}
           {isMobileSidebarOpen && (
             <div
@@ -1061,169 +817,24 @@ function VtopLoginDashboard() {
           )}
 
           {/* SIDEBAR NAVIGATION */}
-          <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-bgSidebar border-r border-borderColor flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-            {/* Logo area */}
-            <div className="p-5 pb-4 shrink-0">
-              <div className="text-xl font-bold text-textMain flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-accentColor flex items-center justify-center text-white font-black">V</div>
-                VTOP Client
-              </div>
-            </div>
-
-            {/* Student Info Card */}
-            <div className="px-4 pb-4 shrink-0">
-              <button 
-                onClick={() => setActiveTab('profile')}
-                className="w-full flex items-center gap-3 p-3 rounded-xl bg-bgPrimary border border-borderColor hover:bg-bgPrimary/60 transition-colors text-left focus:outline-none cursor-pointer"
-              >
-                <div className="h-10 w-10 rounded-full bg-bgCard border border-borderColor flex items-center justify-center text-accentColor font-bold shrink-0 overflow-hidden">
-                  {profileQuery.data?.personal?.photo_url ? (
-                    <img src={profileQuery.data.personal.photo_url} alt="Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    activeUser ? activeUser.substring(0, 1).toUpperCase() : 'S'
-                  )}
-                </div>
-                <div className="overflow-hidden flex-1">
-                  <p className="text-sm font-semibold text-textMain truncate">{profileQuery.data?.personal?.name || activeUser || 'Active Session'}</p>
-                  {profileQuery.data?.personal?.name && (
-                    <p className="text-[11px] text-textMuted font-medium truncate font-mono">{activeUser}</p>
-                  )}
-                </div>
-              </button>
-            </div>
-
-            {/* Collapsible Nav Links */}
-            <nav className="flex-1 overflow-y-auto px-3 space-y-1 pb-4 custom-scrollbar">
-              {[
-                { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-                {
-                  id: 'academics', label: 'Academics', icon: GraduationCap,
-                  children: [
-                    { id: 'timetable', label: 'Time Table' },
-                    { id: 'attendance', label: 'Attendance' },
-                    { id: 'calendar', label: 'Calendar' },
-                    { id: 'faculty', label: 'Faculty Search' }
-                  ]
-                },
-                {
-                  id: 'examinations', label: 'Examinations', icon: FileText,
-                  children: [
-                    { id: 'marks', label: 'Marks' },
-                    { id: 'grades', label: 'Grades' },
-                    { id: 'exams', label: 'Exam Schedule' }
-                  ]
-                },
-                {
-                  id: 'hostel', label: 'Hostel', icon: Home,
-                  children: [
-                    { id: 'my-room', label: 'My Room' }
-                  ]
-                },
-                {
-                  id: 'extra', label: 'Extra Options', icon: PlusCircle, divider: true,
-                  children: [
-                    { id: 'calculator', label: 'Attendance Calculator' }
-                  ]
-                }
-              ].map((item) => (
-                <div key={item.id} className={item.divider ? "pt-3 mt-3 border-t border-borderColor" : ""}>
-                  {item.children ? (
-                    <div className="space-y-0.5 animate-in fade-in duration-200">
-                      <button 
-                        onClick={() => setExpandedNav(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                        className="w-full flex justify-between items-center px-3 py-2 rounded-lg text-textMuted hover:bg-bgPrimary/40 hover:text-textMain transition-colors font-medium text-[13px] cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <item.icon className="h-4 w-4 text-accentColor" /> {item.label}
-                        </div>
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${expandedNav[item.id] ? 'rotate-180' : ''}`} />
-                      </button>
-                      {expandedNav[item.id] && (
-                        <div className="pl-9 pr-2 py-1 space-y-0.5">
-                          {item.children.map(child => {
-                            const isLocked = child.id === 'marks' ? isMarksLocked : child.id === 'grades' ? isGradesLocked : child.id === 'exams' ? isExamsLocked : false;
-                            return (
-                              <button
-                                key={child.id}
-                                disabled={isLocked}
-                                onClick={() => { setActiveTab(child.id as any); setIsMobileSidebarOpen(false); }}
-                                className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                                  isLocked 
-                                  ? 'opacity-40 cursor-not-allowed text-textMuted' 
-                                  : activeTab === child.id 
-                                    ? 'bg-accentColor text-textMain shadow-sm font-bold cursor-pointer' 
-                                    : 'text-textMuted hover:bg-bgPrimary/40 hover:text-textMain cursor-pointer'
-                                }`}
-                              >
-                                <span>{child.label}</span>
-                                {isLocked && (
-                                  <span className="text-[8px] bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wider scale-90 origin-right">
-                                    NOT AVAILABLE
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setActiveTab(item.id as any); setIsMobileSidebarOpen(false); }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-[13px] cursor-pointer ${
-                        activeTab === item.id
-                        ? 'bg-accentColor text-textMain shadow-sm font-bold'
-                        : 'text-textMuted hover:bg-bgPrimary/40 hover:text-textMain'
-                      }`}
-                    >
-                      <item.icon className={`h-4 w-4 ${activeTab === item.id ? 'text-textMain' : 'text-accentColor'}`} /> {item.label}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </nav>
-
-            {/* Bottom Actions */}
-            <div className="p-4 border-t border-borderColor shrink-0 space-y-3 mt-auto">
-              <div>
-                <label htmlFor="semester-select" className="block text-[11px] font-medium text-textMuted mb-1.5 uppercase tracking-wider">Semester</label>
-                <div className="relative">
-                  <select
-                    id="semester-select"
-                    value={activeSemester}
-                    onChange={(e) => setActiveSemester(e.target.value)}
-                    className="block w-full p-2 pr-8 text-sm font-semibold text-textMain border border-borderColor rounded-lg bg-bgPrimary focus:ring-1 focus:ring-accentColor focus:outline-none transition-colors appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={semestersQuery.isPending || !semestersQuery.data || semestersQuery.data.length === 0}
-                  >
-                    {semestersQuery.isPending ? (
-                      <option>Loading...</option>
-                    ) : !semestersQuery.data || semestersQuery.data.length === 0 ? (
-                      <option value="UNAVAILABLE">Unavailable</option>
-                    ) : (
-                      semestersQuery.data?.map((sem: any) => (
-                        <option key={sem.id} value={sem.id}>{sem.name}</option>
-                      ))
-                    )}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-textMuted">
-                    <ChevronDown className="h-4 w-4" />
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => logoutMutation.mutate()}
-                disabled={logoutMutation.isPending}
-                className="flex items-center justify-center w-full px-3 py-2.5 text-sm font-bold rounded-lg text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
-              >
-                <LogOut className="mr-2 h-4 w-4" /> Logout
-              </button>
-            </div>
-          </aside>
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            activeSemester={activeSemester}
+            setActiveSemester={setActiveSemester}
+            semestersQuery={semestersQuery}
+            isMarksLocked={isMarksLocked}
+            isGradesLocked={isGradesLocked}
+            isExamsLocked={isExamsLocked}
+            logoutMutation={logoutMutation}
+            activeUser={activeUser}
+            profileData={profileQuery.data}
+            isMobileSidebarOpen={isMobileSidebarOpen}
+            setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+          />
 
           {/* MAIN DASHBOARD CONTENT AREA */}
           <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-bgPrimary">
-            {/* Header controls (Theme switcher and title) */}
             <header className="flex items-center justify-between px-6 py-4 bg-bgCard border-b border-borderColor text-textMain z-10 shrink-0">
               <div className="flex items-center">
                 <button 
@@ -1250,108 +861,90 @@ function VtopLoginDashboard() {
 
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 relative custom-scrollbar bg-bgPrimary text-textMain">
+              {activeTab === 'dashboard' && (
+                <DashboardView
+                  attendanceQuery={attendanceQuery}
+                  timetableQuery={timetableQuery}
+                  odSnapshotQuery={odSnapshotQuery}
+                  TIMETABLE_SLOTS={TIMETABLE_SLOTS}
+                />
+              )}
 
-            {/* 1. DASHBOARD VIEW */}
-            {activeTab === 'dashboard' && (
-              <DashboardView
-                attendanceQuery={attendanceQuery}
-                timetableQuery={timetableQuery}
-                odSnapshotQuery={odSnapshotQuery}
-                TIMETABLE_SLOTS={TIMETABLE_SLOTS}
-              />
-            )}
+              {activeTab === 'profile' && (
+                <ProfileView 
+                  profileQuery={profileQuery} 
+                  setActiveTab={setActiveTab}
+                  activeUser={activeUser}
+                />
+              )}
 
-            {/* 1. PROFILE VIEW */}
-            {activeTab === 'profile' && (
-              <ProfileView 
-                profileQuery={profileQuery} 
-                setActiveTab={setActiveTab}
-                activeUser={activeUser}
-              />
-            )}
+              {activeTab === 'timetable' && (
+                <TimetableView
+                  timetableQuery={timetableQuery}
+                  TIMETABLE_SLOTS={TIMETABLE_SLOTS}
+                />
+              )}
 
-            {/* 2. TIMETABLE VIEW */}
-            {activeTab === 'timetable' && (
-              <TimetableView
-                timetableQuery={timetableQuery}
-                TIMETABLE_SLOTS={TIMETABLE_SLOTS}
-              />
-            )}
+              {activeTab === 'attendance' && (
+                <AttendanceView
+                  attendanceQuery={attendanceQuery}
+                  selectedAttendanceCourse={selectedAttendanceCourse}
+                  setSelectedAttendanceCourse={setSelectedAttendanceCourse}
+                  attendanceDetailQuery={attendanceDetailQuery}
+                />
+              )}
 
-            {/* 3. ATTENDANCE VIEW */}
-            {activeTab === 'attendance' && (
-              <AttendanceView
-                attendanceQuery={attendanceQuery}
-                selectedAttendanceCourse={selectedAttendanceCourse}
-                setSelectedAttendanceCourse={setSelectedAttendanceCourse}
-                attendanceDetailQuery={attendanceDetailQuery}
-              />
-            )}
+              {activeTab === 'marks' && (
+                <MarksView marksQuery={marksQuery} />
+              )}
 
-            {/* 4. MARKS VIEW */}
-            {activeTab === 'marks' && (
-              <MarksView marksQuery={marksQuery} />
-            )}
+              {activeTab === 'grades' && (
+                <GradesView gradesQuery={gradesQuery} />
+              )}
 
-            {/* 5. GRADES VIEW */}
-            {activeTab === 'grades' && (
-              <GradesView gradesQuery={gradesQuery} />
-            )}
+              {activeTab === 'exams' && (
+                <ExamsView examsQuery={examsQuery} />
+              )}
 
-            {/* 6. EXAMS VIEW */}
-            {activeTab === 'exams' && (
-              <ExamsView examsQuery={examsQuery} />
-            )}
+              {activeTab === 'calendar' && (
+                <CalendarView
+                  semesters={semestersQuery.data || []}
+                  activeUser={activeUser}
+                />
+              )}
 
-            {/* 7. CALENDAR VIEW */}
-            {activeTab === 'calendar' && (
-              <CalendarView
-                semesters={semestersQuery.data || []}
-                activeUser={activeUser}
-              />
-            )}
+              {activeTab === 'credentials' && (
+                <CredentialsView credentialsQuery={credentialsQuery} />
+              )}
 
-            {/* 8. CREDENTIALS VIEW */}
-            {activeTab === 'credentials' && (
-              <CredentialsView credentialsQuery={credentialsQuery} />
-            )}
+              {activeTab === 'my-room' && (
+                <HostelView profileQuery={profileQuery} />
+              )}
 
-            {/* 9. MY ROOM (HOSTEL) VIEW */}
-            {activeTab === 'my-room' && (
-              <HostelView profileQuery={profileQuery} />
-            )}
+              {activeTab === 'calculator' && (
+                <AttendanceCalculator 
+                  attendanceQuery={attendanceQuery} 
+                  timetableQuery={timetableQuery}
+                />
+              )}
 
-            {/* 10. ATTENDANCE CALCULATOR VIEW */}
-            {activeTab === 'calculator' && (
-              <AttendanceCalculator 
-                attendanceQuery={attendanceQuery} 
-                timetableQuery={timetableQuery}
-              />
-            )}
-
-            {/* 11. REGISTERED COURSES (UNDER CONSTRUCTION) */}
-            {activeTab === 'courses' && (
-              <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="bg-bgPrimary rounded-full p-6 mb-4 border border-borderColor shadow-sm">
-                  <PlusCircle className="w-12 h-12 text-textMuted" />
+              {activeTab === 'courses' && (
+                <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="bg-bgPrimary rounded-full p-6 mb-4 border border-borderColor shadow-sm">
+                    <Loader2 className="w-12 h-12 text-textMuted animate-spin" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-textMain mb-2 capitalize">{activeTab.replace('-', ' ')}</h2>
+                  <p className="text-textMuted max-w-md">
+                    This section is currently under construction. Please check back later when new updates are rolled out.
+                  </p>
                 </div>
-                <h2 className="text-2xl font-bold text-textMain mb-2 capitalize">{activeTab.replace('-', ' ')}</h2>
-                <p className="text-textMuted max-w-md">
-                  This section is currently under construction. Please check back later when new updates are rolled out.
-                </p>
-              </div>
-            )}
+              )}
 
-            {/* 12. FACULTY SEARCH VIEW */}
-            {activeTab === 'faculty' && (
-              <FacultyView />
-            )}
-
-
-
+              {activeTab === 'faculty' && (
+                <FacultyView />
+              )}
             </div>
           </main>
-
         </div>
       )}
 
@@ -1438,16 +1031,17 @@ function VtopLoginDashboard() {
               </div>
             </div>
 
-            <button
-              onClick={() => setSelectedAttendanceCourse(null)}
-              className="w-full py-3 mt-6 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-black text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer"
-            >
-              Close History Drawer
-            </button>
+            <div className="border-t border-slate-100 dark:border-neutral-800 pt-4 mt-6 flex justify-end">
+              <button
+                onClick={() => setSelectedAttendanceCourse(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close details
+              </button>
+            </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
@@ -1457,21 +1051,5 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <VtopLoginDashboard />
     </QueryClientProvider>
-  );
-}
-
-
-
-// Global generic styles for scrollbars
-function GlobalScrollbarStyles() {
-  return (
-    <style dangerouslySetInnerHTML={{__html: `
-      .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-      .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
-      .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
-    `}} />
   );
 }
