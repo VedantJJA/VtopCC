@@ -928,3 +928,58 @@ export function parseCredentials(htmlContent: string) {
 
   return data;
 }
+
+export interface FacultyDetails {
+  image: string | null;
+  name: string | null;
+  designation: string | null;
+  department: string | null;
+  school: string | null;
+  email: string | null;
+  cabin: string | null;
+}
+
+export function parseFacultyDetails(htmlContent: string): FacultyDetails | null {
+  if (!htmlContent) return null;
+  const $ = cheerio.load(htmlContent);
+
+  let name: string | null = null;
+  let designation: string | null = null;
+  let department: string | null = null;
+  let school: string | null = null;
+  let email: string | null = null;
+  let cabin: string | null = null;
+
+  $('td').each((_, td) => {
+    const text = $(td).text().trim().toLowerCase();
+    if (text.includes('name of the faculty')) {
+      name = $(td).next('td').text().trim();
+    } else if (text.includes('designation')) {
+      designation = $(td).next('td').text().trim();
+    } else if (text.includes('name of department')) {
+      department = $(td).next('td').text().trim();
+    } else if (text.includes('school / centre name')) {
+      school = $(td).next('td').text().trim();
+    } else if (text.includes('e-mail id')) {
+      email = $(td).next('td').text().trim();
+    } else if (text.includes('cabin number')) {
+      cabin = $(td).next('td').text().trim();
+    }
+  });
+
+  if (!name) {
+    return null;
+  }
+
+  const image = $('img.img-rounded').attr('src') || null;
+
+  return {
+    image,
+    name,
+    designation,
+    department,
+    school,
+    email,
+    cabin
+  };
+}

@@ -11,7 +11,9 @@ import {
   getCalendar,
   getCredentials,
   getDebugData,
-  getODSnapshot
+  getODSnapshot,
+  searchFaculty,
+  getFacultyDirectory
 } from '../controllers/data.controller';
 
 const router = Router();
@@ -37,5 +39,7 @@ router.post('/calendar', getCalendar);
 router.post('/credentials', getCredentials);
 router.post('/debug', getDebugData);
 router.post('/get-od-snapshot', getODSnapshot);
+router.post('/faculty', searchFaculty);
+router.post('/faculty-directory', getFacultyDirectory);
 
 export default router;

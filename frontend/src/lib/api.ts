@@ -36,4 +36,10 @@ export const getExams = (semesterId: string) =>
 export const getCalendar = (semesterId: string, calDate: string) => 
   api.post('/data/calendar', { semesterId, calDate });
 
+export const searchFaculty = (empId: string) =>
+  api.post('/data/faculty', { empId });
+
+export const getFacultyDirectory = () =>
+  api.post('/data/faculty-directory');
+
 export default api;

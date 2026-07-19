@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { getSessionDetails } from '../services/vtop.service';
 import * as parsers from '../services/parsers.service';
+import fs from 'fs';
+import path from 'path';
 
 export const getSemesters = async (req: Request, res: Response) => {
   const { session_id } = req.body;
@@ -824,5 +826,73 @@ export const getODSnapshot = async (req: Request, res: Response) => {
       status: 'error',
       message: error.message || 'Failed to fetch OD count'
     });
+  }
+};
+
+export const searchFaculty = async (req: Request, res: Response) => {
+  const { session_id, empId } = req.body;
+  
+  if (!empId) {
+    return res.status(400).json({ status: 'error', message: 'Employee ID is required.' });
+  }
+
+  try {
+    const details = await getSessionDetails(session_id);
+    const { client, authorizedId, csrfToken } = details;
+
+    const payload = new URLSearchParams();
+    payload.append('_csrf', csrfToken);
+    payload.append('authorizedID', authorizedId);
+    payload.append('empId', empId);
+    payload.append('x', new Date().toUTCString());
+
+    const response = await client.post('hrms/EmployeeSearch1ForStudent', payload, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+      }
+    });
+
+    const parsedData = parsers.parseFacultyDetails(response.data);
+    if (!parsedData) {
+      return res.status(404).json({ status: 'error', message: 'Faculty not found.' });
+    }
+
+    return res.json({ status: 'success', raw_data: parsedData });
+  } catch (error: any) {
+    console.error('searchFaculty failed:', error);
+    return res.status(error.message === 'Session expired or invalid.' ? 401 : 500).json({
+      status: 'error',
+      message: error.message || 'Failed to query HRMS server.'
+    });
+  }
+};
+
+export const getFacultyDirectory = async (_req: Request, res: Response) => {
+  try {
+    const dirPath = path.join(__dirname, '../../../faculty_data');
+    const directoryMap: Record<string, string> = {};
+
+    if (fs.existsSync(dirPath)) {
+      const files = fs.readdirSync(dirPath);
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          try {
+            const filePath = path.join(dirPath, file);
+            const content = fs.readFileSync(filePath, 'utf8');
+            const data = JSON.parse(content);
+            Object.assign(directoryMap, data);
+          } catch (e) {
+            console.error(`Failed to parse faculty directory file ${file}:`, e);
+          }
+        }
+      }
+    }
+
+    return res.json({ status: 'success', directory: directoryMap });
+  } catch (error: any) {
+    console.error('getFacultyDirectory failed:', error);
+    return res.status(500).json({ status: 'error', message: 'Failed to build faculty directory.' });
   }
 };

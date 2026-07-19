@@ -42,6 +42,7 @@ import { DashboardView } from './components/DashboardView';
 import { ProfileView } from './components/ProfileView';
 import { TimetableView } from './components/TimetableView';
 import { AttendanceView } from './components/AttendanceView';
+import { FacultyView } from './components/FacultyView';
 import { MarksView } from './components/MarksView';
 import { GradesView } from './components/GradesView';
 import { ExamsView } from './components/ExamsView';
@@ -86,7 +87,7 @@ const TIMETABLE_SLOTS = [
   { id: 12, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
-type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses';
+type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses' | 'faculty';
 
 function VtopLoginDashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -1100,7 +1101,8 @@ function VtopLoginDashboard() {
                   children: [
                     { id: 'timetable', label: 'Time Table' },
                     { id: 'attendance', label: 'Attendance' },
-                    { id: 'calendar', label: 'Calendar' }
+                    { id: 'calendar', label: 'Calendar' },
+                    { id: 'faculty', label: 'Faculty Search' }
                   ]
                 },
                 {
@@ -1338,6 +1340,11 @@ function VtopLoginDashboard() {
                   This section is currently under construction. Please check back later when new updates are rolled out.
                 </p>
               </div>
+            )}
+
+            {/* 12. FACULTY SEARCH VIEW */}
+            {activeTab === 'faculty' && (
+              <FacultyView />
             )}
 
 
