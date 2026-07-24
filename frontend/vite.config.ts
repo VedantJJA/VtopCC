@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons.svg', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['favicon.svg', 'favicon.ico', 'icons.svg', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'VTOP Client CC',
         short_name: 'VTOPCC',
@@ -24,13 +24,13 @@ export default defineConfig({
             src: '/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
           },
           {
             src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
           }
         ]
       },

@@ -608,8 +608,8 @@ function VtopLoginDashboard() {
     queryKey: ['semesters', activeUser],
     queryFn: async () => {
       const res = await getSemesters();
-      const sems = res.data.semesters || [];
-      if (sems.length > 0) {
+      const sems = res.data?.semesters || res.data || [];
+      if (Array.isArray(sems) && sems.length > 0) {
         localStorage.setItem('vtop_cache_semesters', JSON.stringify(sems));
       }
       return sems;
@@ -619,7 +619,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !isRestoringSession
+    enabled: isLoggedIn
   });
 
   // Set default active semester when semesters list loads
@@ -640,7 +640,7 @@ function VtopLoginDashboard() {
     queryKey: ['profile', activeUser],
     queryFn: async () => {
       const res = await getProfile();
-      const data = res.data.raw_data;
+      const data = res.data?.raw_data || res.data;
       if (data) {
         localStorage.setItem('vtop_cache_profile', JSON.stringify(data));
       }
@@ -651,60 +651,76 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !isRestoringSession
+    enabled: isLoggedIn
   });
 
   const timetableQuery = useQuery({
     queryKey: ['timetable', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getTimetable(activeSemester);
-      const data = res.data.raw_data;
-      if (data) {
+      const data = res.data?.raw_data || res.data;
+      if (data && activeSemester) {
         localStorage.setItem(`vtop_cache_timetable_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
       const cached = localStorage.getItem(`vtop_cache_timetable_${activeSemester}`);
-      return cached ? JSON.parse(cached) : undefined;
+      if (cached) return JSON.parse(cached);
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('vtop_cache_timetable_')) {
+          const item = localStorage.getItem(key);
+          if (item) return JSON.parse(item);
+        }
+      }
+      return undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
 
   const attendanceQuery = useQuery({
     queryKey: ['attendance', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getAttendance(activeSemester);
-      const data = res.data.raw_data || [];
-      if (data.length > 0) {
+      const data = res.data?.raw_data || res.data || [];
+      if (Array.isArray(data) && data.length > 0 && activeSemester) {
         localStorage.setItem(`vtop_cache_attendance_${activeSemester}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
       const cached = localStorage.getItem(`vtop_cache_attendance_${activeSemester}`);
-      return cached ? JSON.parse(cached) : [];
+      if (cached) return JSON.parse(cached);
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('vtop_cache_attendance_')) {
+          const item = localStorage.getItem(key);
+          if (item) return JSON.parse(item);
+        }
+      }
+      return [];
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
 
   const attendanceDetailQuery = useQuery({
     queryKey: ['attendance-detail', activeUser, activeSemester, selectedAttendanceCourse?.class_id, selectedAttendanceCourse?.slot_param],
     queryFn: async () => {
       const res = await getAttendanceDetail(activeSemester, selectedAttendanceCourse.class_id, selectedAttendanceCourse.slot_param);
-      return res.data.raw_data as any[];
+      return (res.data?.raw_data || res.data) as any[];
     },
-    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!selectedAttendanceCourse && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!selectedAttendanceCourse
   });
 
   const marksQuery = useQuery({
     queryKey: ['marks', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getMarks(activeSemester);
-      const data = res.data.raw_data;
-      if (data) {
+      const data = res.data?.raw_data || res.data;
+      if (data && activeSemester) {
         localStorage.setItem(`vtop_cache_marks_${activeSemester}`, JSON.stringify(data));
       }
       return data;
@@ -714,15 +730,15 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
 
   const gradesQuery = useQuery({
     queryKey: ['grades', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getGrades(activeSemester);
-      const data = res.data.raw_data;
-      if (data) {
+      const data = res.data?.raw_data || res.data;
+      if (data && activeSemester) {
         localStorage.setItem(`vtop_cache_grades_${activeSemester}`, JSON.stringify(data));
       }
       return data;
@@ -732,15 +748,15 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
 
   const examsQuery = useQuery({
     queryKey: ['exams', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getExams(activeSemester);
-      const data = res.data.raw_data || [];
-      if (data.length > 0) {
+      const data = res.data?.raw_data || res.data || [];
+      if (Array.isArray(data) && data.length > 0 && activeSemester) {
         localStorage.setItem(`vtop_cache_exams_${activeSemester}`, JSON.stringify(data));
       }
       return data;
@@ -750,14 +766,14 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : [];
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
   });
 
   const credentialsQuery = useQuery({
     queryKey: ['credentials', activeUser],
     queryFn: async () => {
       const res = await getCredentials();
-      const data = res.data.raw_data;
+      const data = res.data?.raw_data || res.data;
       if (data) {
         localStorage.setItem('vtop_cache_credentials', JSON.stringify(data));
       }
@@ -768,7 +784,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !isRestoringSession
+    enabled: isLoggedIn
   });
 
   const odSnapshotQuery = useQuery({
