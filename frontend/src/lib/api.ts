@@ -9,55 +9,99 @@ const api = axios.create({
 });
 
 /**
+ * Helper to find cached item in localStorage.
+ * Handles exact key lookup and prefix fallback (e.g. if semester ID differs offline).
+ */
+function getCachedData(cacheKey?: string): any {
+  if (!cacheKey) return null;
+  try {
+    const exact = localStorage.getItem(cacheKey);
+    if (exact) {
+      return JSON.parse(exact);
+    }
+
+    // Prefix fallbacks for dynamic keys
+    const prefixes = [
+      'vtop_cache_timetable_',
+      'vtop_cache_attendance_',
+      'vtop_cache_marks_',
+      'vtop_cache_grades_',
+      'vtop_cache_exams_',
+      'vtop_cache_calendar_'
+    ];
+
+    for (const prefix of prefixes) {
+      if (cacheKey.startsWith(prefix)) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(prefix)) {
+            const item = localStorage.getItem(key);
+            if (item) {
+              return JSON.parse(item);
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[Cache] Error reading key '${cacheKey}':`, e);
+  }
+  return null;
+}
+
+/**
  * Generic Network-First, Fallback-to-Cache API Wrapper.
- * - Step A (Offline bypass): If navigator.onLine is false, immediately return cached data from localStorage.
- * - Step B & C: Attempt Axios POST request. On success, store res.data into localStorage under `cacheKey`.
- * - Step D: On network failure (error), check if cached data exists under `cacheKey`.
- *   If cached data exists, return { data: cached } to prevent crashing the UI.
- * - Step E: Only throw an error if no cached data exists.
+ * 1. Step A (Offline bypass): If navigator.onLine is false, immediately return cached data.
+ * 2. Step B & C: Attempt Axios POST request. On success & valid status, store res.data into localStorage under `cacheKey`.
+ * 3. Step D: On network failure or session/server error, return cached data if available to prevent blank screens.
+ * 4. Step E: Only throw error if no cached data is available.
  */
 export async function fetchWithCache<T = any>(
   endpoint: string,
   payload?: any,
   cacheKey?: string
 ): Promise<{ data: T }> {
+  const cachedData = getCachedData(cacheKey);
+
   // Step A: Quick offline bypass when navigator.onLine is false
   if (cacheKey && typeof navigator !== 'undefined' && !navigator.onLine) {
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        console.log(`[Offline Bypass] Returning cached data for '${cacheKey}'`);
-        return { data: JSON.parse(cached) };
-      }
-    } catch (e) {
-      console.warn(`[Offline Bypass] Error reading cache key '${cacheKey}':`, e);
+    if (cachedData) {
+      console.log(`[Offline Bypass] Returning cached data for '${cacheKey}'`);
+      return { data: cachedData };
     }
   }
 
   // Step B & C: Attempt network request in try block
   try {
     const res = await api.post(endpoint, payload);
-    if (cacheKey && res && res.data) {
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify(res.data));
-      } catch (e) {
-        console.warn(`[Cache] Error writing key '${cacheKey}':`, e);
+
+    // If server response indicates success, save to cache and return
+    if (res && res.data && res.data.status !== 'error') {
+      if (cacheKey) {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(res.data));
+        } catch (e) {
+          console.warn(`[Cache] Error writing key '${cacheKey}':`, e);
+        }
       }
+      return res;
     }
+
+    // If server returned status: 'error' (e.g. session expired on VTOP), but we have cached data,
+    // fallback to cached data so the UI remains visible instead of going blank
+    if (cachedData) {
+      console.warn(`[Server Error Fallback] Returning cached data for '${cacheKey}' due to server status: ${res?.data?.message}`);
+      return { data: cachedData };
+    }
+
     return res;
   } catch (error: any) {
-    // Step D: Fallback to cache on network failure
-    if (cacheKey) {
-      try {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          console.warn(`[Network Failure Fallback] Returning cached data for '${cacheKey}' due to error:`, error?.message || error);
-          return { data: JSON.parse(cached) };
-        }
-      } catch (e) {
-        console.warn(`[Cache Fallback] Error reading key '${cacheKey}':`, e);
-      }
+    // Step D: Fallback to cache on network failure (offline / timeout / 500)
+    if (cachedData) {
+      console.warn(`[Network Failure Fallback] Returning cached data for '${cacheKey}' due to network error:`, error?.message || error);
+      return { data: cachedData };
     }
+
     // Step E: Only throw if we have no cached data to show
     throw error;
   }

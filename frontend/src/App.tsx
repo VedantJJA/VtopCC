@@ -78,8 +78,18 @@ function VtopLoginDashboard() {
     return (localStorage.getItem('theme') as any) || 'dark';
   });
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
-  const [activeSemester, setActiveSemester] = useState<string>('');
+  const [activeSemester, setActiveSemester] = useState<string>(() => {
+    try {
+      const cached = localStorage.getItem('vtop_cache_semesters');
+      if (cached) {
+        const sems = JSON.parse(cached);
+        if (sems && sems.length > 0 && sems[0].id) {
+          return sems[0].id;
+        }
+      }
+    } catch (_e) {}
+    return '';
+  });
   
   // Auth state
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
