@@ -113,35 +113,6 @@ function VtopLoginDashboard() {
   const initRef = useRef(false);
   const autoLoginPromiseRef = useRef<Promise<boolean> | null>(null);
 
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-
-  // Capture beforeinstallprompt for native WebAPK install
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      console.log('[PWA] beforeinstallprompt event captured');
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  const handleInstallApp = async () => {
-    if (!deferredPrompt) {
-      alert("To install VTOPCC as a native Web App:\n\n1. Open this website in Chrome on Android\n2. Tap the 3-dots menu icon\n3. Select 'Install app' or 'Add to Home screen'");
-      return;
-    }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`[PWA] User install choice: ${outcome}`);
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
-  };
-
   // Toggle theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -847,7 +818,6 @@ function VtopLoginDashboard() {
           handleAutoLoginSubmit={handleAutoLoginSubmit}
           handleLoginSubmit={handleLoginSubmit}
           recaptchaRef={recaptchaRef}
-          handleInstallApp={handleInstallApp}
         />
       ) : (
         <div className="flex-1 flex h-screen overflow-hidden relative bg-bgPrimary text-textMain">
