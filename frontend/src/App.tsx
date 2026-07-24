@@ -82,7 +82,12 @@ function VtopLoginDashboard() {
   const [activeSemester, setActiveSemester] = useState<string>('');
   
   // Auth state
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    const hasUser = !!localStorage.getItem('vtop_username');
+    const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+    const explicitLogout = localStorage.getItem('vtop_explicit_logout') === 'true';
+    return !explicitLogout && (hasUser || hasCache);
+  });
   const [activeUser, setActiveUser] = useState(() => {
     return localStorage.getItem('vtop_username') || '';
   });
@@ -159,15 +164,29 @@ function VtopLoginDashboard() {
             localStorage.setItem('vtop_username', res.data.username);
           }
         } else {
-          console.log("Session verification failed, attempting silent background autologin...");
-          setIsRestoringSession(true);
-          triggerSilentAutoLoginAttempt();
+          console.log("Session verification failed, checking for offline cached data...");
+          const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+          if (hasCache || localUsername) {
+            console.log("Offline mode active: displaying cached data.");
+            setIsLoggedIn(true);
+            setIsRestoringSession(false);
+          } else {
+            setIsRestoringSession(true);
+            triggerSilentAutoLoginAttempt();
+          }
         }
       })
       .catch((_err) => {
-        console.log("Session expired on server (401), restoring silently...");
-        setIsRestoringSession(true);
-        triggerSilentAutoLoginAttempt();
+        console.log("Backend offline or network error. Retaining cached session.");
+        const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+        if (hasCache || localUsername) {
+          setIsLoggedIn(true);
+          setIsRestoringSession(false);
+          setMessage({ text: 'Backend offline. Displaying cached data.', type: 'info' });
+        } else {
+          setIsRestoringSession(true);
+          triggerSilentAutoLoginAttempt();
+        }
       });
   }, []);
 
@@ -316,6 +335,17 @@ function VtopLoginDashboard() {
     console.warn('[AutoLogin] Failure:', reason);
     autoLoginRetryCount.current = 0;
     autoLoginPromiseRef.current = null;
+
+    const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+    if (hasCache || localStorage.getItem('vtop_username')) {
+      console.log("[AutoLogin] Retaining offline mode with cached data.");
+      setIsLoggedIn(true);
+      setIsRestoringSession(false);
+      setIsCaptchaSolving(false);
+      setMessage({ text: 'Backend unreachable. Showing cached data.', type: 'info' });
+      return;
+    }
+
     localStorage.removeItem('vtop_username');
     setIsLoggedIn(false);
     setIsRestoringSession(false);

@@ -50,7 +50,12 @@ function findBestSemesterForDate(date: Date, semesters: any[]): string | null {
   return bestMatch ? bestMatch.id : semesters[0].id;
 }
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ semesters, activeUser }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemesters, activeUser }) => {
+  const semesters = propSemesters.length > 0 ? propSemesters : (() => {
+    const cached = localStorage.getItem('vtop_cache_semesters');
+    return cached ? JSON.parse(cached) : [];
+  })();
+
   const [activeSemester, setActiveSemester] = useState<string>(() => {
     return semesters[0]?.id || '';
   });
@@ -93,12 +98,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters, activeUse
       const data = res.data.raw_data;
       if (data) {
         localStorage.setItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
+        localStorage.setItem(`vtop_cache_calendar_latest_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
       }
       return data;
     },
     initialData: () => {
-      if (!activeSemester) return undefined;
-      const cached = localStorage.getItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
+      const specificCache = activeSemester ? localStorage.getItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`) : null;
+      const genericCache = localStorage.getItem(`vtop_cache_calendar_latest_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
+      const cached = specificCache || genericCache;
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
@@ -113,11 +120,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters, activeUse
           <h4 className="font-bold text-textMain">Calendar Not Available</h4>
           <p className="text-xs text-textMuted">No academic calendar can be loaded without an active semester selection.</p>
         </div>
-      ) : calendarQuery.isPending ? (
+      ) : calendarQuery.isPending && !calendarQuery.data ? (
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : calendarQuery.isError ? (
+      ) : calendarQuery.isError && !calendarQuery.data ? (
         <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <span>Failed to fetch Academic Calendar. Please retry.</span>

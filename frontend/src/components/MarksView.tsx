@@ -8,11 +8,11 @@ interface MarksViewProps {
 export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
   return (
     <div className="space-y-6">
-      {marksQuery.isPending ? (
+      {marksQuery.isPending && !marksQuery.data ? (
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : marksQuery.isError ? (
+      ) : marksQuery.isError && !marksQuery.data ? (
         <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <span>Failed to fetch course marks. Please refresh.</span>

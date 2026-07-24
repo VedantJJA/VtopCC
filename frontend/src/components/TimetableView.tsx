@@ -43,11 +43,11 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
 
   return (
     <div className="space-y-6">
-      {timetableQuery.isPending ? (
+      {timetableQuery.isPending && !timetableQuery.data ? (
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : timetableQuery.isError || !timetableQuery.data || !timetableQuery.data.timetable ? (
+      ) : !timetableQuery.data || !timetableQuery.data.timetable ? (
         <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
           <BookOpen className="h-12 w-12 text-textMuted mx-auto" />
           <h4 className="font-bold text-textMain">Timetable Not Available</h4>

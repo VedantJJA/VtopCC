@@ -16,11 +16,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 }) => {
   return (
     <div className="space-y-6">
-      {attendanceQuery.isPending ? (
+      {attendanceQuery.isPending && !attendanceQuery.data ? (
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : attendanceQuery.isError || !attendanceQuery.data || attendanceQuery.data.length === 0 ? (
+      ) : !attendanceQuery.data || attendanceQuery.data.length === 0 ? (
         <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
           <Clock className="h-12 w-12 text-textMuted mx-auto" />
           <h4 className="font-bold text-textMain">Attendance Not Available</h4>
