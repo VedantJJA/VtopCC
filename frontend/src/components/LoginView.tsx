@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   User as UserIcon, Lock, Eye, EyeOff, CheckCircle2, 
-  AlertTriangle, Loader2, Sun, Moon
+  AlertTriangle, Loader2, Sun, Moon, Download
 } from 'lucide-react';
 
 interface LoginViewProps {
@@ -25,6 +25,7 @@ interface LoginViewProps {
   handleAutoLoginSubmit: (e: React.FormEvent) => void;
   handleLoginSubmit: (e: React.FormEvent) => void;
   recaptchaRef: React.RefObject<HTMLDivElement | null>;
+  handleInstallApp?: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -47,20 +48,34 @@ export const LoginView: React.FC<LoginViewProps> = ({
   isCaptchaSolving,
   handleAutoLoginSubmit,
   handleLoginSubmit,
-  recaptchaRef
+  recaptchaRef,
+  handleInstallApp
 }) => {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
-      {/* Theme Toggle */}
-      <button
-        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        className="absolute top-6 right-6 p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
-        title={`Switch theme (Current: ${theme})`}
-      >
-        {theme === 'dark' ? <Sun className="h-5 w-5 text-blue-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
-      </button>
+      {/* Top right buttons */}
+      <div className="absolute top-6 right-6 flex items-center space-x-3">
+        {handleInstallApp && (
+          <button
+            onClick={handleInstallApp}
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-xs font-bold transition-colors shadow-sm cursor-pointer"
+            title="Install VTOPCC as Native App"
+          >
+            <Download className="h-4 w-4" />
+            <span>Install App</span>
+          </button>
+        )}
+
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="p-3 bg-bgCard border border-borderColor rounded-full hover:bg-bgPrimary transition-colors shadow-sm cursor-pointer"
+          title={`Switch theme (Current: ${theme})`}
+        >
+          {theme === 'dark' ? <Sun className="h-5 w-5 text-blue-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
+        </button>
+      </div>
 
       <div className="w-full max-w-md">
         {/* Title */}
