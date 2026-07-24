@@ -77,7 +77,7 @@ function VtopLoginDashboard() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as any) || 'dark';
   });
-
+  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
   const [activeSemester, setActiveSemester] = useState<string>(() => {
     try {
       const cached = localStorage.getItem('vtop_cache_semesters');
