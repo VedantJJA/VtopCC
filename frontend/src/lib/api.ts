@@ -9,54 +9,61 @@ const api = axios.create({
 });
 
 /**
- * Generic Stale-While-Revalidate & Offline Fallback caching wrapper.
- * 1. Checks localStorage for existing cached data under `cacheKey`.
- * 2. Fires network request via Axios.
- * 3. On network success: updates localStorage cache and returns fresh data.
- * 4. On network error (offline/timeout/server error): catches error, logs warning,
- *    and returns cached data if available to prevent UI crashes.
+ * Generic Network-First, Fallback-to-Cache API Wrapper.
+ * - Step A (Offline bypass): If navigator.onLine is false, immediately return cached data from localStorage.
+ * - Step B & C: Attempt Axios POST request. On success, store res.data into localStorage under `cacheKey`.
+ * - Step D: On network failure (error), check if cached data exists under `cacheKey`.
+ *   If cached data exists, return { data: cached } to prevent crashing the UI.
+ * - Step E: Only throw an error if no cached data exists.
  */
 export async function fetchWithCache<T = any>(
   endpoint: string,
   payload?: any,
   cacheKey?: string
 ): Promise<{ data: T }> {
-  let cachedData: any = null;
-
-  if (cacheKey) {
+  // Step A: Quick offline bypass when navigator.onLine is false
+  if (cacheKey && typeof navigator !== 'undefined' && !navigator.onLine) {
     try {
-      const raw = localStorage.getItem(cacheKey);
-      if (raw) {
-        cachedData = JSON.parse(raw);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        console.log(`[Offline Bypass] Returning cached data for '${cacheKey}'`);
+        return { data: JSON.parse(cached) };
       }
     } catch (e) {
-      console.warn(`[Cache] Error reading key '${cacheKey}':`, e);
+      console.warn(`[Offline Bypass] Error reading cache key '${cacheKey}':`, e);
     }
   }
 
+  // Step B & C: Attempt network request in try block
   try {
     const res = await api.post(endpoint, payload);
     if (cacheKey && res && res.data) {
       try {
         localStorage.setItem(cacheKey, JSON.stringify(res.data));
       } catch (e) {
-        console.warn(`[Cache] Error saving key '${cacheKey}':`, e);
+        console.warn(`[Cache] Error writing key '${cacheKey}':`, e);
       }
     }
     return res;
-  } catch (err: any) {
-    console.warn(`[Network/Cache] Request to '${endpoint}' failed:`, err?.message || err);
-
-    if (cachedData) {
-      console.log(`[Cache] Returning stale cached response for '${cacheKey}'`);
-      return { data: cachedData } as any;
+  } catch (error: any) {
+    // Step D: Fallback to cache on network failure
+    if (cacheKey) {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          console.warn(`[Network Failure Fallback] Returning cached data for '${cacheKey}' due to error:`, error?.message || error);
+          return { data: JSON.parse(cached) };
+        }
+      } catch (e) {
+        console.warn(`[Cache Fallback] Error reading key '${cacheKey}':`, e);
+      }
     }
-
-    throw err;
+    // Step E: Only throw if we have no cached data to show
+    throw error;
   }
 }
 
-// Data service API calls with Stale-While-Revalidate caching keys
+// API functions wrapping endpoints with endpoint-specific cache keys
 export const getSemesters = () => 
   fetchWithCache('/data/semesters', undefined, 'vtop_cache_semesters');
 
