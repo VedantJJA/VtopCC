@@ -1,11 +1,17 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { CookieJar } from 'tough-cookie';
-import { sessionService } from './session.service';
-import crypto from 'crypto';
 import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 
 const VTOP_BASE_URL = 'https://vtopcc.vit.ac.in/vtop/';
+
+// Serialized state that gets encrypted into the vtop_state JWT
+export interface VtopState {
+  jar: CookieJar.Serialized;  // CookieJar.serializeSync() output
+  csrf?: string;              // Current CSRF token
+  authorizedId?: string;
+  username?: string;
+}
 
 // Helper to create a cookie-aware axios client per user
 function createClient(jar: CookieJar) {
@@ -17,11 +23,24 @@ function createClient(jar: CookieJar) {
     httpAgent: new HttpCookieAgent({ cookies: { jar }, keepAlive: true, keepAliveMsecs: 60000 }),
     httpsAgent: new HttpsCookieAgent({ cookies: { jar }, keepAlive: true, keepAliveMsecs: 60000 }),
     withCredentials: true,
-    maxRedirects: 5 // Default redirect following for standard login/redirection flow
+    maxRedirects: 5
   });
 }
 
-export async function startLogin() {
+// Deserialize a CookieJar from the stored state
+export function deserializeJar(serialized: CookieJar.Serialized): CookieJar {
+  return CookieJar.deserializeSync(serialized);
+}
+
+/**
+ * Start a new login flow: fetch CSRF + CAPTCHA from VTOP.
+ * Returns serialized jar state + captcha data (no server-side storage).
+ */
+export async function startLogin(): Promise<{
+  state: VtopState;
+  captchaType: number;
+  captchaImageData: string;
+}> {
   const jar = new CookieJar();
   const client = createClient(jar);
 
@@ -44,24 +63,37 @@ export async function startLogin() {
   const captchaSrcMatch = captchaRes.data.match(/img\s+src="([^"]+)"/);
   const captchaSrc = captchaSrcMatch ? captchaSrcMatch[1] : (cheerio.load(captchaRes.data)('img').attr('src') || '');
 
-  // Save Jar in session
-  const sessionId = crypto.randomUUID();
-  sessionService.sessions.set(sessionId, {
-    cookieJar: jar,
-    csrfToken: csrfLogin,
-    lastAccessed: Date.now()
-  });
+  const state: VtopState = {
+    jar: jar.serializeSync(),
+    csrf: csrfLogin
+  };
 
-  return { sessionId, captchaType: 1, captchaImageData: captchaSrc };
+  return { state, captchaType: 1, captchaImageData: captchaSrc };
 }
 
-export async function performVtopLogin(sessionId: string, username: string, password: string, captchaText: string, gResponse?: string) {
-  const session = sessionService.getSession(sessionId);
-  if (!session) return { success: false, message: 'Session expired', code: 'session_expired' };
+/**
+ * Perform VTOP login using deserialized state.
+ * Returns updated state on success (jar may have new cookies after login).
+ */
+export async function performVtopLogin(
+  state: VtopState,
+  username: string,
+  password: string,
+  captchaText: string,
+  gResponse?: string
+): Promise<{
+  success: boolean;
+  message?: string;
+  code: string;
+  updatedState?: VtopState;
+  authorizedId?: string;
+}> {
+  const jar = deserializeJar(state.jar);
+  const client = createClient(jar);
+  const csrfToken = state.csrf!;
 
-  const client = createClient(session.cookieJar);
   const payload = new URLSearchParams();
-  payload.append('_csrf', session.csrfToken!);
+  payload.append('_csrf', csrfToken);
   payload.append('username', username);
   payload.append('password', password);
   
@@ -77,11 +109,16 @@ export async function performVtopLogin(sessionId: string, username: string, pass
 
   if (loginForm.length === 0) {
     // SUCCESS
-    let authorizedId = $('input[name="authorizedID"]').val() || $('input[id="authorizedIDX"]').val() || username;
-    sessionService.updateSession(sessionId, { username, authorizedId: authorizedId as string, csrfToken: undefined });
-    return { success: true, authorizedId, code: 'success' };
+    const authorizedId = ($('input[name="authorizedID"]').val() || $('input[id="authorizedIDX"]').val() || username) as string;
+    const updatedState: VtopState = {
+      jar: jar.serializeSync(),
+      csrf: undefined, // Will be re-fetched on first data call
+      authorizedId,
+      username
+    };
+    return { success: true, authorizedId, code: 'success', updatedState };
   } else {
-    // PARSE ERROR MESSAGES LIKE THE FLASK APP
+    // PARSE ERROR MESSAGES
     let status_code = 'invalid_credentials';
     let error_message = 'Invalid credentials.';
     
@@ -99,17 +136,23 @@ export async function performVtopLogin(sessionId: string, username: string, pass
   }
 }
 
-export async function getSessionDetails(sessionId: string) {
-  const session = sessionService.getSession(sessionId);
-  if (!session) throw new Error('Session expired.');
-
-  const client = createClient(session.cookieJar);
+/**
+ * Get an authenticated Axios client + metadata from deserialized state.
+ * Used by data controllers to make authenticated requests to VTOP.
+ */
+export async function getSessionDetails(state: VtopState): Promise<{
+  client: ReturnType<typeof axios.create>;
+  authorizedId: string;
+  csrfToken: string;
+  updatedState: VtopState;
+}> {
+  const jar = deserializeJar(state.jar);
+  const client = createClient(jar);
 
   // Auto-detect expired session if login form HTML is returned
   client.interceptors.response.use(
     (response) => {
       if (typeof response.data === 'string' && response.data.includes('vtopLoginForm')) {
-        sessionService.deleteSession(sessionId);
         return Promise.reject(new Error('Session expired or invalid.'));
       }
       return response;
@@ -119,30 +162,39 @@ export async function getSessionDetails(sessionId: string) {
     }
   );
 
-  // Optimize: Reuse CSRF token and authorized ID if already parsed
-  if (session.csrfToken && session.authorizedId) {
+  // Reuse CSRF token if already parsed
+  if (state.csrf && state.authorizedId) {
     client.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
     client.defaults.headers.common['Referer'] = `${VTOP_BASE_URL}content`;
-    return { client, authorizedId: session.authorizedId, csrfToken: session.csrfToken };
+    return {
+      client,
+      authorizedId: state.authorizedId,
+      csrfToken: state.csrf,
+      updatedState: { ...state, jar: jar.serializeSync() }
+    };
   }
   
-  // FIX: Remove the slash in `${baseUrl}content`
+  // Fetch content page to get CSRF token
   const contentRes = await client.get('content', {
     headers: { Referer: `${VTOP_BASE_URL}content` } 
   });
 
   const $ = cheerio.load(contentRes.data);
   if ($('#vtopLoginForm').length > 0) {
-    sessionService.deleteSession(sessionId);
     throw new Error('Session expired or invalid.');
   }
 
   const csrfToken = $('input[name="_csrf"]').val() as string;
-  sessionService.updateSession(sessionId, { csrfToken });
 
   // Return the customized client for data routes to use
   client.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
   client.defaults.headers.common['Referer'] = `${VTOP_BASE_URL}content`;
   
-  return { client, authorizedId: session.authorizedId || '', csrfToken };
+  const updatedState: VtopState = {
+    ...state,
+    jar: jar.serializeSync(),
+    csrf: csrfToken
+  };
+
+  return { client, authorizedId: state.authorizedId || '', csrfToken, updatedState };
 }

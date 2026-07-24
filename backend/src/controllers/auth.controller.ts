@@ -1,55 +1,76 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { sessionService } from '../services/session.service';
-import { startLogin, performVtopLogin } from '../services/vtop.service';
+import { startLogin, performVtopLogin, VtopState } from '../services/vtop.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vtopc_default_jwt_secret_key_change_this_in_prod';
-const COOKIE_NAME = 'vtop_creds';
+const CREDS_COOKIE = 'vtop_creds';
+const STATE_COOKIE = 'vtop_state';
 
-// Helper to encrypt credentials
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const
+};
+
+// --- JWT Helpers ---
+
 function encryptCredentials(username: string, password: string): string {
   return jwt.sign({ u: username, p: password }, JWT_SECRET, { expiresIn: '30d' });
 }
 
-// Helper to decrypt credentials
 function decryptCredentials(token: string): { u: string; p: string } {
   return jwt.verify(token, JWT_SECRET) as { u: string; p: string };
 }
 
+function encryptState(state: VtopState): string {
+  // 1h expiry — VTOP sessions rarely last longer. Re-auth flow handles expiry.
+  return jwt.sign({ s: state }, JWT_SECRET, { expiresIn: '1h' });
+}
+
+function decryptState(token: string): VtopState {
+  const decoded = jwt.verify(token, JWT_SECRET) as { s: VtopState };
+  return decoded.s;
+}
+
+function setStateCookie(res: Response, state: VtopState): void {
+  res.cookie(STATE_COOKIE, encryptState(state), COOKIE_OPTS);
+}
+
+// --- Controllers ---
+
 export const checkSession = async (req: Request, res: Response) => {
-  const session_id = req.cookies.vtop_session_id;
-  if (session_id) {
-    const session = sessionService.getSession(session_id);
-    if (session) {
-      const userDisplay = session.authorizedId || session.username || 'User';
+  const stateToken = req.cookies[STATE_COOKIE];
+  if (!stateToken) {
+    return res.json({ status: 'failure' });
+  }
+
+  try {
+    const state = decryptState(stateToken);
+    if (state.authorizedId) {
       return res.json({
         status: 'success',
-        message: `Welcome back, ${userDisplay}!`,
-        session_id,
-        username: userDisplay
+        message: `Welcome back, ${state.authorizedId}!`,
+        username: state.authorizedId
       });
     }
+  } catch (_e) {
+    // Token expired or invalid
   }
+
   return res.json({ status: 'failure' });
 };
 
-export const initLogin = async (req: Request, res: Response) => {
+export const initLogin = async (_req: Request, res: Response) => {
   console.log('\n[DEBUG] Initiating new login session...');
   try {
-    const hasSavedCreds = !!req.cookies[COOKIE_NAME];
-    const { sessionId, captchaType, captchaImageData } = await startLogin();
+    const hasSavedCreds = !!_req.cookies[CREDS_COOKIE];
+    const { state, captchaType, captchaImageData } = await startLogin();
 
-    // 1. Set the cookie for backend session persistence
-    res.cookie('vtop_session_id', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
-    });
+    // Set state cookie (contains serialized jar + csrf)
+    setStateCookie(res, state);
 
-    // 2. MUST return session_id in JSON so React state doesn't break
     return res.json({
       status: 'captcha_ready',
-      session_id: sessionId,
       captcha_type: captchaType,
       captcha_image_data: captchaImageData,
       has_saved_creds: hasSavedCreds
@@ -64,28 +85,34 @@ export const initLogin = async (req: Request, res: Response) => {
 
 export const loginAttempt = async (req: Request, res: Response) => {
   const { username, password, captcha, gResponse } = req.body;
-  const session_id = req.cookies.vtop_session_id;
+  const stateToken = req.cookies[STATE_COOKIE];
 
-  if (!session_id || !sessionService.getSession(session_id)) {
+  if (!stateToken) {
     return res.status(400).json({ status: 'failure', message: 'Session expired.' });
   }
 
-  const result = await performVtopLogin(session_id, username, password, captcha, gResponse);
+  let state: VtopState;
+  try {
+    state = decryptState(stateToken);
+  } catch (_e) {
+    return res.status(400).json({ status: 'failure', message: 'Session expired.' });
+  }
 
-  if (result.success) {
-    // Encrypt and store credentials in HttpOnly Cookie (30 Days)
-    const token = encryptCredentials(username, password);
-    res.cookie(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 Days
+  const result = await performVtopLogin(state, username, password, captcha, gResponse);
+
+  if (result.success && result.updatedState) {
+    // Set updated state cookie (with authorizedId + fresh jar)
+    setStateCookie(res, result.updatedState);
+
+    // Store encrypted credentials for auto-login (30 days)
+    res.cookie(CREDS_COOKIE, encryptCredentials(username, password), {
+      ...COOKIE_OPTS,
+      maxAge: 30 * 24 * 60 * 60 * 1000
     });
 
     return res.json({
       status: 'success',
-      message: `Welcome, ${result.authorizedId}!`,
-      session_id
+      message: `Welcome, ${result.authorizedId}!`
     });
   } else {
     return res.json({
@@ -97,32 +124,38 @@ export const loginAttempt = async (req: Request, res: Response) => {
 
 export const autoLogin = async (req: Request, res: Response) => {
   const { captcha, gResponse } = req.body;
-  const session_id = req.cookies.vtop_session_id;
+  const stateToken = req.cookies[STATE_COOKIE];
+  const credsToken = req.cookies[CREDS_COOKIE];
 
-  if (!session_id || !sessionService.getSession(session_id)) {
+  if (!stateToken) {
     return res.status(400).json({ status: 'failure', message: 'Session expired.' });
   }
 
-  const cookieToken = req.cookies[COOKIE_NAME];
-  if (!cookieToken) {
+  if (!credsToken) {
     return res.status(400).json({ status: 'failure', message: 'No saved credentials.' });
   }
 
+  let state: VtopState;
   try {
-    const creds = decryptCredentials(cookieToken);
+    state = decryptState(stateToken);
+  } catch (_e) {
+    return res.status(400).json({ status: 'failure', message: 'Session expired.' });
+  }
+
+  try {
+    const creds = decryptCredentials(credsToken);
     const { u: username, p: password } = creds;
 
-    const result = await performVtopLogin(session_id, username, password, captcha, gResponse);
+    const result = await performVtopLogin(state, username, password, captcha, gResponse);
 
-    if (result.success) {
+    if (result.success && result.updatedState) {
+      setStateCookie(res, result.updatedState);
       return res.json({
         status: 'success',
-        message: `Welcome back, ${result.authorizedId}!`,
-        session_id
+        message: `Welcome back, ${result.authorizedId}!`
       });
     } else if (result.code === 'invalid_credentials') {
-      // Clear cookie if saved credentials are wrong
-      res.clearCookie(COOKIE_NAME);
+      res.clearCookie(CREDS_COOKIE);
       return res.json({
         status: result.code,
         message: result.message
@@ -135,21 +168,16 @@ export const autoLogin = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      res.clearCookie(COOKIE_NAME);
+      res.clearCookie(CREDS_COOKIE);
       return res.status(400).json({ status: 'failure', message: 'Invalid credentials cookie.' });
     }
     return res.status(500).json({ status: 'error', message: error.message || 'Internal Server Error' });
   }
 };
 
-export const logout = async (req: Request, res: Response) => {
-  const session_id = req.cookies.vtop_session_id;
-  if (session_id) {
-    sessionService.deleteSession(session_id);
-  }
-
-  res.clearCookie(COOKIE_NAME);
-  res.clearCookie('vtop_session_id');
+export const logout = async (_req: Request, res: Response) => {
+  res.clearCookie(CREDS_COOKIE);
+  res.clearCookie(STATE_COOKIE);
   return res.json({ status: 'success' });
 };
 

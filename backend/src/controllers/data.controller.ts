@@ -1,15 +1,76 @@
 import { Request, Response } from 'express';
-import { getSessionDetails } from '../services/vtop.service';
+import jwt from 'jsonwebtoken';
+import { getSessionDetails, VtopState } from '../services/vtop.service';
 import * as parsers from '../services/parsers.service';
 import fs from 'fs';
 import path from 'path';
 
-export const getSemesters = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+const JWT_SECRET = process.env.JWT_SECRET || 'vtopc_default_jwt_secret_key_change_this_in_prod';
+const STATE_COOKIE = 'vtop_state';
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const
+};
 
+// --- Helpers ---
+
+function decryptState(token: string): VtopState {
+  const decoded = jwt.verify(token, JWT_SECRET) as { s: VtopState };
+  return decoded.s;
+}
+
+function encryptState(state: VtopState): string {
+  return jwt.sign({ s: state }, JWT_SECRET, { expiresIn: '1h' });
+}
+
+function setStateCookie(res: Response, state: VtopState): void {
+  res.cookie(STATE_COOKIE, encryptState(state), COOKIE_OPTS);
+}
+
+/**
+ * Extract VTOP state from the encrypted cookie.
+ * Throws if cookie is missing or invalid.
+ */
+function extractVtopState(req: Request): VtopState {
+  const stateToken = req.cookies[STATE_COOKIE];
+  if (!stateToken) {
+    throw new Error('Session expired or invalid.');
+  }
+  return decryptState(stateToken);
+}
+
+/**
+ * Shared wrapper for data endpoints:
+ * 1. Extract state from cookie
+ * 2. Get authenticated client
+ * 3. Update state cookie with refreshed jar
+ */
+async function withSession(req: Request, res: Response): Promise<{
+  client: any;
+  authorizedId: string;
+  csrfToken: string;
+} | null> {
+  try {
+    const state = extractVtopState(req);
+    const details = await getSessionDetails(state);
+    // Persist updated state (jar may have new cookies from VTOP)
+    setStateCookie(res, details.updatedState);
+    return { client: details.client, authorizedId: details.authorizedId, csrfToken: details.csrfToken };
+  } catch (error: any) {
+    res.status(401).json({ status: 'error', message: error.message || 'Session expired or invalid.' });
+    return null;
+  }
+}
+
+// --- Data Controllers ---
+
+export const getSemesters = async (req: Request, res: Response) => {
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
+
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -24,8 +85,6 @@ export const getSemesters = async (req: Request, res: Response) => {
     });
 
     console.log('[DEBUG] getSemesters response length:', response.data.length);
-    console.log('[DEBUG] Contains select#semesterSubId:', response.data.includes('semesterSubId'));
-    console.log('[DEBUG] Contains vtopLoginForm:', response.data.includes('vtopLoginForm'));
 
     if (response.data.includes('vtopLoginForm') || response.data.includes('Login') || response.data.includes('login')) {
       return res.status(401).json({ status: 'error', message: 'Session expired or invalid.' });
@@ -53,12 +112,13 @@ export const getSemesters = async (req: Request, res: Response) => {
 };
 
 export const getTimetable = async (req: Request, res: Response) => {
-  const { session_id, isSaturday, includeDayOrder } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
+  const { isSaturday, includeDayOrder } = req.body;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -71,17 +131,8 @@ export const getTimetable = async (req: Request, res: Response) => {
     const parsedData = parsers.parseCourseData(response.data) as any;
 
     if (isSaturday || includeDayOrder) {
-      // Get all semesters for fallback switcher
-      const session = sessionService.getSession(session_id);
-      let allSemesters: any[] = [];
-      if (session) {
-        if (!session.semestersList || session.semestersList.length === 0) {
-          const semesters = await fetchSemestersList(client, authorizedId, csrfToken);
-          sessionService.updateSession(session_id, { semestersList: semesters });
-          session.semestersList = semesters;
-        }
-        allSemesters = session.semestersList || [];
-      }
+      // Fetch semesters list fresh (no longer cached in-memory)
+      const allSemesters = await fetchSemestersList(client, authorizedId, csrfToken);
 
       // Calculate upcoming Saturday's date
       const now = new Date();
@@ -113,7 +164,7 @@ export const getTimetable = async (req: Request, res: Response) => {
       });
       let calData = parsers.parseAcademicCalendar(calRes.data);
 
-      // Backend Fallback Semester Loop (Step 3)
+      // Backend Fallback Semester Loop
       if (!hasMeaningfulEvents(calData) && allSemesters.length > 0) {
         console.log(`[SATURDAY PATCH] Calendar date ${satDateStr} empty for sem ${targetSemId}. Checking fallbacks...`);
         for (const sem of allSemesters) {
@@ -138,7 +189,7 @@ export const getTimetable = async (req: Request, res: Response) => {
               console.log(`[SATURDAY PATCH] Auto-switched to sem: ${sem.id}`);
               break;
             }
-          } catch (e) {
+          } catch (_e) {
             continue;
           }
         }
@@ -177,12 +228,12 @@ export const getTimetable = async (req: Request, res: Response) => {
 };
 
 export const getAttendance = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -201,12 +252,13 @@ export const getAttendance = async (req: Request, res: Response) => {
 };
 
 export const getAttendanceDetail = async (req: Request, res: Response) => {
-  const { session_id, classId, slot } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
+  const { classId, slot } = req.body;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -227,12 +279,12 @@ export const getAttendanceDetail = async (req: Request, res: Response) => {
 };
 
 export const getMarks = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -366,12 +418,12 @@ export const getMarks = async (req: Request, res: Response) => {
 };
 
 export const getGrades = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -419,12 +471,12 @@ export const getGrades = async (req: Request, res: Response) => {
 };
 
 export const getExams = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -443,11 +495,11 @@ export const getExams = async (req: Request, res: Response) => {
 };
 
 export const getProfile = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('verifyMenu', 'true');
     payload.append('authorizedID', authorizedId);
@@ -538,29 +590,17 @@ async function fetchSemestersList(client: any, authorizedId: string, csrfToken: 
   }
 }
 
-import { sessionService } from '../services/session.service';
-
 export const getCalendar = async (req: Request, res: Response) => {
-  const { session_id, calDate } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
+  const { calDate } = req.body;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
+
   try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+    // Fetch semesters list fresh
+    const allSemesters = await fetchSemestersList(client, authorizedId, csrfToken);
 
-    const session = sessionService.getSession(session_id);
-    if (!session) {
-      throw new Error('Session not found in service.');
-    }
-
-    // --- 0. Fetch & Cache Semester List ---
-    if (!session.semestersList || session.semestersList.length === 0) {
-      const semesters = await fetchSemestersList(client, authorizedId, csrfToken);
-      sessionService.updateSession(session_id, { semestersList: semesters });
-      session.semestersList = semesters;
-    }
-    const allSemesters = session.semestersList || [];
-
-    // --- 1. Cache Lookup for Target Semester ---
     let dateStr = calDate;
     if (!dateStr) {
       const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -570,22 +610,9 @@ export const getCalendar = async (req: Request, res: Response) => {
       dateStr = `01-${monthStr}-${year}`;
     }
 
-    const monthKey = dateStr;
     let targetSemId = semesterSubId;
 
-    if (!session.calendarCache) {
-      session.calendarCache = {};
-    }
-
-    const cachedSem = session.calendarCache[monthKey];
-    if (cachedSem && (!semesterSubId || semesterSubId === cachedSem)) {
-      console.log(`[DEBUG] Cache Hit: Using semester ${cachedSem} for ${monthKey}`);
-      targetSemId = cachedSem;
-    } else {
-      targetSemId = semesterSubId;
-    }
-
-    // --- 2. Fetch Calendar ---
+    // Fetch Calendar
     let selectedGroup = await getClassGroupId(client, authorizedId, csrfToken, targetSemId);
     
     let payload = new URLSearchParams();
@@ -603,7 +630,7 @@ export const getCalendar = async (req: Request, res: Response) => {
     let parsedData = parsers.parseAcademicCalendar(response.data);
     let newSemesterId: string | null = null;
 
-    // --- 3. Auto-Switch Logic (If Empty) ---
+    // Auto-Switch Logic (If Empty)
     if (!hasMeaningfulEvents(parsedData)) {
       console.log(`[DEBUG] Month ${dateStr} appears empty for sem ${targetSemId}. Checking others...`);
       for (const sem of allSemesters) {
@@ -628,22 +655,15 @@ export const getCalendar = async (req: Request, res: Response) => {
             targetSemId = sem.id;
             newSemesterId = sem.id;
             console.log(`[DEBUG] Auto-switched calendar semester to: ${sem.name || sem.id}`);
-            if (session.calendarCache) {
-              session.calendarCache[monthKey] = sem.id;
-            }
             break;
           }
-        } catch (e) {
+        } catch (_e) {
           continue;
         }
       }
-    } else {
-      if (session.calendarCache) {
-        session.calendarCache[monthKey] = targetSemId;
-      }
     }
 
-    // --- 4. Merge Exams (From ALL Semesters) ---
+    // Merge Exams (From ALL Semesters)
     try {
       const monthsMap: Record<string, number> = {
         JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
@@ -697,7 +717,7 @@ export const getCalendar = async (req: Request, res: Response) => {
                   }
                 }
               }
-            } catch (exErr) {
+            } catch (_exErr) {
               continue;
             }
           }
@@ -722,11 +742,11 @@ export const getCalendar = async (req: Request, res: Response) => {
 };
 
 export const getCredentials = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('verifyMenu', 'true');
     payload.append('authorizedID', authorizedId);
@@ -746,11 +766,11 @@ export const getCredentials = async (req: Request, res: Response) => {
 };
 
 export const getDebugData = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -775,12 +795,12 @@ export const getDebugData = async (req: Request, res: Response) => {
 };
 
 export const getODSnapshot = async (req: Request, res: Response) => {
-  const { session_id } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
   const semesterSubId = (req.body.semesterId || req.body.semesterSubId || req.query.semesterId || req.query.semesterSubId) as string;
-  try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
 
+  try {
     const payload = new URLSearchParams();
     payload.append('authorizedID', authorizedId);
     payload.append('_csrf', csrfToken);
@@ -814,7 +834,7 @@ export const getODSnapshot = async (req: Request, res: Response) => {
             totalOd += isLab ? 2 : 1;
           }
         }
-      } catch (err) {
+      } catch (_err) {
         // Ignore individual failures
       }
     }
@@ -830,16 +850,16 @@ export const getODSnapshot = async (req: Request, res: Response) => {
 };
 
 export const searchFaculty = async (req: Request, res: Response) => {
-  const { session_id, empId } = req.body;
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
+  const { empId } = req.body;
   
   if (!empId) {
     return res.status(400).json({ status: 'error', message: 'Employee ID is required.' });
   }
 
   try {
-    const details = await getSessionDetails(session_id);
-    const { client, authorizedId, csrfToken } = details;
-
     const payload = new URLSearchParams();
     payload.append('_csrf', csrfToken);
     payload.append('authorizedID', authorizedId);

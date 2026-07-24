@@ -66,7 +66,6 @@ const TIMETABLE_SLOTS = [
 type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses' | 'faculty';
 type StartLoginResponse = {
   status: 'captcha_ready';
-  session_id: string;
   captcha_type?: number;
   captcha_image_data?: string;
   has_saved_creds: boolean;
@@ -83,9 +82,7 @@ function VtopLoginDashboard() {
   const [activeSemester, setActiveSemester] = useState<string>('');
   
   // Auth state
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return !!localStorage.getItem('vtop_session_id');
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeUser, setActiveUser] = useState(() => {
     return localStorage.getItem('vtop_username') || '';
   });
@@ -94,9 +91,6 @@ function VtopLoginDashboard() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [captcha, setCaptcha] = useState('');
-  const [sessionId, setSessionId] = useState<string | null>(() => {
-    return localStorage.getItem('vtop_session_id');
-  });
   
   const [showManualForm, setShowManualForm] = useState(false);
   const [showCaptchaUI, setShowCaptchaUI] = useState(false);
@@ -135,14 +129,13 @@ function VtopLoginDashboard() {
     return () => {
       delete (window as any).onRecaptchaSolved;
     };
-  }, [sessionId, username, password, showManualForm, hasSavedCreds]);
+  }, [username, password, showManualForm, hasSavedCreds]);
 
   // Check session on mount
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
-    const localSessionId = localStorage.getItem('vtop_session_id');
     const localUsername = localStorage.getItem('vtop_username');
     const explicitLogout = localStorage.getItem('vtop_explicit_logout') === 'true';
 
@@ -152,38 +145,30 @@ function VtopLoginDashboard() {
       return;
     }
 
-    if (localSessionId) {
-      setSessionId(localSessionId);
-      setIsLoggedIn(true);
-      if (localUsername) {
-        setActiveUser(localUsername);
-      }
-      
-      // Verify session integrity
-      api.post('/auth/check-session', { session_id: localSessionId })
-        .then((res) => {
-          if (res.data.status === 'success') {
-            if (res.data.username) {
-              setActiveUser(res.data.username);
-              localStorage.setItem('vtop_username', res.data.username);
-            }
-          } else {
-            console.log("Session verification failed, attempting silent background autologin...");
-            setIsRestoringSession(true);
-            triggerSilentAutoLoginAttempt();
-          }
-        })
-        .catch((err) => {
-          if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-            console.log("Session expired on server (401), restoring silently...");
-            setIsRestoringSession(true);
-            triggerSilentAutoLoginAttempt();
-          }
-        });
-    } else {
-      setIsRestoringSession(true);
-      startLoginFlow(true);
+    if (localUsername) {
+      setActiveUser(localUsername);
     }
+    
+    // Verify session integrity via HttpOnly cookie
+    api.post('/auth/check-session')
+      .then((res) => {
+        if (res.data.status === 'success') {
+          setIsLoggedIn(true);
+          if (res.data.username) {
+            setActiveUser(res.data.username);
+            localStorage.setItem('vtop_username', res.data.username);
+          }
+        } else {
+          console.log("Session verification failed, attempting silent background autologin...");
+          setIsRestoringSession(true);
+          triggerSilentAutoLoginAttempt();
+        }
+      })
+      .catch((_err) => {
+        console.log("Session expired on server (401), restoring silently...");
+        setIsRestoringSession(true);
+        triggerSilentAutoLoginAttempt();
+      });
   }, []);
 
   // Axios interceptor for live 401 recovery
@@ -244,11 +229,9 @@ function VtopLoginDashboard() {
     try {
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready') {
-        const currentSessionId = res.data.session_id;
         const currentCaptchaType = res.data.captcha_type || 1;
         const credsAvailable = res.data.has_saved_creds;
 
-        setSessionId(currentSessionId);
         setCaptchaType(currentCaptchaType);
         setCaptchaImg(res.data.captcha_image_data || '');
         setHasSavedCreds(credsAvailable);
@@ -267,8 +250,7 @@ function VtopLoginDashboard() {
             setCaptcha(solvedText);
             if (autoTriggerAfterInit && credsAvailable) {
               autoLoginMutation.mutate({
-                captchaText: solvedText,
-                currentSessionId: currentSessionId
+                captchaText: solvedText
               });
             }
           } catch (solveError: any) {
@@ -305,17 +287,15 @@ function VtopLoginDashboard() {
       setIsCaptchaSolving(true);
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready') {
-        setSessionId(res.data.session_id);
         setCaptchaImg(res.data.captcha_image_data || null);
 
         try {
           const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
           setCaptcha(solvedText);
           loginMutation.mutate({
-            captchaText: solvedText,
-            currentSessionId: res.data.session_id
+            captchaText: solvedText
           });
-        } catch (solveErr) {
+        } catch (_solveErr) {
           if (manualLoginRetryCount.current < MAX_RETRIES) {
             manualLoginRetryCount.current++;
             triggerSilentLoginAttempt();
@@ -336,9 +316,7 @@ function VtopLoginDashboard() {
     console.warn('[AutoLogin] Failure:', reason);
     autoLoginRetryCount.current = 0;
     autoLoginPromiseRef.current = null;
-    localStorage.removeItem('vtop_session_id');
     localStorage.removeItem('vtop_username');
-    setSessionId(null);
     setIsLoggedIn(false);
     setIsRestoringSession(false);
     setIsCaptchaSolving(false);
@@ -362,8 +340,6 @@ function VtopLoginDashboard() {
 
         const res = await api.post<StartLoginResponse>('/auth/start-login');
         if (res.data.status === 'captcha_ready') {
-          const currentSessionId = res.data.session_id;
-          setSessionId(currentSessionId);
           setCaptchaImg(res.data.captcha_image_data || null);
 
           if (!res.data.has_saved_creds) {
@@ -376,8 +352,7 @@ function VtopLoginDashboard() {
             setCaptcha(solvedText);
 
             const loginResult = await autoLoginMutation.mutateAsync({
-              captchaText: solvedText,
-              currentSessionId: currentSessionId
+              captchaText: solvedText
             });
 
             if (loginResult && loginResult.status === 'success') {
@@ -391,7 +366,7 @@ function VtopLoginDashboard() {
               handleAutoLoginFailure(loginResult?.message || 'Auto-login session expired.');
               return false;
             }
-          } catch (solveErr: any) {
+          } catch (_solveErr: any) {
             if (autoLoginRetryCount.current < MAX_RETRIES) {
               autoLoginRetryCount.current++;
               autoLoginPromiseRef.current = null;
@@ -444,47 +419,39 @@ function VtopLoginDashboard() {
   };
 
   const handleRecaptchaCallback = (token: string) => {
-    if (!sessionId) return;
     if (hasSavedCreds && !showManualForm) {
       autoLoginMutation.mutate({
         captchaText: '',
-        gResponse: token,
-        currentSessionId: sessionId
+        gResponse: token
       });
     } else {
       loginMutation.mutate({
         captchaText: '',
-        gResponse: token,
-        currentSessionId: sessionId
+        gResponse: token
       });
     }
   };
 
   // Login mutation
   const loginMutation = useMutation({
-    mutationFn: async ({ captchaText, gResponse, currentSessionId }: { captchaText: string; gResponse?: string; currentSessionId: string }) => {
+    mutationFn: async ({ captchaText, gResponse }: { captchaText: string; gResponse?: string }) => {
       setMessage({ text: 'Authenticating with VTOP...', type: 'info' });
       const res = await api.post('/auth/login-attempt', {
         username,
         password,
         captcha: captchaText,
-        gResponse,
-        session_id: currentSessionId
+        gResponse
       });
       return res.data;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data) => {
       if (data.status === 'success') {
         localStorage.removeItem('vtop_explicit_logout');
         setIsLoggedIn(true);
         setActiveUser(username);
         manualLoginRetryCount.current = 0;
         setMessage({ text: data.message, type: 'success' });
-        if (variables.currentSessionId) {
-          setSessionId(variables.currentSessionId);
-          localStorage.setItem('vtop_session_id', variables.currentSessionId);
-          localStorage.setItem('vtop_username', username);
-        }
+        localStorage.setItem('vtop_username', username);
         setTimeout(() => setMessage(null), 3000);
       } else if (data.status === 'invalid_captcha') {
         safeResetRecaptcha();
@@ -515,33 +482,28 @@ function VtopLoginDashboard() {
 
   // Auto Login mutation
   const autoLoginMutation = useMutation({
-    mutationFn: async ({ captchaText, gResponse, currentSessionId }: { captchaText: string; gResponse?: string; currentSessionId: string }) => {
+    mutationFn: async ({ captchaText, gResponse }: { captchaText: string; gResponse?: string }) => {
       setMessage({ text: 'Performing background autologin...', type: 'info' });
       const res = await api.post('/auth/auto-login', {
         captcha: captchaText,
-        gResponse,
-        session_id: currentSessionId
+        gResponse
       });
       return res.data;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data) => {
       if (data.status === 'success') {
         localStorage.removeItem('vtop_explicit_logout');
         setIsLoggedIn(true);
         setIsRestoringSession(false);
         autoLoginRetryCount.current = 0;
         setMessage({ text: data.message, type: 'success' });
-        if (variables.currentSessionId) {
-          setSessionId(variables.currentSessionId);
-          localStorage.setItem('vtop_session_id', variables.currentSessionId);
-          api.post('/auth/check-session', { session_id: variables.currentSessionId })
-            .then(res => {
-              if (res.data.username) {
-                setActiveUser(res.data.username);
-                localStorage.setItem('vtop_username', res.data.username);
-              }
-            });
-        }
+        api.post('/auth/check-session')
+          .then(res => {
+            if (res.data.username) {
+              setActiveUser(res.data.username);
+              localStorage.setItem('vtop_username', res.data.username);
+            }
+          });
         setTimeout(() => setMessage(null), 3000);
         queryClient.refetchQueries();
       }
@@ -558,7 +520,6 @@ function VtopLoginDashboard() {
       setIsRestoringSession(false);
       setActiveUser('');
       localStorage.setItem('vtop_explicit_logout', 'true');
-      localStorage.removeItem('vtop_session_id');
       localStorage.removeItem('vtop_username');
 
       // Clear cache on logout
@@ -585,8 +546,7 @@ function VtopLoginDashboard() {
     } else {
       if (!captcha) return;
       loginMutation.mutate({
-        captchaText: captcha,
-        currentSessionId: sessionId || ''
+        captchaText: captcha
       });
     }
   };
@@ -598,15 +558,14 @@ function VtopLoginDashboard() {
     } else {
       if (isCaptchaSolving) return;
       autoLoginMutation.mutate({
-        captchaText: captcha,
-        currentSessionId: sessionId || ''
+        captchaText: captcha
       });
     }
   };
 
   // Data Queries (Student Information)
   const semestersQuery = useQuery({
-    queryKey: ['semesters', sessionId],
+    queryKey: ['semesters', activeUser],
     queryFn: async () => {
       const res = await getSemesters();
       const sems = res.data.semesters || [];
@@ -620,7 +579,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !isRestoringSession
+    enabled: isLoggedIn && !isRestoringSession
   });
 
   // Set default active semester when semesters list loads
@@ -656,7 +615,7 @@ function VtopLoginDashboard() {
   });
 
   const timetableQuery = useQuery({
-    queryKey: ['timetable', sessionId, activeSemester],
+    queryKey: ['timetable', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getTimetable(activeSemester);
       const data = res.data.raw_data;
@@ -670,11 +629,11 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const attendanceQuery = useQuery({
-    queryKey: ['attendance', sessionId, activeSemester],
+    queryKey: ['attendance', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getAttendance(activeSemester);
       const data = res.data.raw_data || [];
@@ -688,20 +647,20 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : [];
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const attendanceDetailQuery = useQuery({
-    queryKey: ['attendance-detail', sessionId, activeSemester, selectedAttendanceCourse?.class_id, selectedAttendanceCourse?.slot_param],
+    queryKey: ['attendance-detail', activeUser, activeSemester, selectedAttendanceCourse?.class_id, selectedAttendanceCourse?.slot_param],
     queryFn: async () => {
       const res = await getAttendanceDetail(activeSemester, selectedAttendanceCourse.class_id, selectedAttendanceCourse.slot_param);
       return res.data.raw_data as any[];
     },
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!selectedAttendanceCourse && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!selectedAttendanceCourse && !isRestoringSession
   });
 
   const marksQuery = useQuery({
-    queryKey: ['marks', sessionId, activeSemester],
+    queryKey: ['marks', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getMarks(activeSemester);
       const data = res.data.raw_data;
@@ -715,11 +674,11 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const gradesQuery = useQuery({
-    queryKey: ['grades', sessionId, activeSemester],
+    queryKey: ['grades', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getGrades(activeSemester);
       const data = res.data.raw_data;
@@ -733,11 +692,11 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const examsQuery = useQuery({
-    queryKey: ['exams', sessionId, activeSemester],
+    queryKey: ['exams', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getExams(activeSemester);
       const data = res.data.raw_data || [];
@@ -751,7 +710,7 @@ function VtopLoginDashboard() {
       return cached ? JSON.parse(cached) : [];
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const credentialsQuery = useQuery({
@@ -773,7 +732,7 @@ function VtopLoginDashboard() {
   });
 
   const odSnapshotQuery = useQuery({
-    queryKey: ['od-snapshot', sessionId, activeSemester],
+    queryKey: ['od-snapshot', activeUser, activeSemester],
     queryFn: async () => {
       const res = await getODSnapshot(activeSemester);
       const count = res.data.total_od_count;
@@ -785,7 +744,7 @@ function VtopLoginDashboard() {
       return cached ? { total_od_count: JSON.parse(cached) } : undefined;
     },
     initialDataUpdatedAt: 0,
-    enabled: isLoggedIn && !!sessionId && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
+    enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
   const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
