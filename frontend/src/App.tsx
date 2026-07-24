@@ -41,7 +41,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: false,
       staleTime: 5 * 60 * 1000, // 5 minutes
     }
   }
@@ -112,6 +112,7 @@ function VtopLoginDashboard() {
   const autoLoginRetryCount = useRef(0);
   const manualLoginRetryCount = useRef(0);
   const initRef = useRef(false);
+  const autoLoginPromiseRef = useRef<Promise<boolean> | null>(null);
 
   // Toggle theme
   useEffect(() => {
@@ -200,10 +201,13 @@ function VtopLoginDashboard() {
         ) {
           originalRequest._retry = true;
           console.log("[Interceptor] VTOP session dropped. Recovering session in background...");
-          setIsRestoringSession(true);
           try {
-            await triggerSilentAutoLoginAttempt();
-            return api(originalRequest);
+            const success = await triggerSilentAutoLoginAttempt();
+            if (success) {
+              return api(originalRequest);
+            } else {
+              return Promise.reject(error);
+            }
           } catch (retryErr) {
             return Promise.reject(retryErr);
           }
@@ -328,40 +332,91 @@ function VtopLoginDashboard() {
     }
   };
 
-  // Silent retry logic for auto login
-  const triggerSilentAutoLoginAttempt = async () => {
-    try {
-      setIsCaptchaSolving(true);
-      const res = await api.post<StartLoginResponse>('/auth/start-login');
-      if (res.data.status === 'captcha_ready') {
-        setSessionId(res.data.session_id);
-        setCaptchaImg(res.data.captcha_image_data || null);
+  const handleAutoLoginFailure = (reason: string) => {
+    console.warn('[AutoLogin] Failure:', reason);
+    autoLoginRetryCount.current = 0;
+    autoLoginPromiseRef.current = null;
+    localStorage.removeItem('vtop_session_id');
+    localStorage.removeItem('vtop_username');
+    setSessionId(null);
+    setIsLoggedIn(false);
+    setIsRestoringSession(false);
+    setIsCaptchaSolving(false);
+    setShowManualForm(true);
+    setShowCaptchaUI(true);
+    setMessage({ text: reason, type: 'error' });
+    safeResetRecaptcha();
+    startLoginFlow(false);
+  };
 
-        try {
-          const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
-          setCaptcha(solvedText);
-          autoLoginMutation.mutate({
-            captchaText: solvedText,
-            currentSessionId: res.data.session_id
-          });
-        } catch (solveErr) {
-          if (autoLoginRetryCount.current < MAX_RETRIES) {
-            autoLoginRetryCount.current++;
-            triggerSilentAutoLoginAttempt();
-          } else {
-            setIsRestoringSession(false);
-            setIsLoggedIn(false);
-            setShowManualForm(true);
-            setShowCaptchaUI(true);
-            setMessage({ text: 'Background CAPTCHA solving failed. Sign in manually.', type: 'error' });
-            setIsCaptchaSolving(false);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Silent auto start-login failed:", err);
-      setIsRestoringSession(false);
+  // Silent retry logic for auto login with single-concurrency lock
+  const triggerSilentAutoLoginAttempt = async (): Promise<boolean> => {
+    if (autoLoginPromiseRef.current) {
+      return autoLoginPromiseRef.current;
     }
+
+    const promise = (async (): Promise<boolean> => {
+      try {
+        setIsCaptchaSolving(true);
+        setIsRestoringSession(true);
+
+        const res = await api.post<StartLoginResponse>('/auth/start-login');
+        if (res.data.status === 'captcha_ready') {
+          const currentSessionId = res.data.session_id;
+          setSessionId(currentSessionId);
+          setCaptchaImg(res.data.captcha_image_data || null);
+
+          if (!res.data.has_saved_creds) {
+            handleAutoLoginFailure('No saved credentials found. Sign in manually.');
+            return false;
+          }
+
+          try {
+            const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
+            setCaptcha(solvedText);
+
+            const loginResult = await autoLoginMutation.mutateAsync({
+              captchaText: solvedText,
+              currentSessionId: currentSessionId
+            });
+
+            if (loginResult && loginResult.status === 'success') {
+              autoLoginRetryCount.current = 0;
+              return true;
+            } else if (loginResult && loginResult.status === 'invalid_captcha' && autoLoginRetryCount.current < MAX_RETRIES) {
+              autoLoginRetryCount.current++;
+              autoLoginPromiseRef.current = null;
+              return await triggerSilentAutoLoginAttempt();
+            } else {
+              handleAutoLoginFailure(loginResult?.message || 'Auto-login session expired.');
+              return false;
+            }
+          } catch (solveErr: any) {
+            if (autoLoginRetryCount.current < MAX_RETRIES) {
+              autoLoginRetryCount.current++;
+              autoLoginPromiseRef.current = null;
+              return await triggerSilentAutoLoginAttempt();
+            } else {
+              handleAutoLoginFailure('Background CAPTCHA verification failed. Sign in manually.');
+              return false;
+            }
+          }
+        } else {
+          handleAutoLoginFailure('VTOP connection failed. Sign in manually.');
+          return false;
+        }
+      } catch (err: any) {
+        console.error("Silent auto start-login error:", err);
+        handleAutoLoginFailure(err.response?.data?.message || 'Auto-login network error.');
+        return false;
+      } finally {
+        setIsCaptchaSolving(false);
+        autoLoginPromiseRef.current = null;
+      }
+    })();
+
+    autoLoginPromiseRef.current = promise;
+    return promise;
   };
 
   const triggerGoogleReCAPTCHA = () => {
@@ -488,39 +543,8 @@ function VtopLoginDashboard() {
             });
         }
         setTimeout(() => setMessage(null), 3000);
-        
-        // Refresh queries on dynamic session restore success!
         queryClient.refetchQueries();
-      } else if (data.status === 'invalid_captcha') {
-        safeResetRecaptcha();
-        if (autoLoginRetryCount.current < MAX_RETRIES) {
-          autoLoginRetryCount.current++;
-          triggerSilentAutoLoginAttempt();
-        } else {
-          setIsRestoringSession(false);
-          setIsLoggedIn(false);
-          setShowManualForm(true);
-          setShowCaptchaUI(true);
-          setMessage({ text: 'Auto-login CAPTCHA solver failed. Sign in manually.', type: 'error' });
-        }
-      } else {
-        setIsRestoringSession(false);
-        setIsLoggedIn(false);
-        setShowManualForm(true);
-        setShowCaptchaUI(true);
-        setMessage({ text: data.message || 'Auto-login expired.', type: 'error' });
-        safeResetRecaptcha();
       }
-    },
-    onError: (err: any) => {
-      setIsRestoringSession(false);
-      setIsLoggedIn(false);
-      setShowManualForm(true);
-      setMessage({
-        text: err.response?.data?.message || 'Auto-login network error.',
-        type: 'error'
-      });
-      safeResetRecaptcha();
     }
   });
 
