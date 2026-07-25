@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCalendar } from '../lib/api';
@@ -61,6 +61,46 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
   });
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
+  // Carousel Touch & Animation States
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchTranslateX, setTouchTranslateX] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [targetOffsetPercent, setTargetOffsetPercent] = useState<number>(0);
+  const [_isAnimating, setIsAnimating] = useState<boolean>(false);
+  const [isSnapReset, setIsSnapReset] = useState<boolean>(false);
+
+  const isBusyRef = useRef(false);
+
+  const triggerShift = (dir: 'left' | 'right') => {
+    if (isBusyRef.current) return;
+    isBusyRef.current = true;
+
+    setIsAnimating(true);
+    setTouchTranslateX(0);
+    setTargetOffsetPercent(dir === 'left' ? -33.333333 : 33.333333);
+
+    setTimeout(() => {
+      // 1. Instantly disable transition for seamless panel swap
+      setIsSnapReset(true);
+      setIsAnimating(false);
+      setTargetOffsetPercent(0);
+
+      // 2. Advance calendar month state
+      setCalendarDate(prev => {
+        const nextMonthOffset = dir === 'left' ? 1 : -1;
+        return new Date(prev.getFullYear(), prev.getMonth() + nextMonthOffset, 1);
+      });
+
+      // 3. Re-enable transitions after browser paints the swap
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsSnapReset(false);
+          isBusyRef.current = false;
+        });
+      });
+    }, 250);
+  };
+
   // Initialize activeSemester on load
   useEffect(() => {
     if (semesters.length > 0 && !activeSemester) {
@@ -79,7 +119,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
     }
   }, [calendarDate, semesters]);
 
-  // Calendar query
+  // Calendar query for currently selected month
   const calendarQuery = useQuery({
     queryKey: ['calendar', activeUser, activeSemester, calendarDate.getMonth(), calendarDate.getFullYear()],
     queryFn: async () => {
@@ -112,8 +152,120 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
     enabled: !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!activeUser
   });
 
+  // Background buffer pre-fetch for ±1 month after current month completes loading
+  useEffect(() => {
+    if (calendarQuery.data && !calendarQuery.isFetching && activeSemester && activeUser) {
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+      const prefetchMonth = async (date: Date) => {
+        const targetSemId = findBestSemesterForDate(date, semesters) || activeSemester;
+        const monthIdx = date.getMonth();
+        const year = date.getFullYear();
+        const cacheKey = `vtop_cache_calendar_${targetSemId}_${monthIdx}_${year}`;
+        const genericKey = `vtop_cache_calendar_latest_${monthIdx}_${year}`;
+
+        if (!localStorage.getItem(cacheKey) && !localStorage.getItem(genericKey)) {
+          try {
+            const dateStr = `01-${months[monthIdx]}-${year}`;
+            console.log(`[Calendar Buffer Pre-fetch] Background fetching calendar for ${months[monthIdx]} ${year}...`);
+            const res = await getCalendar(targetSemId, dateStr);
+            const data = res.data?.raw_data;
+            if (data) {
+              localStorage.setItem(cacheKey, JSON.stringify(data));
+              localStorage.setItem(genericKey, JSON.stringify(data));
+            }
+          } catch (_err) {
+            console.warn(`[Calendar Buffer Pre-fetch] Failed to pre-fetch calendar for ${months[monthIdx]} ${year}`);
+          }
+        }
+      };
+
+      const prevMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+      const nextMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+
+      prefetchMonth(prevMonth);
+      prefetchMonth(nextMonth);
+    }
+  }, [calendarQuery.data, calendarQuery.isFetching, calendarDate, activeSemester, activeUser, semesters]);
+
+  // Touch Drag & Swipe Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (isBusyRef.current) return;
+    setTouchStartX(e.targetTouches[0].clientX);
+    setIsDragging(true);
+    setIsAnimating(false);
+    setIsSnapReset(false);
+    setTouchTranslateX(0);
+    setTargetOffsetPercent(0);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX === null || isBusyRef.current) return;
+    const currentX = e.targetTouches[0].clientX;
+    const deltaX = currentX - touchStartX;
+    setTouchTranslateX(deltaX);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX === null || isBusyRef.current) return;
+    
+    const dragDistance = touchTranslateX;
+    setTouchStartX(null);
+    setIsDragging(false);
+
+    if (dragDistance < -40) {
+      // Swiped Left -> Smoothly animate to Next Month
+      triggerShift('left');
+    } else if (dragDistance > 40) {
+      // Swiped Right -> Smoothly animate to Previous Month
+      triggerShift('right');
+    } else {
+      // Release short -> Smoothly snap back to center
+      setIsAnimating(true);
+      setTouchTranslateX(0);
+      setTargetOffsetPercent(0);
+      setTimeout(() => {
+        setIsAnimating(false);
+      }, 200);
+    }
+  };
+
+  // Helper function to load cached month data for adjacent panels
+  const getMonthDataForDate = (date: Date) => {
+    const isCurrent = date.getMonth() === calendarDate.getMonth() && date.getFullYear() === calendarDate.getFullYear();
+    if (isCurrent && calendarQuery.data) {
+      return calendarQuery.data;
+    }
+    const targetSemId = findBestSemesterForDate(date, semesters) || activeSemester;
+    const cacheKey = `vtop_cache_calendar_${targetSemId}_${date.getMonth()}_${date.getFullYear()}`;
+    const genericKey = `vtop_cache_calendar_latest_${date.getMonth()}_${date.getFullYear()}`;
+    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(genericKey);
+    return cached ? JSON.parse(cached) : null;
+  };
+
+  const prevMonthDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+  const nextMonthDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+
+  const prevData = getMonthDataForDate(prevMonthDate);
+  const currData = calendarQuery.data;
+  const nextData = getMonthDataForDate(nextMonthDate);
+
+  // Determine transform & transition styling
+  const transformStyle = targetOffsetPercent !== 0
+    ? `translate3d(${targetOffsetPercent}%, 0, 0)`
+    : `translate3d(${touchTranslateX}px, 0, 0)`;
+
+  const transitionStyle = isSnapReset || isDragging
+    ? 'none'
+    : 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)';
+
   return (
-    <div className="space-y-6">
+    <div 
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="space-y-6 select-none overflow-hidden touch-pan-y"
+    >
       {!activeSemester || activeSemester === 'UNAVAILABLE' ? (
         <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
           <AlertTriangle className="h-12 w-12 text-textMuted mx-auto" />
@@ -134,10 +286,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
           {/* Header Controls for Month Selection */}
           <div className="flex justify-center items-center bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm space-x-6">
             <button
-              onClick={() => {
-                const prev = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
-                setCalendarDate(prev);
-              }}
+              onClick={() => triggerShift('right')}
               className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
               title="Previous Month"
             >
@@ -145,14 +294,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
             </button>
             
             <h3 className="font-extrabold text-textMain text-sm sm:text-base md:text-lg text-center min-w-[150px] uppercase tracking-wide">
-              {calendarQuery.data?.month_title || 'Calendar Month'}
+              {currData?.month_title || 'Calendar Month'}
             </h3>
             
             <button
-              onClick={() => {
-                const next = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
-                setCalendarDate(next);
-              }}
+              onClick={() => triggerShift('left')}
               className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
               title="Next Month"
             >
@@ -160,83 +306,121 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
             </button>
           </div>
 
-          {/* Calendar Grid */}
-          <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
-            <div className="grid grid-cols-7 border-b border-borderColor bg-bgPrimary font-bold text-center text-xs text-textMuted py-3">
-              <div>Sun</div>
-              <div>Mon</div>
-              <div>Tue</div>
-              <div>Wed</div>
-              <div>Thu</div>
-              <div>Fri</div>
-              <div>Sat</div>
-            </div>
-            
-            <div className="grid grid-cols-7 bg-borderColor dark:bg-borderColor/40 gap-px">
-              {calendarQuery.data?.days?.map((dayObj: any, index: number) => {
-                const isPadding = dayObj.status === 'padding' || !dayObj.day;
-                const isHoliday = dayObj.status === 'holiday';
-                const isWorking = dayObj.status === 'working';
-                const isDayOrder = dayObj.status === 'day_order';
-                const isExam = dayObj.status === 'exam';
+          {/* 3-Panel Continuous Calendar Track Container */}
+          <div className="w-full overflow-hidden">
+            <div 
+              style={{
+                transform: transformStyle,
+                transition: transitionStyle
+              }}
+              className="flex flex-row w-[300%] -ml-[100%]"
+            >
+              {/* Previous Month Panel */}
+              <div className="w-[33.333333%] shrink-0 px-2">
+                <CalendarMonthPanel data={prevData} />
+              </div>
 
-                if (isPadding) {
-                  return (
-                    <div 
-                      key={index} 
-                      className="bg-bgPrimary/30 min-h-[100px]" 
-                    />
-                  );
-                }
+              {/* Current Month Panel */}
+              <div className="w-[33.333333%] shrink-0 px-2">
+                <CalendarMonthPanel data={currData} />
+              </div>
 
-                let cellBg = 'bg-bgCard';
-                let textCls = 'text-textMuted';
-                let dateCls = 'text-textMuted/70';
-
-                if (isExam) {
-                  cellBg = 'bg-orange-100 dark:bg-orange-950/20';
-                  textCls = 'text-orange-800 dark:text-orange-400';
-                  dateCls = 'text-orange-600 dark:text-orange-400/80';
-                } else if (isWorking) {
-                  cellBg = 'bg-green-100 dark:bg-green-950/20';
-                  textCls = 'text-green-800 dark:text-green-400';
-                  dateCls = 'text-green-600 dark:text-green-400/80';
-                } else if (isDayOrder) {
-                  cellBg = 'bg-yellow-100 dark:bg-yellow-950/20';
-                  textCls = 'text-yellow-800 dark:text-yellow-400';
-                  dateCls = 'text-yellow-600 dark:text-yellow-400/80';
-                } else if (isHoliday) {
-                  cellBg = 'bg-red-100 dark:bg-red-950/20';
-                  textCls = 'text-red-800 dark:text-red-400';
-                  dateCls = 'text-red-600 dark:text-red-400/80';
-                }
-
-                return (
-                  <div 
-                    key={index} 
-                    className={`${cellBg} min-h-[100px] p-2 relative transition-all flex flex-col justify-between hover:brightness-95 dark:hover:brightness-110`}
-                  >
-                    <span className={`absolute top-2 left-2 text-sm font-extrabold ${dateCls}`}>
-                      {dayObj.day}
-                    </span>
-                    
-                    <div className="mt-6 flex-1 flex flex-col items-center justify-center space-y-1">
-                      {dayObj.events?.map((event: any, eventIdx: number) => (
-                        <p 
-                          key={eventIdx} 
-                          className={`text-[10px] font-bold text-center leading-tight ${textCls}`}
-                        >
-                          {event.text}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+              {/* Next Month Panel */}
+              <div className="w-[33.333333%] shrink-0 px-2">
+                <CalendarMonthPanel data={nextData} />
+              </div>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// Helper component rendering a single month calendar grid
+const CalendarMonthPanel: React.FC<{ data: any }> = ({ data }) => {
+  if (!data || !data.days) {
+    return (
+      <div className="h-64 flex items-center justify-center bg-bgCard border border-borderColor rounded-xl">
+        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
+      <div className="grid grid-cols-7 border-b border-borderColor bg-bgPrimary font-bold text-center text-xs text-textMuted py-3">
+        <div>Sun</div>
+        <div>Mon</div>
+        <div>Tue</div>
+        <div>Wed</div>
+        <div>Thu</div>
+        <div>Fri</div>
+        <div>Sat</div>
+      </div>
+      
+      <div className="grid grid-cols-7 bg-borderColor dark:bg-borderColor/40 gap-px">
+        {data.days.map((dayObj: any, index: number) => {
+          const isPadding = dayObj.status === 'padding' || !dayObj.day;
+          const isHoliday = dayObj.status === 'holiday';
+          const isWorking = dayObj.status === 'working';
+          const isDayOrder = dayObj.status === 'day_order';
+          const isExam = dayObj.status === 'exam';
+
+          if (isPadding) {
+            return (
+              <div 
+                key={index} 
+                className="bg-bgPrimary/30 min-h-[100px]" 
+              />
+            );
+          }
+
+          let cellBg = 'bg-bgCard';
+          let textCls = 'text-textMuted';
+          let dateCls = 'text-textMuted/70';
+
+          if (isExam) {
+            cellBg = 'bg-orange-100 dark:bg-orange-950/20';
+            textCls = 'text-orange-800 dark:text-orange-400';
+            dateCls = 'text-orange-600 dark:text-orange-400/80';
+          } else if (isWorking) {
+            cellBg = 'bg-green-100 dark:bg-green-950/20';
+            textCls = 'text-green-800 dark:text-green-400';
+            dateCls = 'text-green-600 dark:text-green-400/80';
+          } else if (isDayOrder) {
+            cellBg = 'bg-yellow-100 dark:bg-yellow-950/20';
+            textCls = 'text-yellow-800 dark:text-yellow-400';
+            dateCls = 'text-yellow-600 dark:text-yellow-400/80';
+          } else if (isHoliday) {
+            cellBg = 'bg-red-100 dark:bg-red-950/20';
+            textCls = 'text-red-800 dark:text-red-400';
+            dateCls = 'text-red-600 dark:text-red-400/80';
+          }
+
+          return (
+            <div 
+              key={index} 
+              className={`${cellBg} min-h-[100px] p-2 relative transition-all flex flex-col justify-between hover:brightness-95 dark:hover:brightness-110`}
+            >
+              <span className={`absolute top-2 left-2 text-sm font-extrabold ${dateCls}`}>
+                {dayObj.day}
+              </span>
+              
+              <div className="mt-6 flex-1 flex flex-col items-center justify-center space-y-1">
+                {dayObj.events?.map((event: any, eventIdx: number) => (
+                  <p 
+                    key={eventIdx} 
+                    className={`text-[10px] font-bold text-center leading-tight ${textCls}`}
+                  >
+                    {event.text}
+                  </p>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

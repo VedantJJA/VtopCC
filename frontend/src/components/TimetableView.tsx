@@ -41,6 +41,17 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
     return null;
   };
 
+  // Determine if Saturday has an instructional day / scheduled classes
+  const hasSaturday = (() => {
+    const satData = timetableQuery.data?.timetable?.['SAT'];
+    if (!satData) return false;
+    return Object.keys(satData).length > 0;
+  })();
+
+  const daysToRender = hasSaturday 
+    ? ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+    : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+
   return (
     <div className="space-y-6">
       {timetableQuery.isPending && !timetableQuery.data ? (
@@ -90,7 +101,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
                   </tr>
                 </thead>
                 <tbody>
-                  {['MON', 'TUE', 'WED', 'THU', 'FRI'].map(day => (
+                  {daysToRender.map(day => (
                     <tr key={day} className="border-b border-borderColor hover:bg-bgPrimary/50">
                       <td className="p-4 font-bold text-center bg-bgPrimary border-r border-borderColor text-textMain">{day}</td>
                       {TIMETABLE_SLOTS.map((slot, slotIdx) => {
