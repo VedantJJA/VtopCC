@@ -16,7 +16,8 @@ services:
       - key: ADMIN_ROLL_NUMBERS
         value: 25BCE5232
 
-  - type: static
+  - type: web
+    env: static
     name: vtopcc
     buildCommand: npm install && npm run build
     staticPublishPath: dist
