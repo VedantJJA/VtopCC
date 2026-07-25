@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import authRouter from './routes/auth.routes';
 import dataRouter from './routes/data.routes';
+import adminRouter from './routes/admin.routes';
 
 dotenv.config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -27,6 +28,7 @@ app.get('/health', (_req, res) => {
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/data', dataRouter);
+app.use('/api/admin', adminRouter);
 
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

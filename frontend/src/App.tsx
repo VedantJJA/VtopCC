@@ -15,7 +15,8 @@ import api, {
   getAttendanceDetail, 
   getMarks, 
   getGrades, 
-  getExams 
+  getExams,
+  checkIsAdmin
 } from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
 import { 
@@ -36,6 +37,9 @@ import { CalendarView } from './components/CalendarView';
 import { CredentialsView } from './components/CredentialsView';
 import { HostelView } from './components/HostelView';
 import { AttendanceCalculator } from './components/AttendanceCalculator';
+import { SettingsView } from './components/SettingsView';
+import { AdminView } from './components/AdminView';
+import { CoursesView } from './components/CoursesView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,7 +67,7 @@ const TIMETABLE_SLOTS = [
   { id: 13, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
-type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses' | 'faculty';
+type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses' | 'faculty' | 'settings' | 'admin';
 type StartLoginResponse = {
   status: 'captcha_ready';
   captcha_type?: number;
@@ -803,6 +807,15 @@ function VtopLoginDashboard() {
     enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
   });
 
+  const adminCheckQuery = useQuery({
+    queryKey: ['admin-check', activeUser],
+    queryFn: async () => {
+      const res = await checkIsAdmin();
+      return res.data?.isAdmin ?? false;
+    },
+    enabled: isLoggedIn
+  });
+
   const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
   const isGradesLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !gradesQuery.isPending && (!gradesQuery.data || !gradesQuery.data.grades || gradesQuery.data.grades.length === 0));
   const isExamsLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !examsQuery.isPending && (!examsQuery.data || examsQuery.data.length === 0));
@@ -859,9 +872,6 @@ function VtopLoginDashboard() {
           <Sidebar
             activeTab={activeTab}
             setActiveTab={setActiveTab}
-            activeSemester={activeSemester}
-            setActiveSemester={setActiveSemester}
-            semestersQuery={semestersQuery}
             isMarksLocked={isMarksLocked}
             isGradesLocked={isGradesLocked}
             isExamsLocked={isExamsLocked}
@@ -870,6 +880,7 @@ function VtopLoginDashboard() {
             profileData={profileQuery.data}
             isMobileSidebarOpen={isMobileSidebarOpen}
             setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+            isAdmin={adminCheckQuery.data ?? false}
           />
 
           {/* MAIN DASHBOARD CONTENT AREA */}
@@ -883,7 +894,7 @@ function VtopLoginDashboard() {
                   <Menu className="h-5 w-5" />
                 </button>
                 <h1 className="text-lg font-bold text-textMain capitalize">
-                  {activeTab === 'my-room' ? 'My Room' : activeTab === 'calculator' ? 'Attendance Calculator' : activeTab.replace('-', ' ')}
+                  {activeTab === 'my-room' ? 'My Room' : activeTab === 'calculator' ? 'Attendance Calculator' : activeTab === 'admin' ? 'Admin Panel' : activeTab.replace('-', ' ')}
                 </h1>
               </div>
               
@@ -906,6 +917,7 @@ function VtopLoginDashboard() {
                   timetableQuery={timetableQuery}
                   odSnapshotQuery={odSnapshotQuery}
                   TIMETABLE_SLOTS={TIMETABLE_SLOTS}
+                  setActiveTab={setActiveTab}
                 />
               )}
 
@@ -968,19 +980,28 @@ function VtopLoginDashboard() {
               )}
 
               {activeTab === 'courses' && (
-                <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="bg-bgPrimary rounded-full p-6 mb-4 border border-borderColor shadow-sm">
-                    <Loader2 className="w-12 h-12 text-textMuted animate-spin" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-textMain mb-2 capitalize">{activeTab.replace('-', ' ')}</h2>
-                  <p className="text-textMuted max-w-md">
-                    This section is currently under construction. Please check back later when new updates are rolled out.
-                  </p>
-                </div>
+                <CoursesView 
+                  timetableQuery={timetableQuery}
+                  attendanceQuery={attendanceQuery}
+                />
               )}
 
               {activeTab === 'faculty' && (
                 <FacultyView />
+              )}
+
+              {activeTab === 'settings' && (
+                <SettingsView
+                  theme={theme}
+                  setTheme={setTheme}
+                  activeSemester={activeSemester}
+                  setActiveSemester={setActiveSemester}
+                  semestersQuery={semestersQuery}
+                />
+              )}
+
+              {activeTab === 'admin' && (
+                <AdminView />
               )}
             </div>
           </main>

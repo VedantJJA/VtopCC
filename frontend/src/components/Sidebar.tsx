@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 import { 
   ChevronDown, LogOut, LayoutDashboard, GraduationCap, 
-  FileText, Home, PlusCircle
+  FileText, Home, PlusCircle, Settings, Shield
 } from 'lucide-react';
-import type { UseQueryResult } from '@tanstack/react-query';
+import { VtopLogo } from './VtopLogo';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: any) => void;
-  activeSemester: string;
-  setActiveSemester: (sem: string) => void;
-  semestersQuery: UseQueryResult<any[], any>;
   isMarksLocked: boolean;
   isGradesLocked: boolean;
   isExamsLocked: boolean;
@@ -19,14 +16,12 @@ interface SidebarProps {
   profileData: any;
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (open: boolean) => void;
+  isAdmin?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
-  activeSemester,
-  setActiveSemester,
-  semestersQuery,
   isMarksLocked,
   isGradesLocked,
   isExamsLocked,
@@ -34,7 +29,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeUser,
   profileData,
   isMobileSidebarOpen,
-  setIsMobileSidebarOpen
+  setIsMobileSidebarOpen,
+  isAdmin = false
 }) => {
   const [expandedNav, setExpandedNav] = useState<Record<string, boolean>>({
     academics: true,
@@ -43,12 +39,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
     extra: false
   });
 
+  const navItems: any[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    {
+      id: 'academics', label: 'Academics', icon: GraduationCap,
+      children: [
+        { id: 'timetable', label: 'Time Table' },
+        { id: 'attendance', label: 'Attendance' },
+        { id: 'calendar', label: 'Calendar' },
+        { id: 'courses', label: 'Registered Courses' },
+        { id: 'faculty', label: 'Faculty Search' }
+      ]
+    },
+    {
+      id: 'examinations', label: 'Examinations', icon: FileText,
+      children: [
+        { id: 'marks', label: 'Marks' },
+        { id: 'grades', label: 'Grades' },
+        { id: 'exams', label: 'Exam Schedule' }
+      ]
+    },
+    {
+      id: 'hostel', label: 'Hostel', icon: Home,
+      children: [
+        { id: 'my-room', label: 'My Room' }
+      ]
+    },
+    {
+      id: 'extra', label: 'Extra Options', icon: PlusCircle, divider: true,
+      children: [
+        { id: 'calculator', label: 'Attendance Calculator' }
+      ]
+    },
+    { id: 'settings', label: 'Settings', icon: Settings, divider: true }
+  ];
+
+  // Conditionally add Admin nav item
+  if (isAdmin) {
+    navItems.push({ id: 'admin', label: 'Admin Panel', icon: Shield });
+  }
+
   return (
     <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-bgSidebar border-r border-borderColor flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       {/* Logo area */}
       <div className="p-5 pb-4 shrink-0">
         <div className="text-xl font-bold text-textMain flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-accentColor flex items-center justify-center text-white font-black">V</div>
+          <VtopLogo size={32} />
           VTOP Client
         </div>
       </div>
@@ -77,39 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Collapsible Nav Links */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-1 pb-4 custom-scrollbar">
-        {[
-          { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-          {
-            id: 'academics', label: 'Academics', icon: GraduationCap,
-            children: [
-              { id: 'timetable', label: 'Time Table' },
-              { id: 'attendance', label: 'Attendance' },
-              { id: 'calendar', label: 'Calendar' },
-              { id: 'courses', label: 'Registered Courses' },
-              { id: 'faculty', label: 'Faculty Search' }
-            ]
-          },
-          {
-            id: 'examinations', label: 'Examinations', icon: FileText,
-            children: [
-              { id: 'marks', label: 'Marks' },
-              { id: 'grades', label: 'Grades' },
-              { id: 'exams', label: 'Exam Schedule' }
-            ]
-          },
-          {
-            id: 'hostel', label: 'Hostel', icon: Home,
-            children: [
-              { id: 'my-room', label: 'My Room' }
-            ]
-          },
-          {
-            id: 'extra', label: 'Extra Options', icon: PlusCircle, divider: true,
-            children: [
-              { id: 'calculator', label: 'Attendance Calculator' }
-            ]
-          }
-        ].map((item) => (
+        {navItems.map((item) => (
           <div key={item.id} className={item.divider ? "pt-3 mt-3 border-t border-borderColor" : ""}>
             {item.children ? (
               <div className="space-y-0.5 animate-in fade-in duration-200">
@@ -124,7 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
                 {expandedNav[item.id] && (
                   <div className="pl-9 pr-2 py-1 space-y-0.5">
-                    {item.children.map(child => {
+                    {item.children.map((child: any) => {
                       const isLocked = child.id === 'marks' ? isMarksLocked : child.id === 'grades' ? isGradesLocked : child.id === 'exams' ? isExamsLocked : false;
                       return (
                         <button
@@ -167,34 +171,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </nav>
 
-      {/* Bottom Actions */}
-      <div className="p-4 border-t border-borderColor shrink-0 space-y-3 mt-auto">
-        <div>
-          <label htmlFor="semester-select" className="block text-[11px] font-medium text-textMuted mb-1.5 uppercase tracking-wider">Semester</label>
-          <div className="relative">
-            <select
-              id="semester-select"
-              value={activeSemester}
-              onChange={(e) => setActiveSemester(e.target.value)}
-              className="block w-full p-2 pr-8 text-sm font-semibold text-textMain border border-borderColor rounded-lg bg-bgPrimary focus:ring-1 focus:ring-accentColor focus:outline-none transition-colors appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={semestersQuery.isPending || !semestersQuery.data || semestersQuery.data.length === 0}
-            >
-              {semestersQuery.isPending ? (
-                <option>Loading...</option>
-              ) : !semestersQuery.data || semestersQuery.data.length === 0 ? (
-                <option value="UNAVAILABLE">Unavailable</option>
-              ) : (
-                semestersQuery.data?.map((sem: any) => (
-                  <option key={sem.id} value={sem.id}>{sem.name}</option>
-                ))
-              )}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-textMuted">
-              <ChevronDown className="h-4 w-4" />
-            </div>
-          </div>
-        </div>
-
+      {/* Bottom Actions — Logout only (semester dropdown moved to Settings) */}
+      <div className="p-4 border-t border-borderColor shrink-0 mt-auto">
         <button 
           onClick={() => logoutMutation.mutate()}
           disabled={logoutMutation.isPending}

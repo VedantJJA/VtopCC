@@ -147,4 +147,9 @@ export const searchFaculty = (empId: string) =>
 export const getFacultyDirectory = () => 
   fetchWithCache('/data/faculty-directory', undefined, 'vtop_cache_faculty_directory');
 
+// Admin API functions (GET requests, no caching)
+export const getUserCount = () => api.get('/admin/user-count');
+export const getAdminStats = () => api.get('/admin/stats');
+export const checkIsAdmin = () => api.get('/admin/check');
+
 export default api;

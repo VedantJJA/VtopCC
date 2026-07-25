@@ -7,12 +7,14 @@ interface DashboardViewProps {
   timetableQuery: UseQueryResult<any, any>;
   odSnapshotQuery: UseQueryResult<any, any>;
   TIMETABLE_SLOTS: any[];
+  setActiveTab?: (tab: any) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   attendanceQuery,
   timetableQuery,
-  odSnapshotQuery
+  odSnapshotQuery,
+  setActiveTab
 }) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
 
@@ -98,7 +100,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <div className="space-y-6">
       {/* Dashboard stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Attendance Snapshot Card */}
+        {/* Attendance Snapshot Card (Clickable -> Attendance Page) */}
         <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm flex flex-col h-fit">
           <div>
             <h3 className="font-bold text-textMain text-base mb-6 flex items-center gap-2 border-b border-borderColor pb-3">
@@ -111,10 +113,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             ) : (
               <div className="space-y-6">
-                <div>
+                <div 
+                  onClick={() => setActiveTab && setActiveTab('attendance')}
+                  className="cursor-pointer group p-2 -m-2 rounded-lg hover:bg-bgPrimary/50 transition-all"
+                  title="Click to view detailed attendance"
+                >
                   <div className="flex justify-between text-sm font-semibold mb-2">
-                    <span className="text-textMuted">Attendance</span>
-                    <span className="text-textMain font-bold">{attSum.percentage}%</span>
+                    <span className="text-textMuted group-hover:text-textMain transition-colors">Attendance</span>
+                    <span className="text-textMain font-bold group-hover:text-accentColor transition-colors">{attSum.percentage}%</span>
                   </div>
                   <div className="w-full bg-bgPrimary rounded-full h-2 overflow-hidden border border-borderColor/40">
                     <div 
@@ -143,7 +149,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Today's Schedule Card */}
+        {/* Schedule Card */}
         <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm md:col-span-2 flex flex-col h-fit">
           <div>
             <div className="flex justify-between items-center mb-6 border-b border-borderColor pb-3">
@@ -192,7 +198,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 No classes scheduled for this day.
               </p>
             ) : (
-              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className={`space-y-3 ${todayClasses.list.length > 8 ? 'max-h-[520px] overflow-y-auto pr-1 custom-scrollbar' : ''}`}>
                 {todayClasses.list.map((cls, idx) => (
                   <div 
                     key={idx} 

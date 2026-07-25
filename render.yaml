@@ -13,6 +13,8 @@ services:
         value: 5000
       - key: JWT_SECRET
         generateValue: true
+      - key: ADMIN_ROLL_NUMBERS
+        value: 25BCE5232
 
   - type: static
     name: vtopcc

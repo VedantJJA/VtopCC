@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { startLogin, performVtopLogin, VtopState } from '../services/vtop.service';
+import { trackUser } from './admin.controller';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vtopc_default_jwt_secret_key_change_this_in_prod';
 const CREDS_COOKIE = 'vtop_creds';
@@ -104,6 +105,9 @@ export const loginAttempt = async (req: Request, res: Response) => {
     // Set updated state cookie (with authorizedId + fresh jar)
     setStateCookie(res, result.updatedState);
 
+    // Track unique user by roll number
+    if (result.authorizedId) trackUser(result.authorizedId);
+
     // Store encrypted credentials for auto-login (30 days)
     res.cookie(CREDS_COOKIE, encryptCredentials(username, password), {
       ...COOKIE_OPTS,
@@ -150,6 +154,10 @@ export const autoLogin = async (req: Request, res: Response) => {
 
     if (result.success && result.updatedState) {
       setStateCookie(res, result.updatedState);
+
+      // Track unique user by roll number
+      if (result.authorizedId) trackUser(result.authorizedId);
+
       return res.json({
         status: 'success',
         message: `Welcome back, ${result.authorizedId}!`

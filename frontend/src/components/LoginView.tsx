@@ -27,6 +27,8 @@ interface LoginViewProps {
   recaptchaRef: React.RefObject<HTMLDivElement | null>;
 }
 
+import { VtopLogo } from './VtopLogo';
+
 export const LoginView: React.FC<LoginViewProps> = ({
   theme,
   setTheme,
@@ -64,7 +66,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       <div className="w-full max-w-md">
         {/* Title */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <VtopLogo size={56} className="mb-3" />
           <h1 className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-500">
             VtopC
           </h1>
