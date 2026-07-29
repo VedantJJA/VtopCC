@@ -1,12 +1,28 @@
 version: "1.0"
-project: "vtopcc-clone"
+project: "vtopcc"
 
 services:
-  web:
+  vtopcc-backend:
     type: web
+    source:
+      directory: backend
     build:
       engine: node
-      command: "npm install" # Replaces Render's 'Build Command'
+      command: "npm install && npm run build"
     deploy:
-      port: 3000
-      command: "node server.js" # Replaces Render's 'Start Command'
+      port: 5000
+      command: "npm run start"
+      env:
+        NODE_ENV: production
+        PORT: 5000
+        JWT_SECRET: generated_devpanel_secret
+        ADMIN_ROLL_NUMBERS: 25BCE5232
+
+  vtopcc:
+    type: static
+    source:
+      directory: frontend
+    build:
+      engine: static
+      command: "npm install && npm run build"
+      output_dir: dist
