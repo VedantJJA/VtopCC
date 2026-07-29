@@ -6,12 +6,10 @@ services:
     type: web
     source:
       directory: backend
-    build:
-      engine: node
-      command: "npm install && npm run build"
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm run start"
     deploy:
       port: 5000
-      command: "npm run start"
       env:
         NODE_ENV: production
         PORT: 5000
@@ -22,7 +20,6 @@ services:
     type: static
     source:
       directory: frontend
+    buildCommand: "npm install && npm run build"
     build:
-      engine: static
-      command: "npm install && npm run build"
       output_dir: dist
