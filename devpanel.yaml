@@ -1,0 +1,12 @@
+version: "1.0"
+project: "vtopcc-clone"
+
+services:
+  web:
+    type: web
+    build:
+      engine: node
+      command: "npm install" # Replaces Render's 'Build Command'
+    deploy:
+      port: 3000
+      command: "node server.js" # Replaces Render's 'Start Command'
