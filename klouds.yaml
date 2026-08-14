@@ -1,42 +1,24 @@
 version: "1.0"
-project: "vtopcc"
-
 services:
-  # ----------------------------------------------------
-  # 1. Frontend Client (React / Vite Static SPA)
-  # ----------------------------------------------------
-  vtopcc:
+  # 1. Frontend Static SPA
+  - name: vtopcc
     type: static
-    source:
-      directory: "frontend"
+    directory: "frontend"
     build:
-      command: "npm ci && npm run build"
+      command: "npm install && npm run build"
       output_dir: "dist"
-    env:
-      - key: VITE_API_URL
-        fromService:
-          name: "vtopcc-backend"
-          property: "url"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
 
-  # ----------------------------------------------------
-  # 2. Backend REST API (Node.js Server)
-  # ----------------------------------------------------
-  vtopcc-backend:
+  # 2. Backend Web API
+  - name: vtopcc-backend
     type: web
-    source:
-      directory: "backend"
+    directory: "backend"
     build:
       engine: "node"
-      command: "npm ci"
+      command: "npm install"
     deploy:
       port: 5000
-      command: "node server.js"
-    env:
-      - key: PORT
-        value: "5000"
-      - key: NODE_ENV
-        value: "production"
-      - key: JWT_SECRET
-        generateValue: true
-      - key: ADMIN_ROLL_NUMBERS
-        sync: false
+      command: "npm start"
