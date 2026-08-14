@@ -58,7 +58,7 @@ export const getLeaveStatus = async (req: Request, res: Response) => {
       }
     });
 
-    const parsedData = parsers.parseLeaveHistory ? parsers.parseLeaveHistory(response.data) : response.data;
+    const parsedData = parsers.parseLeaves ? parsers.parseLeaves(response.data) : response.data;
     return res.json({ status: 'success', raw_data: parsedData });
   } catch (error: any) {
     console.error('getLeaveStatus failed:', error);

@@ -9,22 +9,22 @@ export default function LeaveView() {
 
   // Fetch Leave Status (/4) via POST
   const { data: statusData, isLoading: loadingStatus } = useQuery({
-  queryKey: ['leaveStatus'],
-  queryFn: async () => {
-    const res = await fetchLeaveStatus();
-    return res.raw_data;
-  },
-  enabled: activeTab === 'status'
-});
+    queryKey: ['leaveStatus'],
+    queryFn: async () => {
+      const res = await fetchLeaveStatus();
+      return res.raw_data;
+    },
+    enabled: activeTab === 'status'
+  });
 
-const { data: historyData, isLoading: loadingHistory } = useQuery({
-  queryKey: ['leaveHistory'],
-  queryFn: async () => {
-    const res = await fetchLeaveHistory();
-    return res.raw_data;
-  },
-  enabled: activeTab === 'history'
-});
+  const { data: historyData, isLoading: loadingHistory } = useQuery({
+    queryKey: ['leaveHistory'],
+    queryFn: async () => {
+      const res = await fetchLeaveHistory();
+      return res.raw_data;
+    },
+    enabled: activeTab === 'history'
+  });
 
   return (
     <div className="space-y-6">
@@ -37,25 +37,22 @@ const { data: historyData, isLoading: loadingHistory } = useQuery({
       <div className="flex space-x-2 border-b border-zinc-800 pb-3">
         <button
           onClick={() => setActiveTab('apply')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'apply' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'apply' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+            }`}
         >
           Leave Apply
         </button>
         <button
           onClick={() => setActiveTab('status')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'status' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'status' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+            }`}
         >
           Leave Status
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'history' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-          }`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'history' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+            }`}
         >
           Leave History
         </button>
@@ -79,8 +76,30 @@ const { data: historyData, isLoading: loadingHistory } = useQuery({
               <div className="text-zinc-500 text-center py-8">No active leave requests found.</div>
             ) : (
               <div className="overflow-x-auto">
-                {/* Render your table or cards for statusData here */}
-                <pre className="text-xs text-zinc-300">{JSON.stringify(statusData, null, 2)}</pre>
+                <table className="w-full text-left text-sm text-zinc-300">
+                  <thead className="bg-zinc-800 text-zinc-400 uppercase text-xs">
+                    <tr>
+                      <th className="p-3">Leave ID</th>
+                      <th className="p-3">Type</th>
+                      <th className="p-3">Place</th>
+                      <th className="p-3">From</th>
+                      <th className="p-3">To</th>
+                      <th className="p-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800">
+                    {statusData.map((leave: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-zinc-800/50">
+                        <td className="p-3 font-medium text-white">{leave.leave_id}</td>
+                        <td className="p-3">{leave.leave_type}</td>
+                        <td className="p-3">{leave.visit_place}</td>
+                        <td className="p-3">{leave.from}</td>
+                        <td className="p-3">{leave.to}</td>
+                        <td className="p-3 text-amber-400 font-medium">{leave.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
