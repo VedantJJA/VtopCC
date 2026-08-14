@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+// import axios from 'axios';
 
 import { fetchLeaveStatus, fetchLeaveHistory } from '../lib/api';
 
