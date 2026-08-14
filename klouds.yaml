@@ -1,24 +1,36 @@
 version: "1.0"
+
 services:
-  # 1. Frontend Static SPA
+  # 1. Backend Web API (Node.js)
+  - name: vtopcc-backend
+    type: web
+    directory: "backend"
+    build:
+      engine: "node"
+      command: "npm install && npm run build"
+    deploy:
+      port: 5000
+      command: "npm run start"
+    env:
+      NODE_ENV: "production"
+      PORT: "5000"
+      JWT_SECRET:
+        generate_value: true
+      ADMIN_ROLL_NUMBERS: "25BCE5232"
+
+  # 2. Frontend Static SPA (Vite / React)
   - name: vtopcc
     type: static
     directory: "frontend"
     build:
       command: "npm install && npm run build"
       output_dir: "dist"
+    env:
+      VITE_API_URL: "${services.vtopcc-backend.url}"
     routes:
       - type: rewrite
-        source: /*
-        destination: /index.html
-
-  # 2. Backend Web API
-  - name: vtopcc-backend
-    type: web
-    directory: "backend"
-    build:
-      engine: "node"
-      command: "npm install"
-    deploy:
-      port: 5000
-      command: "npm start"
+        source: "/api/*"
+        destination: "${services.vtopcc-backend.url}/api/*"
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"
