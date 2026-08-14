@@ -10,12 +10,12 @@ export const parseLeaves = (html: string) => {
     // Ensure it's a valid data row (10 columns as per your HTML)
     if (tds.length >= 10) {
       leaves.push({
-        leaveId: $(tds[2]).text().trim(),
-        visitPlace: $(tds[3]).text().trim(),
+        leave_id: $(tds[2]).text().trim(),
+        visit_place: $(tds[3]).text().trim(),
         reason: $(tds[4]).text().trim(),
-        type: $(tds[5]).text().trim(),
-        fromDate: $(tds[6]).text().trim(),
-        toDate: $(tds[7]).text().trim(),
+        leave_type: $(tds[5]).text().trim(),
+        from: $(tds[6]).text().trim(),
+        to: $(tds[7]).text().trim(),
         status: $(tds[8]).text().trim(),
         remarks: $(tds[9]).text().trim(),
       });
