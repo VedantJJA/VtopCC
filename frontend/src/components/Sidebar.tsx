@@ -35,7 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedNav, setExpandedNav] = useState<Record<string, boolean>>({
     academics: true,
     examinations: false,
-    hostel: false,
+    hostel: true,
     extra: false
   });
 
@@ -62,7 +62,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'hostel', label: 'Hostel', icon: Home,
       children: [
-        { id: 'my-room', label: 'My Room' }
+        { id: 'my-room', label: 'My Room' },
+		{ id: 'leaves', label: 'Leave Requests' }
       ]
     },
     {

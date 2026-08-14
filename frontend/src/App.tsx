@@ -16,7 +16,8 @@ import api, {
   getMarks, 
   getGrades, 
   getExams,
-  checkIsAdmin
+  checkIsAdmin,
+  fetchLeaves
 } from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
 import { 
@@ -40,6 +41,7 @@ import { AttendanceCalculator } from './components/AttendanceCalculator';
 import { SettingsView } from './components/SettingsView';
 import { AdminView } from './components/AdminView';
 import { CoursesView } from './components/CoursesView';
+import LeaveView from './components/LeaveView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,7 +69,7 @@ const TIMETABLE_SLOTS = [
   { id: 13, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
-type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'calculator' | 'courses' | 'faculty' | 'settings' | 'admin';
+type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'leaves' | 'calculator' | 'courses' | 'faculty' | 'settings' | 'admin';
 type StartLoginResponse = {
   status: 'captcha_ready';
   captcha_type?: number;
@@ -816,6 +818,16 @@ function VtopLoginDashboard() {
     enabled: isLoggedIn
   });
 
+  // NEW: Leaves Query added here
+  const leavesQuery = useQuery({
+    queryKey: ['leaves', activeUser],
+    queryFn: async () => {
+      const res = await fetchLeaves();
+      return res.data || res;
+    },
+    enabled: isLoggedIn && (activeTab === 'leaves' || activeTab === 'my-room')
+  });
+
   const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
   const isGradesLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !gradesQuery.isPending && (!gradesQuery.data || !gradesQuery.data.grades || gradesQuery.data.grades.length === 0));
   const isExamsLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !examsQuery.isPending && (!examsQuery.data || examsQuery.data.length === 0));
@@ -969,8 +981,14 @@ function VtopLoginDashboard() {
               )}
 
               {activeTab === 'my-room' && (
-                <HostelView profileQuery={profileQuery} />
-              )}
+				<HostelView 
+					profileQuery={profileQuery} 
+				/>
+			  )}
+
+			  {activeTab === 'leaves' && (
+				<LeaveView />
+			  )}
 
               {activeTab === 'calculator' && (
                 <AttendanceCalculator 
@@ -983,6 +1001,9 @@ function VtopLoginDashboard() {
                 <CoursesView 
                   timetableQuery={timetableQuery}
                   attendanceQuery={attendanceQuery}
+                  marksQuery={marksQuery}
+                  gradesQuery={gradesQuery}
+                  examsQuery={examsQuery}
                 />
               )}
 

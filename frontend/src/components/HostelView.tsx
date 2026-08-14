@@ -1,12 +1,13 @@
 import React from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { DoorOpen, Building, Bed, Utensils, Users, Loader2, AlertTriangle } from 'lucide-react';
+import { DoorOpen, Building, Bed, Utensils, Users, Loader2, AlertTriangle, CalendarClock } from 'lucide-react';
 
 interface HostelViewProps {
   profileQuery: UseQueryResult<any, any>;
+  leavesQuery?: UseQueryResult<any[], any>; // Added leaves query
 }
 
-export const HostelView: React.FC<HostelViewProps> = ({ profileQuery }) => {
+export const HostelView: React.FC<HostelViewProps> = ({ profileQuery, leavesQuery }) => {
   const hostel = profileQuery.data?.hostel || {};
 
   const stats = [
@@ -21,6 +22,15 @@ export const HostelView: React.FC<HostelViewProps> = ({ profileQuery }) => {
     { name: 'John Smith', regNo: '23BCE9998', program: 'B.Tech CSE' },
     { name: 'David Miller', regNo: '23BCE9954', program: 'B.Tech ECE' }
   ];
+
+  // Helper for status badge colors
+  const getStatusColor = (status: string) => {
+    const s = status.toLowerCase();
+    if (s.includes('approved')) return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+    if (s.includes('rejected')) return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+    if (s.includes('pending')) return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+    return 'bg-bgPrimary text-textMuted border-borderColor';
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -70,6 +80,74 @@ export const HostelView: React.FC<HostelViewProps> = ({ profileQuery }) => {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Leaves Section */}
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-textMain flex items-center">
+                <CalendarClock className="h-5 w-5 mr-2 text-accentColor" /> Leave Requests
+              </h3>
+            </div>
+
+            {leavesQuery?.isPending ? (
+              <div className="p-8 bg-bgCard rounded-3xl border border-borderColor flex justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              </div>
+            ) : leavesQuery?.isError ? (
+              <div className="p-4 bg-rose-50 text-rose-600 rounded-2xl text-sm border border-rose-200">
+                Failed to load leave history.
+              </div>
+            ) : leavesQuery?.data && leavesQuery.data.length > 0 ? (
+              <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="bg-bgPrimary border-b border-borderColor">
+                        <th className="p-4 font-bold text-textMain">Leave ID / Type</th>
+                        <th className="p-4 font-bold text-textMain">Visit Place</th>
+                        <th className="p-4 font-bold text-textMain">Duration</th>
+                        <th className="p-4 font-bold text-textMain text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-borderColor/60">
+                      {leavesQuery.data.map((leave, idx) => (
+                        <tr key={idx} className="hover:bg-bgPrimary/40 transition-colors">
+                          <td className="p-4">
+                            <div className="font-bold font-mono text-accentColor">{leave.leaveId}</div>
+                            <div className="text-[10px] text-textMuted mt-0.5 uppercase tracking-wider">{leave.type}</div>
+                          </td>
+                          <td className="p-4">
+                            <div className="font-semibold text-textMain">{leave.visitPlace}</div>
+                            <div className="text-textMuted mt-0.5 italic line-clamp-1 max-w-[200px]" title={leave.reason}>
+                              {leave.reason}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="font-semibold text-textMain">{leave.fromDate}</div>
+                            <div className="text-textMuted text-[10px] mt-0.5">to {leave.toDate}</div>
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${getStatusColor(leave.status)}`}>
+                              {leave.status}
+                            </span>
+                            {leave.remarks && (
+                               <div className="text-[9px] text-textMuted mt-1.5 line-clamp-1" title={leave.remarks}>{leave.remarks}</div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-bgCard border border-borderColor rounded-3xl p-8 text-center space-y-2 shadow-sm">
+                <CalendarClock className="h-10 w-10 text-textMuted mx-auto opacity-50" />
+                <h4 className="font-bold text-textMain">No Leave Records</h4>
+                <p className="text-xs text-textMuted">You do not have any active or past leave requests.</p>
+              </div>
+            )}
           </div>
         </>
       )}

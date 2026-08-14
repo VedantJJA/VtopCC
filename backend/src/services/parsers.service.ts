@@ -1,5 +1,56 @@
 import * as cheerio from 'cheerio';
 
+export const parseLeaves = (html: string) => {
+  const $ = cheerio.load(html);
+  const leaves: any[] = [];
+
+  $('#LeaveAppliedTable tbody tr').each((_, el) => {
+    const tds = $(el).find('td');
+    
+    // Ensure it's a valid data row (10 columns as per your HTML)
+    if (tds.length >= 10) {
+      leaves.push({
+        leaveId: $(tds[2]).text().trim(),
+        visitPlace: $(tds[3]).text().trim(),
+        reason: $(tds[4]).text().trim(),
+        type: $(tds[5]).text().trim(),
+        fromDate: $(tds[6]).text().trim(),
+        toDate: $(tds[7]).text().trim(),
+        status: $(tds[8]).text().trim(),
+        remarks: $(tds[9]).text().trim(),
+      });
+    }
+  });
+
+  return leaves;
+};
+
+export function parseLeaveHistory(html: string) {
+  const cheerio = require('cheerio');
+  const $ = cheerio.load(html);
+  const history: any[] = [];
+
+  // Targets rows specifically inside the LeaveHistoryTable
+  $('#LeaveHistoryTable tbody tr').each((_: any, row: any) => {
+    const cols = $(row).find('td');
+    // Ensure we have data columns (ignoring hidden spacer tds)
+    if (cols.length >= 9) {
+      history.push({
+        leave_id: $(cols[1]).text().trim(),
+        visit_place: $(cols[2]).text().trim(),
+        reason: $(cols[3]).text().trim(),
+        leave_type: $(cols[4]).text().trim(),
+        from: $(cols[5]).text().trim(),
+        to: $(cols[6]).text().trim(),
+        status: $(cols[7]).text().trim(),
+        remarks: $(cols[8]).text().trim()
+      });
+    }
+  });
+
+  return history;
+}
+
 export interface ProfileData {
   personal: Record<string, string>;
   family: {
