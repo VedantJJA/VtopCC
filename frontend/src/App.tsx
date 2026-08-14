@@ -16,8 +16,8 @@ import api, {
   getMarks, 
   getGrades, 
   getExams,
-  checkIsAdmin,
-  fetchLeaves
+  checkIsAdmin
+  // fetchLeaves
 } from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
 import { 
