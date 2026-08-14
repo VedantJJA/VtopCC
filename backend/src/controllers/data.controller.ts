@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { getSessionDetails, VtopState } from '../services/vtop.service';
+import { getSessionDetails, VtopState} from '../services/vtop.service';
 import * as parsers from '../services/parsers.service';
 import fs from 'fs';
 import path from 'path';
@@ -11,6 +11,115 @@ const COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const
+};
+
+// import { fetchLeaveHistory } from '../services/vtop.service'; 
+
+// Endpoint for Leave Status (hits /hostels/student/leave/4)
+export const getLeaveStatus = async (req: Request, res: Response) => {
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
+
+  try {
+    const initPayload = new URLSearchParams({
+      verifyMenu: 'true',
+      authorizedID: authorizedId,
+      _csrf: csrfToken,
+      nocache: Date.now().toString()
+    });
+
+    const initRes = await client.post('hostels/student/leave/1', initPayload.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+      }
+    });
+
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(initRes.data);
+    const leaveCsrf = $('input[name="_csrf"]').val() as string || csrfToken;
+
+    const statusPayload = new URLSearchParams({
+      _csrf: leaveCsrf,
+      authorizedID: authorizedId,
+      status: '',
+      form: 'undefined',
+      control: 'status',
+      x: new Date().toUTCString()
+    });
+
+    const response = await client.post('hostels/student/leave/4', statusPayload.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/hostels/student/leave/1'
+      }
+    });
+
+    const parsedData = parsers.parseLeaveHistory ? parsers.parseLeaveHistory(response.data) : response.data;
+    return res.json({ status: 'success', raw_data: parsedData });
+  } catch (error: any) {
+    console.error('getLeaveStatus failed:', error);
+    return res.status(401).json({ status: 'error', message: error.message || 'Session expired or invalid.' });
+  }
+};
+
+// Endpoint for Leave History (hits /hostels/student/leave/6)
+export const getLeaveHistory = async (req: Request, res: Response) => {
+  const session = await withSession(req, res);
+  if (!session) return;
+  const { client, authorizedId, csrfToken } = session;
+
+  try {
+    const initPayload = new URLSearchParams({
+      verifyMenu: 'true',
+      authorizedID: authorizedId,
+      _csrf: csrfToken,
+      nocache: Date.now().toString()
+    });
+
+    const initRes = await client.post('hostels/student/leave/1', initPayload.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+      }
+    });
+
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(initRes.data);
+    const leaveCsrf = $('input[name="_csrf"]').val() as string || csrfToken;
+
+    const historyPayload = new URLSearchParams({
+      _csrf: leaveCsrf,
+      authorizedID: authorizedId,
+      history: '',
+      form: 'undefined',
+      control: 'history',
+      x: new Date().toUTCString()
+    });
+
+    const response = await client.post('hostels/student/leave/6', historyPayload.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/hostels/student/leave/1'
+      }
+    });
+
+    // Parse the HTML into a clean array of leave objects
+    const parsedData = parsers.parseLeaveHistory(response.data);
+
+    return res.json({
+      status: 'success',
+      raw_data: parsedData
+    });
+  } catch (error: any) {
+    console.error('getLeaveHistory failed:', error);
+    return res.status(401).json({ status: 'error', message: error.message || 'Session expired or invalid.' });
+  }
 };
 
 // --- Helpers ---

@@ -147,6 +147,21 @@ export const searchFaculty = (empId: string) =>
 export const getFacultyDirectory = () => 
   fetchWithCache('/data/faculty-directory', undefined, 'vtop_cache_faculty_directory');
 
+export const fetchLeaves = async () => {
+  const response = await api.post('/data/leaves');
+  return response.data;
+};
+
+export const fetchLeaveStatus = async () => {
+  const response = await api.post('/data/leave-status', {});
+  return response.data;
+};
+
+export const fetchLeaveHistory = async () => {
+  const response = await api.post('/data/leave-history', {});
+  return response.data;
+};
+
 // Admin API functions (GET requests, no caching)
 export const getUserCount = () => api.get('/admin/user-count');
 export const getAdminStats = () => api.get('/admin/stats');

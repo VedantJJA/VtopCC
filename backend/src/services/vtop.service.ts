@@ -5,6 +5,47 @@ import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 
 const VTOP_BASE_URL = 'https://vtopcc.vit.ac.in/vtop/';
 
+export const fetchLeaveHistory = async (client: any, csrfToken: string, regNo: string) => {
+  // Step 1: Hit the menu endpoint to initialize the module
+  const initPayload = new URLSearchParams({
+    verifyMenu: 'true',
+    authorizedID: regNo,
+    _csrf: csrfToken,
+    nocache: new Date().getTime().toString()
+  });
+
+  const initRes = await client.post('hostels/student/leave/1', initPayload.toString(), {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+    }
+  });
+
+  // Extract the fresh CSRF token generated for the leave page
+  const $ = cheerio.load(initRes.data);
+  const leaveCsrf = $('input[name="_csrf"]').val() as string || csrfToken;
+
+  // Step 2: Fetch the actual data
+  const dataPayload = new URLSearchParams({
+    _csrf: leaveCsrf,
+    authorizedID: regNo,
+    status: '',
+    form: 'undefined',
+    control: 'status',
+    x: new Date().toUTCString()
+  });
+
+  const dataRes = await client.post('hostels/student/leave/4', dataPayload.toString(), {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Referer': 'https://vtopcc.vit.ac.in/vtop/hostels/student/leave/1'
+    }
+  });
+
+  // Pass the raw HTML to your existing parser
+  return parseLeaves(dataRes.data);
+};
+
 // Serialized state that gets encrypted into the vtop_state JWT
 export interface VtopState {
   jar: CookieJar.Serialized;  // CookieJar.serializeSync() output

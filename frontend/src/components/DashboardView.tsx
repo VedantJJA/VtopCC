@@ -80,13 +80,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setIsDragging(false);
 
     if (dragDistance < -40) {
-      // Swiped Left -> Smoothly animate to Next Day
       triggerShift('left');
     } else if (dragDistance > 40) {
-      // Swiped Right -> Smoothly animate to Previous Day
       triggerShift('right');
     } else {
-      // Release short -> Smoothly snap back to center
       setIsAnimating(true);
       setTouchTranslateX(0);
       setTargetOffsetPercent(0);
@@ -96,7 +93,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  // Calculate overall attendance and on-duty counts
   const getAttendanceSummary = () => {
     if (!attendanceQuery.data || !Array.isArray(attendanceQuery.data)) {
       return { percentage: 0, loading: attendanceQuery.isPending };
@@ -115,7 +111,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return { percentage, loading: false };
   };
 
-  // Compute classes scheduled for any given offset
   const getClassesForOffset = (offset: number) => {
     const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const d = new Date();
@@ -167,7 +162,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const odCount = odSnapshotQuery.data?.total_od_count ?? 0;
   const isOdLoading = odSnapshotQuery.isPending;
 
-  // Determine transform & transition styling
   const transformStyle = targetOffsetPercent !== 0
     ? `translate3d(${targetOffsetPercent}%, 0, 0)`
     : `translate3d(${touchTranslateX}px, 0, 0)`;
@@ -178,9 +172,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Dashboard stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Attendance Snapshot Card */}
         <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm flex flex-col h-fit">
           <div>
             <h3 className="font-bold text-textMain text-base mb-6 flex items-center gap-2 border-b border-borderColor pb-3">
@@ -229,7 +221,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Schedule Card (3-Panel Continuous Carousel Window) */}
         <div 
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -243,7 +234,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <CalendarDays className="h-5 w-5 text-indigo-500" /> Schedule
                 </h3>
                 
-                {/* Arrow switchers */}
                 <div className="flex items-center bg-bgPrimary border border-borderColor rounded-lg overflow-hidden shrink-0">
                   <button
                     onClick={() => triggerShift('right')}
@@ -277,7 +267,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </span>
             </div>
 
-            {/* 3-Panel Continuous Track Container */}
             <div className="w-full overflow-hidden">
               <div 
                 style={{
@@ -286,17 +275,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 }}
                 className="flex flex-row w-[300%] -ml-[100%]"
               >
-                {/* Previous Day Panel */}
                 <div className="w-[33.333333%] shrink-0 px-2">
                   <SchedulePanel dayInfo={prevDayInfo} />
                 </div>
-
-                {/* Current Day Panel */}
                 <div className="w-[33.333333%] shrink-0 px-2">
                   <SchedulePanel dayInfo={currDayInfo} />
                 </div>
-
-                {/* Next Day Panel */}
                 <div className="w-[33.333333%] shrink-0 px-2">
                   <SchedulePanel dayInfo={nextDayInfo} />
                 </div>
@@ -309,7 +293,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
 };
 
-// Helper component for single Schedule panel
 const SchedulePanel: React.FC<{ dayInfo: { displayTitle: string; list: any[]; loading: boolean } }> = ({ dayInfo }) => {
   if (dayInfo.loading) {
     return (
