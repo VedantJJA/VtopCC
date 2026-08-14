@@ -22,10 +22,7 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     rootDir: frontend
-    envVars:
-      - key: VITE_API_URL
-        value: https://vtopcc-backend.klouds.online/api
     routes:
       - type: rewrite
         source: /api/*
-        destination: https://vtopcc-backend.klouds.online/api/*
+        destination: https://vtopcc-backend.onrender.com/api/*
