@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { CookieJar } from 'tough-cookie';
+import { parseLeaves } from './parsers.service';
 import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 
 const VTOP_BASE_URL = 'https://vtopcc.vit.ac.in/vtop/';

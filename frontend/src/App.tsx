@@ -16,8 +16,8 @@ import api, {
   getMarks, 
   getGrades, 
   getExams,
-  checkIsAdmin,
-  fetchLeaves
+  checkIsAdmin
+  // fetchLeaves
 } from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
 import { 
@@ -819,14 +819,14 @@ function VtopLoginDashboard() {
   });
 
   // NEW: Leaves Query added here
-  const leavesQuery = useQuery({
-    queryKey: ['leaves', activeUser],
-    queryFn: async () => {
-      const res = await fetchLeaves();
-      return res.data || res;
-    },
-    enabled: isLoggedIn && (activeTab === 'leaves' || activeTab === 'my-room')
-  });
+  // const leavesQuery = useQuery({
+  //   queryKey: ['leaves', activeUser],
+  //   queryFn: async () => {
+  //     const res = await fetchLeaves();
+  //     return res.data || res;
+  //   },
+  //   enabled: isLoggedIn && (activeTab === 'leaves' || activeTab === 'my-room')
+  // });
 
   const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
   const isGradesLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !gradesQuery.isPending && (!gradesQuery.data || !gradesQuery.data.grades || gradesQuery.data.grades.length === 0));

@@ -227,13 +227,13 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
             <div className="p-5 overflow-y-auto space-y-6">
               
               {/* Exams Section */}
-              {examsQuery?.data?.filter((e: any) => e.course_code === selectedCourse.course_code).length > 0 && (
+              {(examsQuery?.data?.filter((e: any) => e.course_code === selectedCourse?.course_code).length ?? 0) > 0 && (
                 <div className="space-y-3">
                   <h4 className="text-sm font-bold text-textMain flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-blue-500" /> Exam Schedule
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {examsQuery.data.filter((e: any) => e.course_code === selectedCourse.course_code).map((exam: any, idx: number) => (
+                    {examsQuery?.data?.filter((e: any) => e.course_code === selectedCourse?.course_code).map((exam: any, idx: number) => (
                       <div key={idx} className="bg-bgPrimary/40 border border-borderColor/60 rounded-xl p-4 text-xs space-y-2">
                         <div className="flex justify-between font-bold text-textMain border-b border-borderColor/40 pb-2">
                           <span>{exam.exam_type}</span>
