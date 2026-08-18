@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { safeGetCache, safeSetCache, safeFindCachePrefix } from './cache';
 
 const api = axios.create({
   baseURL: '/api',
@@ -9,43 +10,36 @@ const api = axios.create({
 });
 
 /**
- * Helper to find cached item in localStorage.
+ * Helper to find cached item in localStorage safely.
  * Handles exact key lookup and prefix fallback (e.g. if semester ID differs offline).
  */
 function getCachedData(cacheKey?: string): any {
   if (!cacheKey) return null;
-  try {
-    const exact = localStorage.getItem(cacheKey);
-    if (exact) {
-      return JSON.parse(exact);
-    }
+  
+  const exact = safeGetCache(cacheKey);
+  if (exact !== undefined) {
+    return exact;
+  }
 
-    // Prefix fallbacks for dynamic keys
-    const prefixes = [
-      'vtop_cache_timetable_',
-      'vtop_cache_attendance_',
-      'vtop_cache_marks_',
-      'vtop_cache_grades_',
-      'vtop_cache_exams_',
-      'vtop_cache_calendar_'
-    ];
+  // Prefix fallbacks for dynamic keys
+  const prefixes = [
+    'vtop_cache_timetable_',
+    'vtop_cache_attendance_',
+    'vtop_cache_marks_',
+    'vtop_cache_grades_',
+    'vtop_cache_exams_',
+    'vtop_cache_calendar_'
+  ];
 
-    for (const prefix of prefixes) {
-      if (cacheKey.startsWith(prefix)) {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith(prefix)) {
-            const item = localStorage.getItem(key);
-            if (item) {
-              return JSON.parse(item);
-            }
-          }
-        }
+  for (const prefix of prefixes) {
+    if (cacheKey.startsWith(prefix)) {
+      const found = safeFindCachePrefix(prefix);
+      if (found !== undefined) {
+        return found;
       }
     }
-  } catch (e) {
-    console.warn(`[Cache] Error reading key '${cacheKey}':`, e);
   }
+
   return null;
 }
 
@@ -78,11 +72,7 @@ export async function fetchWithCache<T = any>(
     // If server response indicates success, save to cache and return
     if (res && res.data && res.data.status !== 'error') {
       if (cacheKey) {
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(res.data));
-        } catch (e) {
-          console.warn(`[Cache] Error writing key '${cacheKey}':`, e);
-        }
+        safeSetCache(cacheKey, res.data);
       }
       return res;
     }

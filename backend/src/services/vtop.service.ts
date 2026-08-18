@@ -162,16 +162,25 @@ export async function performVtopLogin(
   } else {
     // PARSE ERROR MESSAGES
     let status_code = 'invalid_credentials';
-    let error_message = 'Invalid credentials.';
+    let error_message = 'Invalid LoginId/Password';
     
-    const errorText = $('span.text-danger strong').text().toLowerCase();
+    const errorRaw = $('span.text-danger strong').text().trim() || $('span.text-danger').text().trim() || $('[role="alert"]').text().trim();
+    const errorText = errorRaw.toLowerCase();
+    
+    console.log(`[VTOP Login Failed] Extracted error message: "${errorRaw}"`);
+
     if (errorText) {
       if (errorText.includes('captcha')) {
         status_code = 'invalid_captcha';
-        error_message = 'Incorrect CAPTCHA.';
-      } else if (errorText.includes('maximum fail')) {
+        error_message = 'Invalid Captcha';
+      } else if (errorText.includes('maximum fail') || errorText.includes('locked') || errorText.includes('blocked')) {
         status_code = 'locked';
         error_message = 'Account locked due to multiple failed attempts.';
+      } else if (errorText.includes('invalid loginid/password') || errorText.includes('invalid') || errorText.includes('password') || errorText.includes('user')) {
+        status_code = 'invalid_credentials';
+        error_message = 'Invalid LoginId/Password';
+      } else {
+        error_message = errorRaw;
       }
     }
     return { success: false, message: error_message, code: status_code };

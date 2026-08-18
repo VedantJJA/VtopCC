@@ -20,6 +20,7 @@ import api, {
   // fetchLeaves
 } from './lib/api';
 import { solveCaptchaClient } from './lib/solver';
+import { safeGetCache, safeSetCache, safeFindCachePrefix } from './lib/cache';
 import { 
   Menu, Sun, Moon, Loader2, AlertTriangle
 } from 'lucide-react';
@@ -85,22 +86,17 @@ function VtopLoginDashboard() {
   });
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
   const [activeSemester, setActiveSemester] = useState<string>(() => {
-    try {
-      const cached = localStorage.getItem('vtop_cache_semesters');
-      if (cached) {
-        const sems = JSON.parse(cached);
-        if (sems && sems.length > 0 && sems[0].id) {
-          return sems[0].id;
-        }
-      }
-    } catch (_e) {}
+    const sems = safeGetCache<any[]>('vtop_cache_semesters', []);
+    if (sems && sems.length > 0 && sems[0].id) {
+      return sems[0].id;
+    }
     return '';
   });
   
   // Auth state
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     const hasUser = !!localStorage.getItem('vtop_username');
-    const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+    const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters'));
     const explicitLogout = localStorage.getItem('vtop_explicit_logout') === 'true';
     return !explicitLogout && (hasUser || hasCache);
   });
@@ -114,8 +110,6 @@ function VtopLoginDashboard() {
   const [captcha, setCaptcha] = useState('');
   
   const [showManualForm, setShowManualForm] = useState(false);
-  const [showCaptchaUI, setShowCaptchaUI] = useState(false);
-  const [captchaImg, setCaptchaImg] = useState<string | null>(null);
   const [captchaType, setCaptchaType] = useState<number>(1);
   const [isCaptchaSolving, setIsCaptchaSolving] = useState(false);
   const [hasSavedCreds, setHasSavedCreds] = useState(false);
@@ -181,7 +175,7 @@ function VtopLoginDashboard() {
           }
         } else {
           console.log("Session verification failed, checking for offline cached data...");
-          const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+          const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters'));
           if (hasCache || localUsername) {
             console.log("Offline mode active: displaying cached data.");
             setIsLoggedIn(true);
@@ -194,7 +188,7 @@ function VtopLoginDashboard() {
       })
       .catch((_err) => {
         console.log("Backend offline or network error. Retaining cached session.");
-        const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+        const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters'));
         if (hasCache || localUsername) {
           setIsLoggedIn(true);
           setIsRestoringSession(false);
@@ -256,11 +250,8 @@ function VtopLoginDashboard() {
       });
   }, []);
 
-  // Fetch CSRF & CAPTCHA
+  // Fetch CSRF & CAPTCHA in background
   const startLoginFlow = async (autoTriggerAfterInit = false) => {
-    if (showCaptchaUI || manualLoginRetryCount.current === 0) {
-      setMessage({ text: 'Initializing secure VTOP portal handshake...', type: 'info' });
-    }
     try {
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready') {
@@ -268,17 +259,13 @@ function VtopLoginDashboard() {
         const credsAvailable = res.data.has_saved_creds;
 
         setCaptchaType(currentCaptchaType);
-        setCaptchaImg(res.data.captcha_image_data || '');
         setHasSavedCreds(credsAvailable);
         if (credsAvailable) {
           setShowManualForm(false);
         }
         setCaptcha('');
-        if (showCaptchaUI || manualLoginRetryCount.current === 0) {
-          setMessage(null);
-        }
 
-        if (currentCaptchaType === 1) {
+        if (currentCaptchaType === 1 && res.data.captcha_image_data) {
           setIsCaptchaSolving(true);
           try {
             const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
@@ -321,9 +308,7 @@ function VtopLoginDashboard() {
     try {
       setIsCaptchaSolving(true);
       const res = await api.post<StartLoginResponse>('/auth/start-login');
-      if (res.data.status === 'captcha_ready') {
-        setCaptchaImg(res.data.captcha_image_data || null);
-
+      if (res.data.status === 'captcha_ready' && res.data.captcha_image_data) {
         try {
           const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
           setCaptcha(solvedText);
@@ -335,8 +320,8 @@ function VtopLoginDashboard() {
             manualLoginRetryCount.current++;
             triggerSilentLoginAttempt();
           } else {
-            setShowCaptchaUI(true);
-            setMessage({ text: 'CAPTCHA auto-verification failed. Please solve manually.', type: 'error' });
+            manualLoginRetryCount.current = 0;
+            setMessage({ text: 'Invalid Captcha: Verification failed. Please click Sign In again.', type: 'error' });
             setIsCaptchaSolving(false);
           }
         }
@@ -352,7 +337,7 @@ function VtopLoginDashboard() {
     autoLoginRetryCount.current = 0;
     autoLoginPromiseRef.current = null;
 
-    const hasCache = !!(localStorage.getItem('vtop_cache_profile') || localStorage.getItem('vtop_cache_semesters'));
+    const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters'));
     if (hasCache || localStorage.getItem('vtop_username')) {
       console.log("[AutoLogin] Retaining offline mode with cached data.");
       setIsLoggedIn(true);
@@ -367,7 +352,6 @@ function VtopLoginDashboard() {
     setIsRestoringSession(false);
     setIsCaptchaSolving(false);
     setShowManualForm(true);
-    setShowCaptchaUI(true);
     setMessage({ text: reason, type: 'error' });
     safeResetRecaptcha();
     startLoginFlow(false);
@@ -386,46 +370,45 @@ function VtopLoginDashboard() {
 
         const res = await api.post<StartLoginResponse>('/auth/start-login');
         if (res.data.status === 'captcha_ready') {
-          setCaptchaImg(res.data.captcha_image_data || null);
-
           if (!res.data.has_saved_creds) {
             handleAutoLoginFailure('No saved credentials found. Sign in manually.');
             return false;
           }
 
-          try {
-            const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
-            setCaptcha(solvedText);
+          if (res.data.captcha_image_data) {
+            try {
+              const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
+              setCaptcha(solvedText);
 
-            const loginResult = await autoLoginMutation.mutateAsync({
-              captchaText: solvedText
-            });
+              const loginResult = await autoLoginMutation.mutateAsync({
+                captchaText: solvedText
+              });
 
-            if (loginResult && loginResult.status === 'success') {
-              autoLoginRetryCount.current = 0;
-              return true;
-            } else if (loginResult && loginResult.status === 'invalid_captcha' && autoLoginRetryCount.current < MAX_RETRIES) {
-              autoLoginRetryCount.current++;
-              autoLoginPromiseRef.current = null;
-              return await triggerSilentAutoLoginAttempt();
-            } else {
-              handleAutoLoginFailure(loginResult?.message || 'Auto-login session expired.');
-              return false;
-            }
-          } catch (_solveErr: any) {
-            if (autoLoginRetryCount.current < MAX_RETRIES) {
-              autoLoginRetryCount.current++;
-              autoLoginPromiseRef.current = null;
-              return await triggerSilentAutoLoginAttempt();
-            } else {
-              handleAutoLoginFailure('Background CAPTCHA verification failed. Sign in manually.');
-              return false;
+              if (loginResult && loginResult.status === 'success') {
+                autoLoginRetryCount.current = 0;
+                return true;
+              } else if (loginResult && loginResult.status === 'invalid_captcha' && autoLoginRetryCount.current < MAX_RETRIES) {
+                autoLoginRetryCount.current++;
+                autoLoginPromiseRef.current = null;
+                return await triggerSilentAutoLoginAttempt();
+              } else {
+                handleAutoLoginFailure(loginResult?.message || 'Auto-login session expired.');
+                return false;
+              }
+            } catch (_solveErr: any) {
+              if (autoLoginRetryCount.current < MAX_RETRIES) {
+                autoLoginRetryCount.current++;
+                autoLoginPromiseRef.current = null;
+                return await triggerSilentAutoLoginAttempt();
+              } else {
+                handleAutoLoginFailure('Invalid Captcha: Background verification failed.');
+                return false;
+              }
             }
           }
-        } else {
-          handleAutoLoginFailure('VTOP connection failed. Sign in manually.');
-          return false;
         }
+        handleAutoLoginFailure('VTOP connection failed. Sign in manually.');
+        return false;
       } catch (err: any) {
         console.error("Silent auto start-login error:", err);
         handleAutoLoginFailure(err.response?.data?.message || 'Auto-login network error.');
@@ -499,21 +482,26 @@ function VtopLoginDashboard() {
         setMessage({ text: data.message, type: 'success' });
         localStorage.setItem('vtop_username', username);
         setTimeout(() => setMessage(null), 3000);
+      } else if (data.status === 'invalid_credentials') {
+        manualLoginRetryCount.current = 0;
+        setMessage({ text: 'Invalid LoginId/Password', type: 'error' });
+        safeResetRecaptcha();
+        startLoginFlow(false);
       } else if (data.status === 'invalid_captcha') {
         safeResetRecaptcha();
-        if (!showCaptchaUI && manualLoginRetryCount.current < MAX_RETRIES) {
+        if (manualLoginRetryCount.current < MAX_RETRIES) {
           manualLoginRetryCount.current++;
+          setMessage({ text: `Invalid Captcha. Retrying (${manualLoginRetryCount.current}/${MAX_RETRIES})...`, type: 'info' });
           triggerSilentLoginAttempt();
         } else {
-          setShowCaptchaUI(true);
-          setMessage({ text: 'Verification failed. Solve the CAPTCHA manually.', type: 'error' });
-          startLoginFlow();
+          manualLoginRetryCount.current = 0;
+          setMessage({ text: 'Invalid Captcha: Verification failed. Please click Sign In again.', type: 'error' });
+          startLoginFlow(false);
         }
       } else {
-        setShowCaptchaUI(true);
         setMessage({ text: data.message || 'Login failed.', type: 'error' });
         safeResetRecaptcha();
-        startLoginFlow();
+        startLoginFlow(false);
       }
     },
     onError: (err: any) => {
@@ -522,7 +510,7 @@ function VtopLoginDashboard() {
         type: 'error'
       });
       safeResetRecaptcha();
-      startLoginFlow();
+      startLoginFlow(false);
     }
   });
 
@@ -552,7 +540,21 @@ function VtopLoginDashboard() {
           });
         setTimeout(() => setMessage(null), 3000);
         queryClient.refetchQueries();
+      } else if (data.status === 'invalid_credentials') {
+        handleAutoLoginFailure('Invalid LoginId/Password');
+      } else if (data.status === 'invalid_captcha') {
+        if (autoLoginRetryCount.current < MAX_RETRIES) {
+          autoLoginRetryCount.current++;
+          triggerSilentAutoLoginAttempt();
+        } else {
+          handleAutoLoginFailure('Invalid Captcha: Background verification failed.');
+        }
+      } else {
+        handleAutoLoginFailure(data.message || 'Auto-login failed.');
       }
+    },
+    onError: (err: any) => {
+      handleAutoLoginFailure(err.response?.data?.message || 'Auto-login network error.');
     }
   });
 
@@ -579,33 +581,52 @@ function VtopLoginDashboard() {
       setMessage({ text: 'Successfully logged out.', type: 'success' });
       autoLoginRetryCount.current = 0;
       manualLoginRetryCount.current = 0;
-      setShowCaptchaUI(false);
       setShowManualForm(true);
       startLoginFlow(false);
     }
   });
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (captchaType === 2) {
       triggerGoogleReCAPTCHA();
     } else {
-      if (!captcha) return;
-      loginMutation.mutate({
-        captchaText: captcha
-      });
+      if (captcha) {
+        loginMutation.mutate({
+          captchaText: captcha
+        });
+      } else {
+        setIsCaptchaSolving(true);
+        try {
+          const res = await api.post<StartLoginResponse>('/auth/start-login');
+          if (res.data.status === 'captcha_ready' && res.data.captcha_image_data) {
+            const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
+            setCaptcha(solvedText);
+            loginMutation.mutate({ captchaText: solvedText });
+          } else {
+            loginMutation.mutate({ captchaText: '' });
+          }
+        } catch (err: any) {
+          setMessage({ text: 'Failed to initialize login. Please try again.', type: 'error' });
+        } finally {
+          setIsCaptchaSolving(false);
+        }
+      }
     }
   };
 
-  const handleAutoLoginSubmit = (e: React.FormEvent) => {
+  const handleAutoLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (captchaType === 2) {
       triggerGoogleReCAPTCHA();
     } else {
-      if (isCaptchaSolving) return;
-      autoLoginMutation.mutate({
-        captchaText: captcha
-      });
+      if (captcha && !isCaptchaSolving) {
+        autoLoginMutation.mutate({
+          captchaText: captcha
+        });
+      } else {
+        triggerSilentAutoLoginAttempt();
+      }
     }
   };
 
@@ -616,13 +637,12 @@ function VtopLoginDashboard() {
       const res = await getSemesters();
       const sems = res.data?.semesters || res.data || [];
       if (Array.isArray(sems) && sems.length > 0) {
-        localStorage.setItem('vtop_cache_semesters', JSON.stringify(sems));
+        safeSetCache('vtop_cache_semesters', sems);
       }
       return sems;
     },
     initialData: () => {
-      const cached = localStorage.getItem('vtop_cache_semesters');
-      return cached ? JSON.parse(cached) : undefined;
+      return safeGetCache('vtop_cache_semesters');
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn
@@ -648,13 +668,12 @@ function VtopLoginDashboard() {
       const res = await getProfile();
       const data = res.data?.raw_data || res.data;
       if (data) {
-        localStorage.setItem('vtop_cache_profile', JSON.stringify(data));
+        safeSetCache('vtop_cache_profile', data);
       }
       return data;
     },
     initialData: () => {
-      const cached = localStorage.getItem('vtop_cache_profile');
-      return cached ? JSON.parse(cached) : undefined;
+      return safeGetCache('vtop_cache_profile');
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn
@@ -666,21 +685,14 @@ function VtopLoginDashboard() {
       const res = await getTimetable(activeSemester);
       const data = res.data?.raw_data || res.data;
       if (data && activeSemester) {
-        localStorage.setItem(`vtop_cache_timetable_${activeSemester}`, JSON.stringify(data));
+        safeSetCache(`vtop_cache_timetable_${activeSemester}`, data);
       }
       return data;
     },
     initialData: () => {
-      const cached = localStorage.getItem(`vtop_cache_timetable_${activeSemester}`);
-      if (cached) return JSON.parse(cached);
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('vtop_cache_timetable_')) {
-          const item = localStorage.getItem(key);
-          if (item) return JSON.parse(item);
-        }
-      }
-      return undefined;
+      const exact = safeGetCache(`vtop_cache_timetable_${activeSemester}`);
+      if (exact !== undefined) return exact;
+      return safeFindCachePrefix('vtop_cache_timetable_');
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
@@ -692,21 +704,14 @@ function VtopLoginDashboard() {
       const res = await getAttendance(activeSemester);
       const data = res.data?.raw_data || res.data || [];
       if (Array.isArray(data) && data.length > 0 && activeSemester) {
-        localStorage.setItem(`vtop_cache_attendance_${activeSemester}`, JSON.stringify(data));
+        safeSetCache(`vtop_cache_attendance_${activeSemester}`, data);
       }
       return data;
     },
     initialData: () => {
-      const cached = localStorage.getItem(`vtop_cache_attendance_${activeSemester}`);
-      if (cached) return JSON.parse(cached);
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('vtop_cache_attendance_')) {
-          const item = localStorage.getItem(key);
-          if (item) return JSON.parse(item);
-        }
-      }
-      return [];
+      const exact = safeGetCache(`vtop_cache_attendance_${activeSemester}`);
+      if (exact !== undefined) return exact;
+      return safeFindCachePrefix('vtop_cache_attendance_', []);
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
@@ -727,13 +732,12 @@ function VtopLoginDashboard() {
       const res = await getMarks(activeSemester);
       const data = res.data?.raw_data || res.data;
       if (data && activeSemester) {
-        localStorage.setItem(`vtop_cache_marks_${activeSemester}`, JSON.stringify(data));
+        safeSetCache(`vtop_cache_marks_${activeSemester}`, data);
       }
       return data;
     },
     initialData: () => {
-      const cached = localStorage.getItem(`vtop_cache_marks_${activeSemester}`);
-      return cached ? JSON.parse(cached) : undefined;
+      return safeGetCache(`vtop_cache_marks_${activeSemester}`);
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
@@ -745,13 +749,12 @@ function VtopLoginDashboard() {
       const res = await getGrades(activeSemester);
       const data = res.data?.raw_data || res.data;
       if (data && activeSemester) {
-        localStorage.setItem(`vtop_cache_grades_${activeSemester}`, JSON.stringify(data));
+        safeSetCache(`vtop_cache_grades_${activeSemester}`, data);
       }
       return data;
     },
     initialData: () => {
-      const cached = localStorage.getItem(`vtop_cache_grades_${activeSemester}`);
-      return cached ? JSON.parse(cached) : undefined;
+      return safeGetCache(`vtop_cache_grades_${activeSemester}`);
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
@@ -763,13 +766,12 @@ function VtopLoginDashboard() {
       const res = await getExams(activeSemester);
       const data = res.data?.raw_data || res.data || [];
       if (Array.isArray(data) && data.length > 0 && activeSemester) {
-        localStorage.setItem(`vtop_cache_exams_${activeSemester}`, JSON.stringify(data));
+        safeSetCache(`vtop_cache_exams_${activeSemester}`, data);
       }
       return data;
     },
     initialData: () => {
-      const cached = localStorage.getItem(`vtop_cache_exams_${activeSemester}`);
-      return cached ? JSON.parse(cached) : [];
+      return safeGetCache(`vtop_cache_exams_${activeSemester}`, []) || [];
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE'
@@ -781,13 +783,12 @@ function VtopLoginDashboard() {
       const res = await getCredentials();
       const data = res.data?.raw_data || res.data;
       if (data) {
-        localStorage.setItem('vtop_cache_credentials', JSON.stringify(data));
+        safeSetCache('vtop_cache_credentials', data);
       }
       return data;
     },
     initialData: () => {
-      const cached = localStorage.getItem('vtop_cache_credentials');
-      return cached ? JSON.parse(cached) : undefined;
+      return safeGetCache('vtop_cache_credentials');
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn
@@ -798,12 +799,12 @@ function VtopLoginDashboard() {
     queryFn: async () => {
       const res = await getODSnapshot(activeSemester);
       const count = res.data.total_od_count;
-      localStorage.setItem(`vtop_cache_od_snapshot_${activeSemester}`, JSON.stringify(count));
+      safeSetCache(`vtop_cache_od_snapshot_${activeSemester}`, count);
       return { total_od_count: count };
     },
     initialData: () => {
-      const cached = localStorage.getItem(`vtop_cache_od_snapshot_${activeSemester}`);
-      return cached ? { total_od_count: JSON.parse(cached) } : undefined;
+      const cached = safeGetCache(`vtop_cache_od_snapshot_${activeSemester}`);
+      return cached !== undefined ? { total_od_count: cached } : undefined;
     },
     initialDataUpdatedAt: 0,
     enabled: isLoggedIn && !!activeSemester && activeSemester !== 'UNAVAILABLE' && !isRestoringSession
@@ -859,11 +860,6 @@ function VtopLoginDashboard() {
           setUsername={setUsername}
           password={password}
           setPassword={setPassword}
-          captcha={captcha}
-          setCaptcha={setCaptcha}
-          showCaptchaUI={showCaptchaUI}
-          captchaType={captchaType}
-          captchaImg={captchaImg}
           isPending={isFormPending}
           isCaptchaSolving={isCaptchaSolving}
           handleAutoLoginSubmit={handleAutoLoginSubmit}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Search, Mail, MapPin, Building, Award, GraduationCap, AlertCircle } from 'lucide-react';
 import { searchFaculty, getFacultyDirectory } from '../lib/api';
+import { safeGetCache, safeSetCache } from '../lib/cache';
 
 export const FacultyView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -11,8 +12,7 @@ export const FacultyView: React.FC = () => {
   const [faculty, setFaculty] = useState<any | null>(null);
   const [directory, setDirectory] = useState<Record<string, string>>(() => {
     // Load from cache optimistically for offline compatibility
-    const cached = localStorage.getItem('vtop_cache_faculty_directory');
-    return cached ? JSON.parse(cached) : {};
+    return safeGetCache('vtop_cache_faculty_directory', {}) || {};
   });
 
   // Fetch full consolidated directory map from backend on mount
@@ -22,7 +22,7 @@ export const FacultyView: React.FC = () => {
         const res = await getFacultyDirectory();
         if (res.data.status === 'success' && res.data.directory) {
           setDirectory(res.data.directory);
-          localStorage.setItem('vtop_cache_faculty_directory', JSON.stringify(res.data.directory));
+          safeSetCache('vtop_cache_faculty_directory', res.data.directory);
         }
       } catch (err) {
         console.error('Failed to load faculty directory from backend:', err);

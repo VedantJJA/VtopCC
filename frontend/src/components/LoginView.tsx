@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
   User as UserIcon, Lock, Eye, EyeOff, CheckCircle2, 
-  AlertTriangle, Loader2, Sun, Moon
+  AlertTriangle, AlertCircle, Loader2, Sun, Moon, ShieldAlert
 } from 'lucide-react';
+import { VtopLogo } from './VtopLogo';
 
 interface LoginViewProps {
   theme: 'light' | 'dark';
@@ -15,19 +16,12 @@ interface LoginViewProps {
   setUsername: (username: string) => void;
   password: string;
   setPassword: (password: string) => void;
-  captcha: string;
-  setCaptcha: (captcha: string) => void;
-  showCaptchaUI: boolean;
-  captchaType: number;
-  captchaImg: string | null;
   isPending: boolean;
   isCaptchaSolving: boolean;
   handleAutoLoginSubmit: (e: React.FormEvent) => void;
   handleLoginSubmit: (e: React.FormEvent) => void;
   recaptchaRef: React.RefObject<HTMLDivElement | null>;
 }
-
-import { VtopLogo } from './VtopLogo';
 
 export const LoginView: React.FC<LoginViewProps> = ({
   theme,
@@ -40,11 +34,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
   setUsername,
   password,
   setPassword,
-  captcha,
-  setCaptcha,
-  showCaptchaUI,
-  captchaType,
-  captchaImg,
   isPending,
   isCaptchaSolving,
   handleAutoLoginSubmit,
@@ -53,8 +42,21 @@ export const LoginView: React.FC<LoginViewProps> = ({
 }) => {
   const [showPassword, setShowPassword] = useState(false);
 
+  const isInvalidCreds = message?.type === 'error' && (
+    message.text.toLowerCase().includes('invalid loginid/password') || 
+    message.text.toLowerCase().includes('invalid credentials') ||
+    message.text.toLowerCase().includes('password')
+  );
+
+  const isInvalidCaptcha = message?.type === 'error' && (
+    message.text.toLowerCase().includes('captcha')
+  );
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
+      {/* Hidden container for ReCAPTCHA if needed */}
+      <div ref={recaptchaRef} className="hidden" />
+
       {/* Theme Toggle */}
       <button
         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -76,24 +78,51 @@ export const LoginView: React.FC<LoginViewProps> = ({
           </p>
         </div>
 
-        {/* Message Banner */}
+        {/* Dedicated Error and Status Displays */}
         {message && (
-          <div className={`p-4 rounded-2xl mb-6 text-xs flex items-center gap-3 font-semibold ${
-            message.type === 'error' 
-              ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 border border-rose-200 dark:border-rose-900' 
-              : message.type === 'success'
-              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 border border-emerald-200 dark:border-emerald-900'
-              : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 border border-blue-200 dark:border-blue-900'
-          }`}>
-            {message.type === 'error' ? (
-              <AlertTriangle className="h-5 w-5 shrink-0 text-rose-500" />
-            ) : message.type === 'success' ? (
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+          <>
+            {isInvalidCreds ? (
+              /* Specific Error Display: Invalid LoginId / Password */
+              <div className="p-4 rounded-2xl mb-6 text-xs flex items-start gap-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                <AlertCircle className="h-5 w-5 shrink-0 text-rose-500 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-sm text-rose-800 dark:text-rose-200">Invalid LoginId/Password</p>
+                  <p className="text-xs text-rose-600 dark:text-rose-400 mt-0.5 font-normal">
+                    The registration number or password you entered is incorrect. Please check your credentials.
+                  </p>
+                </div>
+              </div>
+            ) : isInvalidCaptcha ? (
+              /* Specific Error Display: Invalid Captcha */
+              <div className="p-4 rounded-2xl mb-6 text-xs flex items-start gap-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                <ShieldAlert className="h-5 w-5 shrink-0 text-amber-500 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-sm text-amber-900 dark:text-amber-200">Invalid Captcha</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 font-normal">
+                    {message.text.includes('Retrying') ? message.text : 'Automatic CAPTCHA verification failed. Please try signing in again.'}
+                  </p>
+                </div>
+              </div>
             ) : (
-              <Loader2 className="h-5 w-5 shrink-0 text-blue-500 animate-spin" />
+              /* Generic Message Banner */
+              <div className={`p-4 rounded-2xl mb-6 text-xs flex items-center gap-3 font-semibold ${
+                message.type === 'error' 
+                  ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 border border-rose-200 dark:border-rose-900' 
+                  : message.type === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 border border-emerald-200 dark:border-emerald-900'
+                  : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 border border-blue-200 dark:border-blue-900'
+              }`}>
+                {message.type === 'error' ? (
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-rose-500" />
+                ) : message.type === 'success' ? (
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+                ) : (
+                  <Loader2 className="h-5 w-5 shrink-0 text-blue-500 animate-spin" />
+                )}
+                <span>{message.text}</span>
+              </div>
             )}
-            <span>{message.text}</span>
-          </div>
+          </>
         )}
 
         {/* Saved Credentials Card */}
@@ -105,29 +134,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </div>
 
             <form onSubmit={handleAutoLoginSubmit} className="space-y-4">
-              {showCaptchaUI && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-textMain">
-                    Security Verification (CAPTCHA)
-                  </label>
-                  {captchaType === 2 ? (
-                    <div ref={recaptchaRef} className="flex justify-center my-2" />
-                  ) : captchaImg ? (
-                    <div className="flex items-center space-x-3">
-                      <img src={captchaImg} alt="CAPTCHA" className="h-10 rounded border border-borderColor bg-white p-1" />
-                      <input
-                        type="text"
-                        value={captcha}
-                        onChange={(e) => setCaptcha(e.target.value)}
-                        placeholder="Enter CAPTCHA"
-                        required
-                        className="flex-1 px-3 py-2 text-sm border border-borderColor rounded-xl bg-bgPrimary text-textMain focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
               <button
                 type="submit"
                 disabled={isPending || isCaptchaSolving}
@@ -136,7 +142,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 {isPending || isCaptchaSolving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>{isCaptchaSolving ? 'Solving CAPTCHA...' : 'Signing In...'}</span>
+                    <span>{isCaptchaSolving ? 'Solving CAPTCHA in background...' : 'Signing In...'}</span>
                   </>
                 ) : (
                   <span>Sign In with Saved Account</span>
@@ -163,14 +169,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   Registration Number / User ID
                 </label>
                 <div className="relative">
-                  <UserIcon className="absolute left-3.5 top-3 h-4 w-4 text-textMuted" />
+                  <UserIcon className={`absolute left-3.5 top-3 h-4 w-4 ${isInvalidCreds ? 'text-rose-400' : 'text-textMuted'}`} />
                   <input
                     type="text"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    onChange={(e) => setUsername(e.target.value.toUpperCase())}
                     placeholder="e.g. 21BCE0001"
                     required
-                    className="w-full pl-10 pr-3 py-2.5 text-sm border border-borderColor rounded-2xl bg-bgPrimary text-textMain focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                    className={`w-full pl-10 pr-3 py-2.5 text-sm border rounded-2xl bg-bgPrimary text-textMain focus:ring-2 focus:outline-none font-mono uppercase ${
+                      isInvalidCreds 
+                        ? 'border-rose-400 dark:border-rose-600 focus:ring-rose-500' 
+                        : 'border-borderColor focus:ring-blue-500'
+                    }`}
                   />
                 </div>
               </div>
@@ -180,14 +190,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   VTOP Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-3 h-4 w-4 text-textMuted" />
+                  <Lock className={`absolute left-3.5 top-3 h-4 w-4 ${isInvalidCreds ? 'text-rose-400' : 'text-textMuted'}`} />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter password"
                     required
-                    className="w-full pl-10 pr-10 py-2.5 text-sm border border-borderColor rounded-2xl bg-bgPrimary text-textMain focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className={`w-full pl-10 pr-10 py-2.5 text-sm border rounded-2xl bg-bgPrimary text-textMain focus:ring-2 focus:outline-none ${
+                      isInvalidCreds 
+                        ? 'border-rose-400 dark:border-rose-600 focus:ring-rose-500' 
+                        : 'border-borderColor focus:ring-blue-500'
+                    }`}
                   />
                   <button
                     type="button"
@@ -199,29 +213,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </div>
               </div>
 
-              {showCaptchaUI && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-textMain">
-                    Security Verification (CAPTCHA)
-                  </label>
-                  {captchaType === 2 ? (
-                    <div ref={recaptchaRef} className="flex justify-center my-2" />
-                  ) : captchaImg ? (
-                    <div className="flex items-center space-x-3">
-                      <img src={captchaImg} alt="CAPTCHA" className="h-10 rounded border border-borderColor bg-white p-1" />
-                      <input
-                        type="text"
-                        value={captcha}
-                        onChange={(e) => setCaptcha(e.target.value)}
-                        placeholder="Enter CAPTCHA"
-                        required
-                        className="flex-1 px-3 py-2 text-sm border border-borderColor rounded-xl bg-bgPrimary text-textMain focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
               <button
                 type="submit"
                 disabled={isPending || isCaptchaSolving}
@@ -230,7 +221,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 {isPending || isCaptchaSolving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>{isCaptchaSolving ? 'Solving CAPTCHA...' : 'Signing In...'}</span>
+                    <span>{isCaptchaSolving ? 'Solving CAPTCHA in background...' : 'Signing In...'}</span>
                   </>
                 ) : (
                   <span>Sign In</span>

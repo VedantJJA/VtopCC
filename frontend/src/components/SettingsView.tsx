@@ -1,6 +1,7 @@
-import React from 'react';
-import { ChevronDown, Sun, Moon, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, Sun, Moon, Trash2, HardDrive } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { safeClearCachePrefix, getStorageUsage } from '../lib/cache';
 
 interface SettingsViewProps {
   theme: 'light' | 'dark';
@@ -17,10 +18,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setActiveSemester,
   semestersQuery
 }) => {
+  const [storageInfo, setStorageInfo] = useState(() => getStorageUsage());
+
   const handleClearCache = () => {
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('vtop_cache_'));
-    keys.forEach(k => localStorage.removeItem(k));
-    alert(`Cleared ${keys.length} cached entries. Refresh the page to reload fresh data.`);
+    const cleared = safeClearCachePrefix('vtop_cache_');
+    setStorageInfo(getStorageUsage());
+    alert(`Cleared ${cleared} cached entries. Refresh the page to reload fresh data.`);
   };
 
   return (
@@ -89,6 +92,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <p className="text-xs text-textMuted">
           Cached data allows the app to work offline. Clear the cache to fetch fresh data on next load.
         </p>
+        <div className="flex items-center gap-2 text-xs font-medium text-textMuted bg-bgPrimary px-3.5 py-2 rounded-xl border border-borderColor w-fit">
+          <HardDrive className="h-4 w-4 text-blue-500" />
+          <span>Storage Usage: <strong className="text-textMain">{storageInfo.usedFormatted}</strong> ({storageInfo.entryCount} entries)</span>
+        </div>
         <button
           onClick={handleClearCache}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"

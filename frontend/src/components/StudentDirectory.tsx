@@ -43,7 +43,7 @@ export const StudentDirectory: React.FC = () => {
             const tempStudentList: any[] = [];
             let successCount = 0;
 
-            querySnapshot.forEach((doc) => {
+            querySnapshot.forEach((doc: any) => {
                 try {
                     const data = doc.data();
                     const decrypted = CryptoJS.AES.decrypt(data.blob, key, { 

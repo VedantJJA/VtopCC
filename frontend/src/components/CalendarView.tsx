@@ -2,41 +2,35 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCalendar } from '../lib/api';
+import { safeGetCache, safeSetCache } from '../lib/cache';
 
 interface CalendarViewProps {
   semesters: any[];
   activeUser: string;
 }
 
-function findBestSemesterForDate(date: Date, semesters: any[]): string | null {
-  if (semesters.length === 0) return null;
-  const year = date.getFullYear();
-  const month = date.getMonth(); // 0 = Jan, 11 = Dec
+// Function to find best matching semester ID for a given Date
+function findBestSemesterForDate(targetDate: Date, semesters: any[]): string {
+  if (!semesters || semesters.length === 0) return '';
 
-  // Fall: July (6) to Dec (11)
-  // Winter: Jan (0) to June (5)
-  const isFall = month >= 6 && month <= 11;
+  const targetMonth = targetDate.getMonth() + 1; // 1-12
+  const targetYear = targetDate.getFullYear();
+  const targetYearString = targetYear.toString();
 
-  let targetYearStart: number;
-  let targetYearEnd: number;
-  let semType: 'Fall' | 'Winter' | 'Summer';
+  // 1. Exact match on semester patterns
+  const isWinter = targetMonth >= 1 && targetMonth <= 5;
+  const isFall = targetMonth >= 6 && targetMonth <= 11;
 
-  if (isFall) {
-    targetYearStart = year;
-    targetYearEnd = year + 1;
-    semType = 'Fall';
-  } else {
-    targetYearStart = year - 1;
-    targetYearEnd = year;
-    semType = 'Winter';
-  }
-
-  const targetYearString = `${targetYearStart}-${String(targetYearEnd).substring(2)}`;
-  
-  // 1. Precise Match (Year and Type)
   let bestMatch = semesters.find(sem => {
-    const name = sem.name.toUpperCase();
-    return name.includes(targetYearString) && name.includes(semType.toUpperCase());
+    const nameUpper = sem.name.toUpperCase();
+    const matchesYear = nameUpper.includes(targetYearString);
+    if (isWinter && matchesYear && (nameUpper.includes('WIN') || nameUpper.includes('WS') || nameUpper.includes('WINTER'))) {
+      return true;
+    }
+    if (isFall && matchesYear && (nameUpper.includes('FALL') || nameUpper.includes('FS') || nameUpper.includes('MONSOON'))) {
+      return true;
+    }
+    return false;
   });
 
   // 2. Fallback: target year
@@ -51,10 +45,7 @@ function findBestSemesterForDate(date: Date, semesters: any[]): string | null {
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemesters, activeUser }) => {
-  const semesters = propSemesters.length > 0 ? propSemesters : (() => {
-    const cached = localStorage.getItem('vtop_cache_semesters');
-    return cached ? JSON.parse(cached) : [];
-  })();
+  const semesters = propSemesters.length > 0 ? propSemesters : (safeGetCache('vtop_cache_semesters', []) || []);
 
   const [activeSemester, setActiveSemester] = useState<string>(() => {
     return semesters[0]?.id || '';
@@ -137,16 +128,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
       
       const data = res.data.raw_data;
       if (data) {
-        localStorage.setItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
-        localStorage.setItem(`vtop_cache_calendar_latest_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, JSON.stringify(data));
+        safeSetCache(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, data);
+        safeSetCache(`vtop_cache_calendar_latest_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`, data);
       }
       return data;
     },
     initialData: () => {
-      const specificCache = activeSemester ? localStorage.getItem(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`) : null;
-      const genericCache = localStorage.getItem(`vtop_cache_calendar_latest_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
-      const cached = specificCache || genericCache;
-      return cached ? JSON.parse(cached) : undefined;
+      const specificCache = activeSemester ? safeGetCache(`vtop_cache_calendar_${activeSemester}_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`) : null;
+      const genericCache = safeGetCache(`vtop_cache_calendar_latest_${calendarDate.getMonth()}_${calendarDate.getFullYear()}`);
+      return specificCache || genericCache || undefined;
     },
     initialDataUpdatedAt: 0,
     enabled: !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!activeUser
@@ -164,15 +154,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
         const cacheKey = `vtop_cache_calendar_${targetSemId}_${monthIdx}_${year}`;
         const genericKey = `vtop_cache_calendar_latest_${monthIdx}_${year}`;
 
-        if (!localStorage.getItem(cacheKey) && !localStorage.getItem(genericKey)) {
+        if (!safeGetCache(cacheKey) && !safeGetCache(genericKey)) {
           try {
             const dateStr = `01-${months[monthIdx]}-${year}`;
             console.log(`[Calendar Buffer Pre-fetch] Background fetching calendar for ${months[monthIdx]} ${year}...`);
             const res = await getCalendar(targetSemId, dateStr);
             const data = res.data?.raw_data;
             if (data) {
-              localStorage.setItem(cacheKey, JSON.stringify(data));
-              localStorage.setItem(genericKey, JSON.stringify(data));
+              safeSetCache(cacheKey, data);
+              safeSetCache(genericKey, data);
             }
           } catch (_err) {
             console.warn(`[Calendar Buffer Pre-fetch] Failed to pre-fetch calendar for ${months[monthIdx]} ${year}`);
@@ -239,8 +229,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
     const targetSemId = findBestSemesterForDate(date, semesters) || activeSemester;
     const cacheKey = `vtop_cache_calendar_${targetSemId}_${date.getMonth()}_${date.getFullYear()}`;
     const genericKey = `vtop_cache_calendar_latest_${date.getMonth()}_${date.getFullYear()}`;
-    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(genericKey);
-    return cached ? JSON.parse(cached) : null;
+    return safeGetCache(cacheKey) || safeGetCache(genericKey) || null;
   };
 
   const prevMonthDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
