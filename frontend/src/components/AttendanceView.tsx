@@ -1,5 +1,10 @@
+import React, { useState, useMemo } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, ChevronRight, X, Clock } from 'lucide-react';
+import { 
+  Clock, AlertTriangle, ChevronRight, X, Search, CheckCircle2, 
+  BookOpen, ShieldAlert 
+} from 'lucide-react';
+import { AttendanceSkeleton } from './Skeleton';
 
 interface AttendanceViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
@@ -14,117 +19,292 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   setSelectedAttendanceCourse,
   attendanceDetailQuery
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'warning' | 'theory' | 'lab'>('all');
+
+  const courses = attendanceQuery.data || [];
+
+  // Calculate Overall Aggregate Attendance Metrics
+  const summary = useMemo(() => {
+    let totalAttended = 0;
+    let totalConducted = 0;
+    let warningCount = 0;
+
+    for (const c of courses) {
+      const att = parseInt(c.attended_classes, 10) || 0;
+      const tot = parseInt(c.total_classes, 10) || 0;
+      const pct = parseFloat(c.percentage) || 0;
+      totalAttended += att;
+      totalConducted += tot;
+      if (pct < 75) {
+        warningCount++;
+      }
+    }
+
+    const overallPct = totalConducted > 0 
+      ? Math.floor((totalAttended / totalConducted) * 100) 
+      : 0;
+
+    return {
+      totalAttended,
+      totalConducted,
+      overallPct,
+      warningCount,
+      totalCourses: courses.length
+    };
+  }, [courses]);
+
+  // Filtered Courses
+  const filteredCourses = useMemo(() => {
+    return courses.filter((course) => {
+      // 1. Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = course.course_title?.toLowerCase().includes(q);
+        const matchesCode = course.course_code?.toLowerCase().includes(q);
+        const matchesFaculty = course.faculty?.toLowerCase().includes(q);
+        const matchesSlot = course.slot?.toLowerCase().includes(q);
+        if (!matchesTitle && !matchesCode && !matchesFaculty && !matchesSlot) {
+          return false;
+        }
+      }
+
+      // 2. Tab filter
+      const pct = parseFloat(course.percentage) || 0;
+      const type = (course.course_type || '').toUpperCase();
+
+      if (filterType === 'warning') {
+        return pct < 75;
+      }
+      if (filterType === 'theory') {
+        return type.includes('TH') || type.includes('ETH') || type.includes('THEORY');
+      }
+      if (filterType === 'lab') {
+        return type.includes('LO') || type.includes('ELA') || type.includes('LAB');
+      }
+
+      return true;
+    });
+  }, [courses, searchQuery, filterType]);
+
+  if (attendanceQuery.isPending && !attendanceQuery.data) {
+    return <AttendanceSkeleton />;
+  }
+
+  if (!attendanceQuery.data || attendanceQuery.data.length === 0) {
+    return (
+      <div className="p-8 bg-bgCard border border-borderColor rounded-2xl text-center space-y-2 shadow-sm">
+        <Clock className="h-12 w-12 text-textMuted mx-auto" />
+        <h4 className="font-bold text-textMain">Attendance Not Available</h4>
+        <p className="text-xs text-textMuted">No attendance record found for this semester.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {attendanceQuery.isPending && !attendanceQuery.data ? (
-        <div className="h-64 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+    <div className="space-y-4 animate-in fade-in duration-300">
+      {/* 1. HERO ATTENDANCE KPI CARD */}
+      <div className="bg-bgCard border border-borderColor rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">
+              Overall Attendance
+            </span>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-3xl font-black text-textMain tracking-tight">
+                {summary.overallPct}%
+              </span>
+              <span className="text-xs font-semibold text-textMuted">
+                ({summary.totalAttended} / {summary.totalConducted} hrs)
+              </span>
+            </div>
+          </div>
+
+          <div className="text-right">
+            {summary.warningCount > 0 ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20 text-xs font-bold">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                <span>{summary.warningCount} &lt; 75%</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>All Safe (&gt;=75%)</span>
+              </span>
+            )}
+          </div>
         </div>
-      ) : !attendanceQuery.data || attendanceQuery.data.length === 0 ? (
-        <div className="p-8 bg-bgCard border border-borderColor rounded-xl text-center space-y-2 shadow-sm">
-          <Clock className="h-12 w-12 text-textMuted mx-auto" />
-          <h4 className="font-bold text-textMain">Attendance Not Available</h4>
-          <p className="text-xs text-textMuted">No attendance record found for this semester.</p>
+
+        {/* Global Progress Bar */}
+        <div className="w-full bg-bgPrimary rounded-full h-2.5 overflow-hidden border border-borderColor/50">
+          <div 
+            className={`h-full rounded-full transition-all duration-700 ease-out ${
+              summary.overallPct >= 75 ? 'bg-emerald-500' : 'bg-rose-500'
+            }`}
+            style={{ width: `${Math.min(Math.max(summary.overallPct, 0), 100)}%` }}
+          />
+        </div>
+      </div>
+
+      {/* 2. SEARCH & FILTER CONTROLS */}
+      <div className="space-y-2.5">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-3 h-4 w-4 text-textMuted" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by course code, title, slot..."
+            className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-borderColor bg-bgCard text-textMain placeholder:text-textMuted/60 text-xs font-semibold outline-none focus:border-accentColor transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-2.5 text-textMuted hover:text-textMain p-0.5 rounded cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+          <button
+            onClick={() => setFilterType('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+              filterType === 'all'
+                ? 'bg-accentColor text-white border-accentColor shadow-xs'
+                : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain'
+            }`}
+          >
+            All ({courses.length})
+          </button>
+          {summary.warningCount > 0 && (
+            <button
+              onClick={() => setFilterType('warning')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                filterType === 'warning'
+                  ? 'bg-rose-500 text-white border-rose-500 shadow-xs'
+                  : 'bg-bgCard text-rose-500 border-rose-500/30 hover:bg-rose-500/10'
+              }`}
+            >
+              Needs Attention ({summary.warningCount})
+            </button>
+          )}
+          <button
+            onClick={() => setFilterType('theory')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+              filterType === 'theory'
+                ? 'bg-accentColor text-white border-accentColor shadow-xs'
+                : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain'
+            }`}
+          >
+            Theory
+          </button>
+          <button
+            onClick={() => setFilterType('lab')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+              filterType === 'lab'
+                ? 'bg-accentColor text-white border-accentColor shadow-xs'
+                : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain'
+            }`}
+          >
+            Lab
+          </button>
+        </div>
+      </div>
+
+      {/* 3. COURSE ATTENDANCE CARDS */}
+      {filteredCourses.length === 0 ? (
+        <div className="p-8 bg-bgCard border border-dashed border-borderColor rounded-2xl text-center space-y-2">
+          <BookOpen className="h-10 w-10 text-textMuted mx-auto opacity-50" />
+          <h4 className="font-bold text-textMain text-sm">No Matching Courses</h4>
+          <p className="text-xs text-textMuted">Try refining your search or active filter.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {attendanceQuery.data.map((course: any, idx: number) => {
+        <div className="space-y-3">
+          {filteredCourses.map((course: any, idx: number) => {
             const percent = parseFloat(course.percentage) || 0;
             const isSafe = percent >= 75;
             const attended = parseInt(course.attended_classes, 10) || 0;
             const total = parseInt(course.total_classes, 10) || 0;
 
-            let marginText = '';
-            let marginClass = '';
+            let marginText = '0';
             if (total > 0) {
               const margin = Math.floor((4 * attended - 3 * total) / 3);
               if (margin > 0) {
                 marginText = `+${margin}`;
-                marginClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-              } else if (margin === 0) {
-                marginText = '0';
-                marginClass = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-              } else {
+              } else if (margin < 0) {
                 const need = Math.ceil(3 * total - 4 * attended);
                 marginText = `-${Math.max(1, need)}`;
-                marginClass = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
               }
             }
 
             return (
               <div
                 key={idx}
-                className="bg-bgCard border border-borderColor rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex justify-between items-stretch"
+                onClick={() => setSelectedAttendanceCourse(course)}
+                className="bg-bgCard border border-borderColor rounded-2xl p-4 shadow-xs hover:border-accentColor/40 transition-all cursor-pointer active:scale-[0.99] space-y-3"
               >
-                {/* Left Side: Course Info */}
-                <div className="flex-1 flex flex-col justify-between pr-4 space-y-4">
-                  <div className="space-y-2">
-                    <h4 
-                      className="text-base font-bold text-textMain leading-snug line-clamp-2" 
-                      title={course.course_title}
-                    >
-                      {course.course_title}
-                    </h4>
-                    
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      <span className="text-[10px] bg-blue-50 dark:bg-blue-900/25 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30 font-bold px-2 py-0.5 rounded uppercase">
+                {/* Header Row: Badges & Attendance % */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] bg-accentColor/10 text-accentColor border border-accentColor/20 font-bold px-2 py-0.5 rounded-lg uppercase">
                         {course.course_code}
                       </span>
-                      <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-textMuted border border-borderColor font-semibold px-2 py-0.5 rounded">
+                      <span className="text-[10px] bg-bgPrimary text-textMuted border border-borderColor font-semibold px-2 py-0.5 rounded-lg">
                         {course.slot}
                       </span>
-                      <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-textMuted border border-borderColor font-semibold px-2 py-0.5 rounded">
+                      <span className="text-[10px] bg-bgPrimary text-textMuted border border-borderColor font-semibold px-2 py-0.5 rounded-lg">
                         {course.course_type}
                       </span>
                     </div>
 
-                    <p className="text-xs text-textMuted line-clamp-1 mt-1" title={course.faculty}>
-                      {course.faculty}
-                    </p>
+                    <h4 className="text-sm font-bold text-textMain leading-snug pt-0.5 line-clamp-2">
+                      {course.course_title}
+                    </h4>
                   </div>
 
-                  <button
-                    onClick={() => setSelectedAttendanceCourse(course)}
-                    className="text-xs font-bold text-[#0f5cf5] hover:underline flex items-center gap-0.5 self-start cursor-pointer transition-colors"
-                  >
-                    View Details <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                {/* Right Side: Vertical Progress Bar */}
-                <div className="flex flex-col items-center justify-center pl-4 border-l border-dashed border-borderColor shrink-0 w-20">
-                  <div 
-                    className={`relative h-24 w-3.5 rounded-full overflow-hidden flex items-end border border-borderColor/50 ${
-                      isSafe ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-rose-50 dark:bg-rose-950/20'
-                    }`}
-                    title={`${course.percentage}%`}
-                  >
-                    <div
-                      className={`w-full rounded-full transition-all duration-1000 ease-out ${
-                        isSafe ? 'bg-emerald-500' : 'bg-rose-500'
-                      }`}
-                      style={{ height: `${percent}%` }}
-                    />
-                  </div>
-                  
-                  <div className="text-center mt-2.5">
-                    <span className={`block font-bold text-sm leading-none ${
-                      isSafe ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                    }`}>
-                      {course.percentage}%
-                    </span>
-                    <span className="block text-[10px] text-textMuted font-mono font-medium mt-1 whitespace-nowrap">
-                      {course.attended_classes} / {course.total_classes}
-                    </span>
-                    {marginText && (
+                  {/* Percentage & Margin Pill */}
+                  <div className="flex flex-col items-end shrink-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-black text-textMain">
+                        {course.percentage}%
+                      </span>
                       <span 
                         title={marginText}
-                        className={`inline-block text-[10px] font-bold font-mono px-1.5 py-0.5 rounded border mt-1.5 ${marginClass}`}
+                        className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgPrimary text-textMuted"
                       >
                         {marginText}
                       </span>
-                    )}
+                    </div>
+                    <span className="text-[10px] text-textMuted font-mono font-medium mt-0.5">
+                      {course.attended_classes} / {course.total_classes} hrs
+                    </span>
                   </div>
+                </div>
+
+                {/* Horizontal Progress Bar */}
+                <div className="w-full bg-bgPrimary rounded-full h-1.5 overflow-hidden border border-borderColor/30">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ease-out ${
+                      isSafe ? 'bg-emerald-500' : 'bg-rose-500'
+                    }`}
+                    style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
+                  />
+                </div>
+
+                {/* Footer: Faculty & History Hint */}
+                <div className="flex items-center justify-between text-xs text-textMuted pt-0.5">
+                  <span className="truncate max-w-[220px] text-[11px]">
+                    {course.faculty || 'Faculty TBA'}
+                  </span>
+                  <span className="text-[11px] font-bold text-accentColor flex items-center gap-0.5 shrink-0">
+                    <span>History</span>
+                    <ChevronRight className="h-3 w-3" />
+                  </span>
                 </div>
               </div>
             );
@@ -132,103 +312,121 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         </div>
       )}
 
-      {/* ================= ATTENDANCE HISTORY DRAWER/MODAL ================= */}
+      {/* 4. MOBILE LECTURE HISTORY BOTTOM SHEET */}
       {selectedAttendanceCourse && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex justify-end z-50 animate-fade-in">
-          <div className="w-full max-w-lg bg-bgCard h-full overflow-y-auto flex flex-col justify-between animate-slide-in shadow-xl p-6 md:p-8 border-l border-borderColor">
-            <div className="space-y-6">
-              {/* Header */}
-              <div className="flex justify-between items-start border-b border-borderColor pb-4">
-                <div>
-                  <span className="text-[10px] bg-blue-50 dark:bg-blue-900/25 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30 font-bold px-2 py-0.5 rounded uppercase">
-                    {selectedAttendanceCourse.course_code}
-                  </span>
-                  <h3 className="text-lg font-bold text-textMain mt-2 leading-snug">
-                    {selectedAttendanceCourse.course_title}
-                  </h3>
-                  <p className="text-xs text-textMuted mt-1">
-                    {selectedAttendanceCourse.faculty}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedAttendanceCourse(null)}
-                  className="p-1.5 text-textMuted hover:text-textMain border border-borderColor hover:bg-bgPrimary rounded-lg transition-colors cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Attendance Log Table */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-bold text-[#0f5cf5] flex items-center gap-1.5">
-                  <Clock className="h-4 w-4" /> Hourly Lecture History
-                </h4>
-
-                {attendanceDetailQuery.isPending ? (
-                  <div className="h-32 flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                  </div>
-                ) : attendanceDetailQuery.isError ? (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2 text-xs">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>Failed to retrieve lecture history log.</span>
-                  </div>
-                ) : (
-                  <div className="border border-borderColor rounded-xl overflow-hidden text-xs">
-                    <div className="max-h-[450px] overflow-y-auto custom-scrollbar">
-                      <table className="w-full border-collapse text-left">
-                        <thead>
-                          <tr className="bg-bgPrimary border-b border-borderColor text-[10px] font-bold text-textMuted uppercase">
-                            <th className="p-3">#</th>
-                            <th className="p-3">Date</th>
-                            <th className="p-3">Slot / Timing</th>
-                            <th className="p-3 text-center">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {attendanceDetailQuery.data?.map((log: any, logIdx: number) => {
-                            const isPresent = log.status.toLowerCase() === 'present';
-                            const isOd = log.status.toLowerCase() === 'on duty' || log.status === 'On Duty';
-                            
-                            let badgeStyle = '';
-                            if (isPresent) {
-                              badgeStyle = 'bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-400';
-                            } else if (isOd) {
-                              badgeStyle = 'bg-purple-50 dark:bg-purple-950/25 text-purple-600 dark:text-purple-400';
-                            } else {
-                              badgeStyle = 'bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-400';
-                            }
-
-                            return (
-                              <tr key={logIdx} className="border-b border-borderColor hover:bg-bgPrimary/30 transition-colors">
-                                <td className="p-3 font-semibold text-textMuted">{log.sl_no}</td>
-                                <td className="p-3 font-bold text-textMain">{log.date}</td>
-                                <td className="p-3 text-textMain">
-                                  <div>{log.slot}</div>
-                                  <div className="text-[10px] text-textMuted mt-0.5">{log.timing}</div>
-                                </td>
-                                <td className="p-3 text-center">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeStyle}`}>
-                                    {log.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center z-50 animate-in fade-in duration-200">
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full sm:max-w-lg bg-bgCard border-t sm:border border-borderColor rounded-t-3xl sm:rounded-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-250 pb-safe"
+          >
+            {/* Grab Handle for Mobile */}
+            <div className="pt-3 pb-1 flex justify-center sm:hidden">
+              <div className="w-10 h-1 bg-borderColor rounded-full" />
             </div>
 
-            <button
-              onClick={() => setSelectedAttendanceCourse(null)}
-              className="w-full py-3 mt-6 bg-[#0f5cf5] hover:bg-[#0d52db] text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer shadow-sm"
-            >
-              Close History Log
-            </button>
+            {/* Sheet Header */}
+            <div className="p-4 sm:p-5 border-b border-borderColor flex items-start justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] bg-accentColor/10 text-accentColor border border-accentColor/20 font-bold px-2 py-0.5 rounded-lg uppercase">
+                    {selectedAttendanceCourse.course_code}
+                  </span>
+                  <span className="text-[10px] bg-bgPrimary text-textMuted border border-borderColor font-semibold px-2 py-0.5 rounded-lg">
+                    {selectedAttendanceCourse.slot}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-textMain leading-snug">
+                  {selectedAttendanceCourse.course_title}
+                </h3>
+                <p className="text-xs text-textMuted truncate">
+                  {selectedAttendanceCourse.faculty}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedAttendanceCourse(null)}
+                className="p-2 text-textMuted hover:text-textMain border border-borderColor hover:bg-bgPrimary rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Lecture History Log List */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-3 custom-scrollbar">
+              <div className="flex justify-between items-center text-xs font-bold text-textMain">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-accentColor" />
+                  <span>Hourly Lecture Log</span>
+                </span>
+                <span className="text-textMuted font-mono text-[11px]">
+                  {selectedAttendanceCourse.attended_classes} Attended / {selectedAttendanceCourse.total_classes} Total
+                </span>
+              </div>
+
+              {attendanceDetailQuery.isPending ? (
+                <div className="py-12 flex flex-col items-center justify-center space-y-2">
+                  <Clock className="h-6 w-6 text-accentColor animate-spin" />
+                  <span className="text-xs text-textMuted">Loading lecture log...</span>
+                </div>
+              ) : attendanceDetailQuery.isError ? (
+                <div className="p-4 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-xl flex gap-2 text-xs">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Failed to retrieve lecture history log.</span>
+                </div>
+              ) : !attendanceDetailQuery.data || attendanceDetailQuery.data.length === 0 ? (
+                <div className="p-6 text-center text-textMuted text-xs">
+                  No lecture entries found for this course.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {attendanceDetailQuery.data.map((log: any, logIdx: number) => {
+                    const statusLower = (log.status || '').toLowerCase();
+                    const isPresent = statusLower === 'present';
+                    const isOd = statusLower === 'on duty' || statusLower.includes('duty');
+
+                    let statusClass = 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+                    if (isPresent) {
+                      statusClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+                    } else if (isOd) {
+                      statusClass = 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';
+                    }
+
+                    return (
+                      <div
+                        key={logIdx}
+                        className="p-3 bg-bgPrimary/50 border border-borderColor rounded-xl flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-mono text-[11px] text-textMuted w-5">
+                            #{log.sl_no}
+                          </span>
+                          <div>
+                            <div className="font-bold text-textMain">{log.date}</div>
+                            <div className="text-[10px] text-textMuted font-mono mt-0.5">
+                              {log.slot} | {log.timing}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase border ${statusClass}`}>
+                          {log.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Close Action */}
+            <div className="p-4 border-t border-borderColor bg-bgCard">
+              <button
+                onClick={() => setSelectedAttendanceCourse(null)}
+                className="w-full py-2.5 bg-accentColor hover:bg-accentColor/90 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+              >
+                Close History
+              </button>
+            </div>
           </div>
         </div>
       )}

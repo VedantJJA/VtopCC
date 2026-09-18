@@ -59,6 +59,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
   const [targetOffsetPercent, setTargetOffsetPercent] = useState<number>(0);
   const [_isAnimating, setIsAnimating] = useState<boolean>(false);
   const [isSnapReset, setIsSnapReset] = useState<boolean>(false);
+  const [selectedDay, setSelectedDay] = useState<any | null>(null);
 
   const isBusyRef = useRef(false);
 
@@ -239,6 +240,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
   const currData = calendarQuery.data;
   const nextData = getMonthDataForDate(nextMonthDate);
 
+  // Auto-select current day or first active day on month change
+  useEffect(() => {
+    if (currData?.days) {
+      const todayNum = new Date().getDate().toString();
+      const isThisMonth = new Date().getMonth() === calendarDate.getMonth() && new Date().getFullYear() === calendarDate.getFullYear();
+      const defaultDay = (isThisMonth ? currData.days.find((d: any) => d.day === todayNum && d.status !== 'padding') : null)
+        || currData.days.find((d: any) => d.day && d.status !== 'padding')
+        || null;
+      setSelectedDay(defaultDay);
+    }
+  }, [currData, calendarDate]);
+
   // Determine transform & transition styling
   const transformStyle = targetOffsetPercent !== 0
     ? `translate3d(${targetOffsetPercent}%, 0, 0)`
@@ -305,19 +318,87 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
               className="flex flex-row w-[300%] -ml-[100%]"
             >
               {/* Previous Month Panel */}
-              <div className="w-[33.333333%] shrink-0 px-2">
+              <div className="w-[33.333333%] shrink-0 px-1 sm:px-2">
                 <CalendarMonthPanel data={prevData} />
               </div>
 
               {/* Current Month Panel */}
-              <div className="w-[33.333333%] shrink-0 px-2">
-                <CalendarMonthPanel data={currData} />
+              <div className="w-[33.333333%] shrink-0 px-1 sm:px-2">
+                <CalendarMonthPanel 
+                  data={currData} 
+                  selectedDay={selectedDay} 
+                  onSelectDay={setSelectedDay} 
+                />
               </div>
 
               {/* Next Month Panel */}
-              <div className="w-[33.333333%] shrink-0 px-2">
+              <div className="w-[33.333333%] shrink-0 px-1 sm:px-2">
                 <CalendarMonthPanel data={nextData} />
               </div>
+            </div>
+          </div>
+
+          {/* Selected Day Agenda Card */}
+          {selectedDay && selectedDay.day && (
+            <div className="bg-bgCard border border-borderColor rounded-xl p-4 sm:p-5 shadow-sm space-y-3 animate-in fade-in duration-300">
+              <div className="flex items-start justify-between gap-3 border-b border-borderColor/50 pb-2.5">
+                <div>
+                  <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Selected Date</span>
+                  <h4 className="text-base sm:text-lg font-black text-textMain mt-0.5">
+                    Day {selectedDay.day} - {currData?.month_title || 'Current Month'}
+                  </h4>
+                </div>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border shrink-0 ${
+                  selectedDay.status === 'working' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                  selectedDay.status === 'holiday' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                  selectedDay.status === 'exam' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                  selectedDay.status === 'day_order' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20' :
+                  'bg-bgPrimary text-textMuted border-borderColor'
+                }`}>
+                  {selectedDay.status === 'working' ? 'Instructional Day' :
+                   selectedDay.status === 'holiday' ? 'Holiday / Off' :
+                   selectedDay.status === 'exam' ? 'Exam Session' :
+                   selectedDay.status === 'day_order' ? 'Day Order' : 'Scheduled Day'}
+                </span>
+              </div>
+
+              {/* Event Items */}
+              {selectedDay.events && selectedDay.events.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedDay.events.map((event: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-bgPrimary/50 border border-borderColor/50 text-xs font-semibold text-textMain">
+                      <span className="w-2 h-2 rounded-full bg-accentColor shrink-0" />
+                      <span>{event.text}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-textMuted italic">
+                  {selectedDay.status === 'working' 
+                    ? 'Standard instructional classes scheduled according to regular timetable.' 
+                    : 'No special events or exam notices reported for this day.'}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Calendar Status Legend */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-1 text-[11px] font-semibold text-textMuted">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>Instructional Day</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span>Holiday</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <span>Exam</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-yellow-500" />
+              <span>Day Order</span>
             </div>
           </div>
         </div>
@@ -327,7 +408,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
 };
 
 // Helper component rendering a single month calendar grid
-const CalendarMonthPanel: React.FC<{ data: any }> = ({ data }) => {
+const CalendarMonthPanel: React.FC<{ 
+  data: any;
+  selectedDay?: any;
+  onSelectDay?: (dayObj: any) => void;
+}> = ({ data, selectedDay, onSelectDay }) => {
   if (!data || !data.days) {
     return (
       <div className="h-64 flex items-center justify-center bg-bgCard border border-borderColor rounded-xl">
@@ -338,7 +423,7 @@ const CalendarMonthPanel: React.FC<{ data: any }> = ({ data }) => {
 
   return (
     <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
-      <div className="grid grid-cols-7 border-b border-borderColor bg-bgPrimary font-bold text-center text-xs text-textMuted py-3">
+      <div className="grid grid-cols-7 border-b border-borderColor bg-bgPrimary font-bold text-center text-xs text-textMuted py-2.5">
         <div>Sun</div>
         <div>Mon</div>
         <div>Tue</div>
@@ -360,47 +445,61 @@ const CalendarMonthPanel: React.FC<{ data: any }> = ({ data }) => {
             return (
               <div 
                 key={index} 
-                className="bg-bgPrimary/30 min-h-[100px]" 
+                className="bg-bgPrimary/30 min-h-[48px] sm:min-h-[85px]" 
               />
             );
           }
 
+          const isSelected = selectedDay && selectedDay.day === dayObj.day && selectedDay.status === dayObj.status;
+
           let cellBg = 'bg-bgCard';
           let textCls = 'text-textMuted';
-          let dateCls = 'text-textMuted/70';
+          let dateCls = 'text-textMuted/80';
 
           if (isExam) {
-            cellBg = 'bg-orange-100 dark:bg-orange-950/20';
-            textCls = 'text-orange-800 dark:text-orange-400';
-            dateCls = 'text-orange-600 dark:text-orange-400/80';
+            cellBg = 'bg-amber-500/10';
+            textCls = 'text-amber-600 dark:text-amber-400';
+            dateCls = 'text-amber-600 dark:text-amber-400';
           } else if (isWorking) {
-            cellBg = 'bg-green-100 dark:bg-green-950/20';
-            textCls = 'text-green-800 dark:text-green-400';
-            dateCls = 'text-green-600 dark:text-green-400/80';
+            cellBg = 'bg-emerald-500/10';
+            textCls = 'text-emerald-700 dark:text-emerald-400';
+            dateCls = 'text-emerald-700 dark:text-emerald-400';
           } else if (isDayOrder) {
-            cellBg = 'bg-yellow-100 dark:bg-yellow-950/20';
-            textCls = 'text-yellow-800 dark:text-yellow-400';
-            dateCls = 'text-yellow-600 dark:text-yellow-400/80';
+            cellBg = 'bg-yellow-500/10';
+            textCls = 'text-yellow-700 dark:text-yellow-400';
+            dateCls = 'text-yellow-700 dark:text-yellow-400';
           } else if (isHoliday) {
-            cellBg = 'bg-red-100 dark:bg-red-950/20';
-            textCls = 'text-red-800 dark:text-red-400';
-            dateCls = 'text-red-600 dark:text-red-400/80';
+            cellBg = 'bg-rose-500/10';
+            textCls = 'text-rose-700 dark:text-rose-400';
+            dateCls = 'text-rose-700 dark:text-rose-400';
           }
 
           return (
             <div 
               key={index} 
-              className={`${cellBg} min-h-[100px] p-2 relative transition-all flex flex-col justify-between hover:brightness-95 dark:hover:brightness-110`}
+              onClick={() => onSelectDay && onSelectDay(dayObj)}
+              className={`${cellBg} min-h-[48px] sm:min-h-[85px] p-1.5 sm:p-2 relative transition-all flex flex-col justify-between cursor-pointer hover:brightness-95 dark:hover:brightness-110 ${
+                isSelected ? 'ring-2 ring-accentColor shadow-md z-10' : ''
+              }`}
             >
-              <span className={`absolute top-2 left-2 text-sm font-extrabold ${dateCls}`}>
+              <span className={`text-xs sm:text-sm font-extrabold ${dateCls}`}>
                 {dayObj.day}
               </span>
+
+              {/* Mobile compact dot badges */}
+              <div className="flex items-center justify-center gap-1 mt-1 sm:hidden">
+                {isWorking && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                {isHoliday && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
+                {isExam && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                {isDayOrder && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />}
+              </div>
               
-              <div className="mt-6 flex-1 flex flex-col items-center justify-center space-y-1">
+              {/* Desktop full event labels */}
+              <div className="hidden sm:flex mt-3 flex-1 flex-col items-center justify-center space-y-1">
                 {dayObj.events?.map((event: any, eventIdx: number) => (
                   <p 
                     key={eventIdx} 
-                    className={`text-[10px] font-bold text-center leading-tight ${textCls}`}
+                    className={`text-[10px] font-bold text-center leading-tight line-clamp-2 ${textCls}`}
                   >
                     {event.text}
                   </p>

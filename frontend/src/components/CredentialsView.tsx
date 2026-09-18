@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, ExternalLink, Eye, EyeOff, CalendarRange, KeyRound } from 'lucide-react';
+import { Loader2, AlertTriangle, ExternalLink, Eye, EyeOff, CalendarRange, KeyRound, Copy, Check } from 'lucide-react';
 
 interface CredentialsViewProps {
   credentialsQuery: UseQueryResult<any, any>;
@@ -8,19 +8,35 @@ interface CredentialsViewProps {
 
 export const CredentialsView: React.FC<CredentialsViewProps> = ({ credentialsQuery }) => {
   const [showPasswordMap, setShowPasswordMap] = useState<Record<number, boolean>>({});
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const togglePassword = (idx: number) => {
     setShowPasswordMap(prev => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
+  const handleCopy = (text: string, key: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey(null);
+    }, 2000);
   };
 
   const accounts = credentialsQuery.data?.accounts || [];
   const exams = credentialsQuery.data?.exams || [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Header */}
+      <div>
+        <h2 className="text-xl sm:text-2xl font-black text-textMain">WiFi & System Logins</h2>
+        <p className="text-xs sm:text-sm text-textMuted mt-1">Access credentials for campus WiFi, lab systems, and proctor portals.</p>
+      </div>
+
       {credentialsQuery.isPending ? (
-        <div className="h-64 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <div className="h-64 flex items-center justify-center bg-bgCard border border-borderColor rounded-xl">
+          <Loader2 className="h-8 w-8 animate-spin text-accentColor" />
         </div>
       ) : credentialsQuery.isError ? (
         <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2">
@@ -28,121 +44,183 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({ credentialsQue
           <span>Failed to fetch WiFi and Proctor System credentials from VTOP.</span>
         </div>
       ) : (
-        <div className="space-y-8">
-          {/* Saved Credentials Table */}
+        <div className="space-y-6">
+          {/* Saved System Accounts */}
           {accounts.length > 0 && (
-            <div className="bg-bgCard border border-borderColor rounded-xl shadow-sm overflow-hidden">
-              <div className="px-6 py-4 bg-bgPrimary/25 border-b border-borderColor">
-                <h4 className="text-sm font-bold text-textMain flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-indigo-500" /> Saved System Logins
-                </h4>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-accentColor" />
+                <h3 className="text-sm font-bold text-textMain uppercase tracking-wider">
+                  Saved System Logins ({accounts.length})
+                </h3>
               </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-textMain">
-                  <thead className="text-xs text-textMuted uppercase bg-bgPrimary border-b border-borderColor font-bold">
-                    <tr>
-                      <th className="px-6 py-3.5">Service / Account</th>
-                      <th className="px-6 py-3.5">Username</th>
-                      <th className="px-6 py-3.5 w-48">Password</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-borderColor/60">
-                    {accounts.map((acc: any, index: number) => (
-                      <tr key={index} className="hover:bg-bgPrimary/30 transition-colors">
-                        <td className="px-6 py-4 font-semibold text-textMain">
-                          {acc.url && acc.url !== '#' ? (
-                            <a 
-                              href={acc.url} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="text-[#0f5cf5] hover:underline flex items-center gap-1"
-                            >
-                              {acc.account} <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                            </a>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {accounts.map((acc: any, index: number) => {
+                  const userKey = `user-${index}`;
+                  const passKey = `pass-${index}`;
+                  const isUserCopied = copiedKey === userKey;
+                  const isPassCopied = copiedKey === passKey;
+
+                  return (
+                    <div
+                      key={index}
+                      className="bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm space-y-3 hover:border-accentColor/40 transition-all duration-200"
+                    >
+                      {/* Service Header */}
+                      <div className="flex items-center justify-between gap-2 border-b border-borderColor/40 pb-2.5">
+                        <span className="font-bold text-sm text-textMain truncate">
+                          {acc.account}
+                        </span>
+                        {acc.url && acc.url !== '#' && (
+                          <a
+                            href={acc.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-accentColor hover:underline flex items-center gap-1 shrink-0 font-medium"
+                          >
+                            <span>Open</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Username Row */}
+                      <div className="flex items-center justify-between gap-2 bg-bgPrimary/40 border border-borderColor/50 rounded-lg p-2.5 text-xs">
+                        <div className="overflow-hidden">
+                          <span className="block text-[10px] uppercase font-bold text-textMuted tracking-wider">Username</span>
+                          <span className="font-mono font-semibold text-textMain truncate block select-all">{acc.username || 'N/A'}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(acc.username, userKey)}
+                          className="p-1.5 rounded-md hover:bg-borderColor/50 text-textMuted hover:text-textMain transition-colors shrink-0"
+                          title="Copy username"
+                        >
+                          {isUserCopied ? (
+                            <Check className="w-4 h-4 text-emerald-500" />
                           ) : (
-                            acc.account
+                            <Copy className="w-4 h-4" />
                           )}
-                        </td>
-                        <td className="px-6 py-4 font-mono text-xs select-all">{acc.username}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center bg-bgPrimary rounded px-2.5 py-1.5 w-fit border border-borderColor">
-                            <span 
-                              onClick={() => togglePassword(index)}
-                              className={`font-mono text-xs text-textMain mr-3 select-all min-w-[90px] cursor-pointer transition-all ${
-                                !showPasswordMap[index] ? 'blur-[3px] select-none' : ''
-                              }`}
-                            >
-                              {acc.password}
-                            </span>
-                            <button 
-                              onClick={() => togglePassword(index)} 
-                              className="text-textMuted hover:text-textMain transition-colors focus:outline-none cursor-pointer"
-                              title="Toggle visibility"
-                            >
-                              {showPasswordMap[index] ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </button>
+                      </div>
+
+                      {/* Password Row */}
+                      <div className="flex items-center justify-between gap-2 bg-bgPrimary/40 border border-borderColor/50 rounded-lg p-2.5 text-xs">
+                        <div className="overflow-hidden flex-1">
+                          <span className="block text-[10px] uppercase font-bold text-textMuted tracking-wider">Password</span>
+                          <span
+                            onClick={() => togglePassword(index)}
+                            className={`font-mono font-bold text-textMain cursor-pointer block select-all transition-all ${
+                              !showPasswordMap[index] ? 'blur-[4px] select-none' : ''
+                            }`}
+                          >
+                            {acc.password || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => togglePassword(index)}
+                            className="p-1.5 rounded-md hover:bg-borderColor/50 text-textMuted hover:text-textMain transition-colors"
+                            title={showPasswordMap[index] ? 'Hide password' : 'Show password'}
+                          >
+                            {showPasswordMap[index] ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(acc.password, passKey)}
+                            className="p-1.5 rounded-md hover:bg-borderColor/50 text-textMuted hover:text-textMain transition-colors"
+                            title="Copy password"
+                          >
+                            {isPassCopied ? (
+                              <Check className="w-4 h-4 text-emerald-500" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Special Exam Credentials Table */}
+          {/* Exam Schedules and Passwords */}
           {exams.length > 0 && (
-            <div className="bg-bgCard border border-borderColor rounded-xl shadow-sm overflow-hidden border-t-4 border-t-indigo-500">
-              <div className="px-6 py-4 bg-indigo-50/40 dark:bg-indigo-950/10 border-b border-borderColor">
-                <h4 className="text-sm font-bold text-[#0f5cf5] flex items-center gap-2">
-                  <CalendarRange className="w-4 h-4" /> Upcoming Exam Schedule
-                </h4>
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center gap-2">
+                <CalendarRange className="w-4 h-4 text-accentColor" />
+                <h3 className="text-sm font-bold text-textMain uppercase tracking-wider">
+                  Upcoming Exam Passwords ({exams.length})
+                </h3>
               </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-textMain">
-                  <thead className="text-xs text-textMuted uppercase bg-bgPrimary border-b border-borderColor font-bold">
-                    <tr>
-                      <th className="px-6 py-3.5">Course / Exam</th>
-                      <th className="px-6 py-3.5">Venue & Time</th>
-                      <th className="px-6 py-3.5 text-center">Seat</th>
-                      <th className="px-6 py-3.5 text-center">Password</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-borderColor/60">
-                    {exams.map((ex: any, index: number) => (
-                      <tr key={index} className="hover:bg-bgPrimary/30 transition-colors">
-                        <td className="px-6 py-4 font-semibold text-textMain">
-                          {ex.account}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center text-xs font-semibold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded border border-amber-200 dark:border-amber-900/40 w-fit">
-                            {ex.venue_date}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center font-bold text-textMain">{ex.seat}</td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="font-mono text-xs text-red-600 dark:text-red-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/30 px-3 py-1.5 rounded select-all inline-block font-bold">
-                            {ex.password}
+
+              <div className="space-y-3">
+                {exams.map((ex: any, index: number) => {
+                  const examPassKey = `exampass-${index}`;
+                  const isExamPassCopied = copiedKey === examPassKey;
+
+                  return (
+                    <div
+                      key={index}
+                      className="bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm space-y-3 hover:border-accentColor/40 transition-all duration-200"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-sm text-textMain">{ex.account}</h4>
+                          <div className="text-xs text-textMuted mt-0.5">{ex.venue_date}</div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="block text-[10px] uppercase font-bold text-textMuted tracking-wider">Seat</span>
+                          <span className="text-xs font-black font-mono text-accentColor bg-bgPrimary border border-borderColor px-2 py-0.5 rounded">
+                            {ex.seat || 'N/A'}
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+
+                      {/* Password Badge + Copy */}
+                      <div className="flex items-center justify-between gap-2 bg-bgPrimary/40 border border-borderColor/50 rounded-lg p-2.5 text-xs">
+                        <div>
+                          <span className="block text-[10px] uppercase font-bold text-textMuted tracking-wider">Exam Password</span>
+                          <span className="font-mono font-bold text-rose-500 text-sm select-all">{ex.password}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(ex.password, examPassKey)}
+                          className="px-3 py-1.5 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg text-xs font-bold text-textMain flex items-center gap-1.5 transition-colors"
+                        >
+                          {isExamPassCopied ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {accounts.length === 0 && exams.length === 0 && (
-            <div className="bg-bgCard border border-borderColor rounded-xl p-8 text-center text-textMuted italic shadow-sm">
-              No credentials or exam schedules found.
+            <div className="bg-bgCard border border-borderColor rounded-xl p-8 text-center space-y-2 shadow-sm">
+              <KeyRound className="h-10 w-10 text-textMuted mx-auto opacity-50" />
+              <h4 className="font-bold text-textMain text-sm">No Saved Credentials</h4>
+              <p className="text-xs text-textMuted">No WiFi or system login credentials found for this account.</p>
             </div>
           )}
         </div>

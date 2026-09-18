@@ -274,7 +274,9 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
           style={{
             transform: targetOffsetPercent !== 0 
               ? `translate3d(${targetOffsetPercent}%, 0, 0)` 
-              : `translate3d(${touchTranslateX}px, 0, 0)`,
+              : touchTranslateX !== 0 
+                ? `translate3d(${touchTranslateX}px, 0, 0)` 
+                : undefined,
             transition: isSnapReset || isDragging 
               ? 'none' 
               : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)'
