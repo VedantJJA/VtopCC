@@ -107,6 +107,15 @@ function VtopLoginDashboard() {
   const [showCardAttendance, setShowCardAttendance] = useState<boolean>(() => {
     return safeStorageGet('vtop_show_card_attendance', 'true') === 'true';
   });
+  const [showBlankSlots, setShowBlankSlots] = useState<boolean>(() => {
+    return safeStorageGet('vtop_show_blank_slots', 'false') === 'true';
+  });
+  const [circularAttendance, setCircularAttendance] = useState<boolean>(() => {
+    return safeStorageGet('vtop_circular_attendance', 'false') === 'true';
+  });
+  const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>(() => {
+    return (safeStorageGet('vtop_time_format', '24h') as '12h' | '24h') || '24h';
+  });
   const [dockTabs, setDockTabs] = useState<string[]>(() => {
     return safeJsonParse<string[]>(
       safeStorageGet('vtop_dock_tabs'),
@@ -147,6 +156,18 @@ function VtopLoginDashboard() {
   useEffect(() => {
     safeStorageSet('vtop_show_card_attendance', String(showCardAttendance));
   }, [showCardAttendance]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_show_blank_slots', String(showBlankSlots));
+  }, [showBlankSlots]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_circular_attendance', String(circularAttendance));
+  }, [circularAttendance]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_time_format', timeFormat);
+  }, [timeFormat]);
 
   useEffect(() => {
     safeStorageSet('vtop_dock_tabs', JSON.stringify(dockTabs));
@@ -719,6 +740,34 @@ function VtopLoginDashboard() {
     }
   };
 
+  const handleSemesterChange = async (newSemId: string) => {
+    setActiveSemester(newSemId);
+    if (!newSemId || newSemId === 'UNAVAILABLE') return;
+
+    setIsRefreshing(true);
+    setMessage({ text: 'Loading semester data from VTOP...', type: 'info' });
+    try {
+      await Promise.allSettled([
+        queryClient.refetchQueries({ queryKey: ['timetable', activeUser, newSemId] }),
+        queryClient.refetchQueries({ queryKey: ['attendance', activeUser, newSemId] }),
+        queryClient.refetchQueries({ queryKey: ['marks', activeUser, newSemId] }),
+        queryClient.refetchQueries({ queryKey: ['grades', activeUser, newSemId] }),
+        queryClient.refetchQueries({ queryKey: ['exams', activeUser, newSemId] }),
+        queryClient.refetchQueries({ queryKey: ['od-snapshot', activeUser, newSemId] }),
+        queryClient.refetchQueries({ queryKey: ['calendar'] })
+      ]);
+      markSynced();
+      setMessage({ text: 'Semester data loaded.', type: 'success' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error('Semester refetch error:', err);
+      setMessage({ text: 'Failed to update semester data.', type: 'error' });
+      setTimeout(() => setMessage(null), 3000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const queryStaleTime = autoRefresh ? 5 * 60 * 1000 : Infinity;
   const queryRefetchOnMount = autoRefresh ? true : false;
   const queryInitialDataUpdatedAt = autoRefresh ? 0 : Date.now();
@@ -1005,6 +1054,8 @@ function VtopLoginDashboard() {
               TIMETABLE_SLOTS={TIMETABLE_SLOTS}
               setActiveTab={setActiveTab}
               showCardAttendance={showCardAttendance}
+              circularAttendance={circularAttendance}
+              timeFormat={timeFormat}
             />
           )}
 
@@ -1021,6 +1072,8 @@ function VtopLoginDashboard() {
               timetableQuery={timetableQuery}
               TIMETABLE_SLOTS={TIMETABLE_SLOTS}
               onOpenCalendar={() => setActiveTab('calendar')}
+              showBlankSlots={showBlankSlots}
+              timeFormat={timeFormat}
             />
           )}
 
@@ -1030,6 +1083,7 @@ function VtopLoginDashboard() {
               selectedAttendanceCourse={selectedAttendanceCourse}
               setSelectedAttendanceCourse={setSelectedAttendanceCourse}
               attendanceDetailQuery={attendanceDetailQuery}
+              circularAttendance={circularAttendance}
             />
           )}
 
@@ -1042,13 +1096,18 @@ function VtopLoginDashboard() {
           )}
 
           {activeTab === 'exams' && (
-            <ExamsView examsQuery={examsQuery} />
+            <ExamsView 
+              examsQuery={examsQuery}
+              timeFormat={timeFormat}
+            />
           )}
 
           {activeTab === 'calendar' && (
             <CalendarView
               semesters={semestersQuery.data || []}
               activeUser={activeUser}
+              mobileOptimization={mobileOptimization}
+              timeFormat={timeFormat}
             />
           )}
 
@@ -1092,7 +1151,7 @@ function VtopLoginDashboard() {
               theme={theme}
               setTheme={setTheme}
               activeSemester={activeSemester}
-              setActiveSemester={setActiveSemester}
+              setActiveSemester={handleSemesterChange}
               semestersQuery={semestersQuery}
               autoRefresh={autoRefresh}
               setAutoRefresh={setAutoRefresh}
@@ -1100,6 +1159,12 @@ function VtopLoginDashboard() {
               setMobileOptimization={setMobileOptimization}
               showCardAttendance={showCardAttendance}
               setShowCardAttendance={setShowCardAttendance}
+              showBlankSlots={showBlankSlots}
+              setShowBlankSlots={setShowBlankSlots}
+              circularAttendance={circularAttendance}
+              setCircularAttendance={setCircularAttendance}
+              timeFormat={timeFormat}
+              setTimeFormat={setTimeFormat}
               dockTabs={dockTabs}
               setDockTabs={setDockTabs}
             />
@@ -1185,6 +1250,8 @@ function VtopLoginDashboard() {
                   TIMETABLE_SLOTS={TIMETABLE_SLOTS}
                   setActiveTab={setActiveTab}
                   showCardAttendance={showCardAttendance}
+                  circularAttendance={circularAttendance}
+                  timeFormat={timeFormat}
                 />
               )}
 
@@ -1201,6 +1268,8 @@ function VtopLoginDashboard() {
                   timetableQuery={timetableQuery}
                   TIMETABLE_SLOTS={TIMETABLE_SLOTS}
                   onOpenCalendar={() => setActiveTab('calendar')}
+                  showBlankSlots={showBlankSlots}
+                  timeFormat={timeFormat}
                 />
               )}
 
@@ -1210,6 +1279,7 @@ function VtopLoginDashboard() {
                   selectedAttendanceCourse={selectedAttendanceCourse}
                   setSelectedAttendanceCourse={setSelectedAttendanceCourse}
                   attendanceDetailQuery={attendanceDetailQuery}
+                  circularAttendance={circularAttendance}
                 />
               )}
 
@@ -1222,13 +1292,18 @@ function VtopLoginDashboard() {
               )}
 
               {activeTab === 'exams' && (
-                <ExamsView examsQuery={examsQuery} />
+                <ExamsView 
+                  examsQuery={examsQuery} 
+                  timeFormat={timeFormat}
+                />
               )}
 
               {activeTab === 'calendar' && (
                 <CalendarView
                   semesters={semestersQuery.data || []}
                   activeUser={activeUser}
+                  mobileOptimization={mobileOptimization}
+                  timeFormat={timeFormat}
                 />
               )}
 
@@ -1272,7 +1347,7 @@ function VtopLoginDashboard() {
                   theme={theme}
                   setTheme={setTheme}
                   activeSemester={activeSemester}
-                  setActiveSemester={setActiveSemester}
+                  setActiveSemester={handleSemesterChange}
                   semestersQuery={semestersQuery}
                   autoRefresh={autoRefresh}
                   setAutoRefresh={setAutoRefresh}
@@ -1280,6 +1355,12 @@ function VtopLoginDashboard() {
                   setMobileOptimization={setMobileOptimization}
                   showCardAttendance={showCardAttendance}
                   setShowCardAttendance={setShowCardAttendance}
+                  showBlankSlots={showBlankSlots}
+                  setShowBlankSlots={setShowBlankSlots}
+                  circularAttendance={circularAttendance}
+                  setCircularAttendance={setCircularAttendance}
+                  timeFormat={timeFormat}
+                  setTimeFormat={setTimeFormat}
                   dockTabs={dockTabs}
                   setDockTabs={setDockTabs}
                 />

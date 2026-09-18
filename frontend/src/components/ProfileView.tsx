@@ -245,7 +245,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery, setActiv
                         </div>
                       </div>
                       <div className="flex items-center group gap-3">
-                        <div className="p-2 bg-orange-100 dark:bg-orange-950/20 rounded-lg text-orange-700 dark:text-orange-400 group-hover:bg-orange-200 transition-colors">
+                        <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-500 dark:text-indigo-400 group-hover:bg-indigo-500/20 transition-colors">
                           <Mail className="h-4 w-4" />
                         </div>
                         <div className="overflow-hidden">

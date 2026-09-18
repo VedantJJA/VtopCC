@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
-  ChevronDown, Sun, Moon, Trash2, HardDrive, RefreshCw, 
+  ChevronDown, Sun, Moon, HardDrive, RefreshCw, 
   Smartphone, BarChart2, CalendarDays, Activity, 
-  Calendar, Calculator, Award, FileText, BookOpen, Search, Home, Sliders
+  Calendar, Calculator, Award, FileText, BookOpen, Search, Home, Sliders,
+  Clock, CircleDot, LayoutGrid, Trash2
 } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { safeClearCachePrefix, getStorageUsage, safeStorageSet } from '../lib/cache';
@@ -19,6 +20,12 @@ interface SettingsViewProps {
   setMobileOptimization?: (val: boolean) => void;
   showCardAttendance?: boolean;
   setShowCardAttendance?: (val: boolean) => void;
+  showBlankSlots?: boolean;
+  setShowBlankSlots?: (val: boolean) => void;
+  circularAttendance?: boolean;
+  setCircularAttendance?: (val: boolean) => void;
+  timeFormat?: '12h' | '24h';
+  setTimeFormat?: (val: '12h' | '24h') => void;
   dockTabs?: string[];
   setDockTabs?: (tabs: string[]) => void;
 }
@@ -48,6 +55,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setMobileOptimization,
   showCardAttendance = true,
   setShowCardAttendance,
+  showBlankSlots = false,
+  setShowBlankSlots,
+  circularAttendance = false,
+  setCircularAttendance,
+  timeFormat = '24h',
+  setTimeFormat,
   dockTabs = ['dashboard', 'timetable', 'attendance', 'calendar', 'more'],
   setDockTabs
 }) => {
@@ -163,6 +176,108 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="text-[11px] font-semibold text-textMuted flex items-center gap-2 pt-1">
           <span className={`inline-block w-2 h-2 rounded-full ${showCardAttendance ? 'bg-emerald-500' : 'bg-gray-400'}`} />
           <span>Status: {showCardAttendance ? 'Attendance metrics and loading bar shown' : 'Hidden from class cards'}</span>
+        </div>
+      </div>
+
+      {/* Circular Attendance Indicator Toggle */}
+      <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1 pr-4">
+            <h3 className="text-sm font-bold text-textMain uppercase tracking-wider flex items-center gap-2">
+              <CircleDot className="h-4 w-4 text-accentColor" /> Circular Attendance Indicator
+            </h3>
+            <p className="text-xs text-textMuted leading-relaxed">
+              Render attendance progress as circular gauge rings instead of horizontal loading bars on cards.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={circularAttendance}
+            onClick={() => setCircularAttendance && setCircularAttendance(!circularAttendance)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accentColor focus:ring-offset-2 ${
+              circularAttendance ? 'bg-accentColor' : 'bg-borderColor'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                circularAttendance ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+        <div className="text-[11px] font-semibold text-textMuted flex items-center gap-2 pt-1">
+          <span className={`inline-block w-2 h-2 rounded-full ${circularAttendance ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+          <span>Status: {circularAttendance ? 'Circular gauge rings active' : 'Linear progress bars (Default)'}</span>
+        </div>
+      </div>
+
+      {/* Timetable Blank / Free Slots Toggle */}
+      <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1 pr-4">
+            <h3 className="text-sm font-bold text-textMain uppercase tracking-wider flex items-center gap-2">
+              <LayoutGrid className="h-4 w-4 text-accentColor" /> Timetable Free Slots
+            </h3>
+            <p className="text-xs text-textMuted leading-relaxed">
+              Display unoccupied periods as cards with a dotted border alongside scheduled classes in the timetable.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showBlankSlots}
+            onClick={() => setShowBlankSlots && setShowBlankSlots(!showBlankSlots)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accentColor focus:ring-offset-2 ${
+              showBlankSlots ? 'bg-accentColor' : 'bg-borderColor'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                showBlankSlots ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+        <div className="text-[11px] font-semibold text-textMuted flex items-center gap-2 pt-1">
+          <span className={`inline-block w-2 h-2 rounded-full ${showBlankSlots ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+          <span>Status: {showBlankSlots ? 'Showing free slots with dotted border' : 'Hidden (Only classes shown)'}</span>
+        </div>
+      </div>
+
+      {/* Time Format (12h / 24h) */}
+      <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
+        <div className="space-y-1">
+          <h3 className="text-sm font-bold text-textMain uppercase tracking-wider flex items-center gap-2">
+            <Clock className="h-4 w-4 text-accentColor" /> Time Format
+          </h3>
+          <p className="text-xs text-textMuted leading-relaxed">
+            Choose whether class slots, exams, and calendar hours display in 24-hour military time or 12-hour AM/PM format.
+          </p>
+        </div>
+        <div className="flex gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => setTimeFormat && setTimeFormat('24h')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+              timeFormat === '24h'
+                ? 'bg-accentColor text-white border-accentColor shadow-xs'
+                : 'bg-bgPrimary text-textMuted border-borderColor hover:bg-bgPrimary/60'
+            }`}
+          >
+            24-Hour (Default)
+          </button>
+          <button
+            type="button"
+            onClick={() => setTimeFormat && setTimeFormat('12h')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+              timeFormat === '12h'
+                ? 'bg-accentColor text-white border-accentColor shadow-xs'
+                : 'bg-bgPrimary text-textMuted border-borderColor hover:bg-bgPrimary/60'
+            }`}
+          >
+            12-Hour (AM/PM)
+          </button>
         </div>
       </div>
 

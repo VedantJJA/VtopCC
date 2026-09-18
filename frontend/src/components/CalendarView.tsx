@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronLeft, ChevronRight, LayoutGrid, CalendarDays } from 'lucide-react';
 import { getCalendar } from '../lib/api';
 import { safeGetCache, safeSetCache } from '../lib/cache';
 
 interface CalendarViewProps {
   semesters: any[];
   activeUser: string;
+  mobileOptimization?: boolean;
+  timeFormat?: '12h' | '24h';
 }
 
 // Function to find best matching semester ID for a given Date
@@ -44,13 +46,19 @@ function findBestSemesterForDate(targetDate: Date, semesters: any[]): string {
   return bestMatch ? bestMatch.id : semesters[0].id;
 }
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemesters, activeUser }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ 
+  semesters: propSemesters, 
+  activeUser,
+  mobileOptimization = false,
+  timeFormat: _timeFormat = '24h'
+}) => {
   const semesters = propSemesters.length > 0 ? propSemesters : (safeGetCache('vtop_cache_semesters', []) || []);
 
   const [activeSemester, setActiveSemester] = useState<string>(() => {
     return semesters[0]?.id || '';
   });
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<'agenda' | 'grid'>(() => mobileOptimization ? 'agenda' : 'grid');
 
   // Carousel Touch & Animation States
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -181,6 +189,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
 
   // Touch Drag & Swipe Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (isBusyRef.current) return;
     setTouchStartX(e.targetTouches[0].clientX);
     setIsDragging(true);
@@ -191,13 +200,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (touchStartX === null || isBusyRef.current) return;
     const currentX = e.targetTouches[0].clientX;
     const deltaX = currentX - touchStartX;
     setTouchTranslateX(deltaX);
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (touchStartX === null || isBusyRef.current) return;
     
     const dragDistance = touchTranslateX;
@@ -263,6 +274,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
 
   return (
     <div 
+      data-no-swipe="true"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -285,27 +297,55 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Header Controls for Month Selection */}
-          <div className="flex justify-center items-center bg-bgCard border border-borderColor rounded-xl p-4 shadow-sm space-x-6">
-            <button
-              onClick={() => triggerShift('right')}
-              className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
-              title="Previous Month"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            
-            <h3 className="font-extrabold text-textMain text-sm sm:text-base md:text-lg text-center min-w-[150px] uppercase tracking-wide">
-              {currData?.month_title || 'Calendar Month'}
-            </h3>
-            
-            <button
-              onClick={() => triggerShift('left')}
-              className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
-              title="Next Month"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+          {/* Header Controls for Month Selection & View Mode Switcher */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-bgCard border border-borderColor rounded-xl p-3 sm:p-4 shadow-sm">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => triggerShift('right')}
+                className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
+                title="Previous Month"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              
+              <h3 className="font-extrabold text-textMain text-sm sm:text-base md:text-lg text-center min-w-[130px] uppercase tracking-wide">
+                {currData?.month_title || 'Calendar Month'}
+              </h3>
+              
+              <button
+                onClick={() => triggerShift('left')}
+                className="p-2 bg-bgPrimary hover:bg-borderColor border border-borderColor rounded-lg cursor-pointer text-textMain transition-all flex items-center justify-center"
+                title="Next Month"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* View Switcher: Agenda vs Legacy Grid */}
+            <div className="flex items-center p-1 bg-bgPrimary border border-borderColor rounded-xl">
+              <button
+                onClick={() => setViewMode('agenda')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'agenda'
+                    ? 'bg-bgCard text-textMain shadow-xs border border-borderColor/60'
+                    : 'text-textMuted hover:text-textMain'
+                }`}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                <span>Agenda</span>
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-bgCard text-textMain shadow-xs border border-borderColor/60'
+                    : 'text-textMuted hover:text-textMain'
+                }`}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span>Grid View</span>
+              </button>
+            </div>
           </div>
 
           {/* 3-Panel Continuous Calendar Track Container */}
@@ -319,7 +359,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
             >
               {/* Previous Month Panel */}
               <div className="w-[33.333333%] shrink-0 px-1 sm:px-2">
-                <CalendarMonthPanel data={prevData} />
+                <CalendarMonthPanel data={prevData} isLegacyGrid={viewMode === 'grid'} />
               </div>
 
               {/* Current Month Panel */}
@@ -328,12 +368,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
                   data={currData} 
                   selectedDay={selectedDay} 
                   onSelectDay={setSelectedDay} 
+                  isLegacyGrid={viewMode === 'grid'}
                 />
               </div>
 
               {/* Next Month Panel */}
               <div className="w-[33.333333%] shrink-0 px-1 sm:px-2">
-                <CalendarMonthPanel data={nextData} />
+                <CalendarMonthPanel data={nextData} isLegacyGrid={viewMode === 'grid'} />
               </div>
             </div>
           </div>
@@ -412,7 +453,8 @@ const CalendarMonthPanel: React.FC<{
   data: any;
   selectedDay?: any;
   onSelectDay?: (dayObj: any) => void;
-}> = ({ data, selectedDay, onSelectDay }) => {
+  isLegacyGrid?: boolean;
+}> = ({ data, selectedDay, onSelectDay, isLegacyGrid = false }) => {
   if (!data || !data.days) {
     return (
       <div className="h-64 flex items-center justify-center bg-bgCard border border-borderColor rounded-xl">
@@ -445,7 +487,7 @@ const CalendarMonthPanel: React.FC<{
             return (
               <div 
                 key={index} 
-                className="bg-bgPrimary/30 min-h-[48px] sm:min-h-[85px]" 
+                className={`bg-bgPrimary/30 ${isLegacyGrid ? 'min-h-[90px] sm:min-h-[110px]' : 'min-h-[48px] sm:min-h-[85px]'}`} 
               />
             );
           }
@@ -478,7 +520,7 @@ const CalendarMonthPanel: React.FC<{
             <div 
               key={index} 
               onClick={() => onSelectDay && onSelectDay(dayObj)}
-              className={`${cellBg} min-h-[48px] sm:min-h-[85px] p-1.5 sm:p-2 relative transition-all flex flex-col justify-between cursor-pointer hover:brightness-95 dark:hover:brightness-110 ${
+              className={`${cellBg} ${isLegacyGrid ? 'min-h-[90px] sm:min-h-[110px]' : 'min-h-[48px] sm:min-h-[85px]'} p-1.5 sm:p-2 relative transition-all flex flex-col justify-between cursor-pointer hover:brightness-95 dark:hover:brightness-110 ${
                 isSelected ? 'ring-2 ring-accentColor shadow-md z-10' : ''
               }`}
             >
@@ -486,25 +528,40 @@ const CalendarMonthPanel: React.FC<{
                 {dayObj.day}
               </span>
 
-              {/* Mobile compact dot badges */}
-              <div className="flex items-center justify-center gap-1 mt-1 sm:hidden">
-                {isWorking && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-                {isHoliday && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
-                {isExam && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
-                {isDayOrder && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />}
-              </div>
-              
-              {/* Desktop full event labels */}
-              <div className="hidden sm:flex mt-3 flex-1 flex-col items-center justify-center space-y-1">
-                {dayObj.events?.map((event: any, eventIdx: number) => (
-                  <p 
-                    key={eventIdx} 
-                    className={`text-[10px] font-bold text-center leading-tight line-clamp-2 ${textCls}`}
-                  >
-                    {event.text}
-                  </p>
-                ))}
-              </div>
+              {isLegacyGrid ? (
+                <div className="mt-1 flex-1 flex flex-col items-center justify-start space-y-1 overflow-hidden">
+                  {dayObj.events?.map((event: any, eventIdx: number) => (
+                    <p 
+                      key={eventIdx} 
+                      className={`text-[9px] sm:text-[10px] font-bold text-center leading-tight line-clamp-2 ${textCls}`}
+                    >
+                      {event.text}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {/* Mobile compact dot badges */}
+                  <div className="flex items-center justify-center gap-1 mt-1 sm:hidden">
+                    {isWorking && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                    {isHoliday && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
+                    {isExam && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                    {isDayOrder && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />}
+                  </div>
+                  
+                  {/* Desktop full event labels */}
+                  <div className="hidden sm:flex mt-3 flex-1 flex-col items-center justify-center space-y-1">
+                    {dayObj.events?.map((event: any, eventIdx: number) => (
+                      <p 
+                        key={eventIdx} 
+                        className={`text-[10px] font-bold text-center leading-tight line-clamp-2 ${textCls}`}
+                      >
+                        {event.text}
+                      </p>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           );
         })}

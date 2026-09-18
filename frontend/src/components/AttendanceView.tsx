@@ -11,13 +11,15 @@ interface AttendanceViewProps {
   selectedAttendanceCourse: any | null;
   setSelectedAttendanceCourse: (course: any | null) => void;
   attendanceDetailQuery: UseQueryResult<any[], any>;
+  circularAttendance?: boolean;
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({
   attendanceQuery,
   selectedAttendanceCourse,
   setSelectedAttendanceCourse,
-  attendanceDetailQuery
+  attendanceDetailQuery,
+  circularAttendance = false
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'warning' | 'theory' | 'lab'>('all');
@@ -229,15 +231,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             const isSafe = percent >= 75;
             const attended = parseInt(course.attended_classes, 10) || 0;
             const total = parseInt(course.total_classes, 10) || 0;
+            const courseType = (course.course_type || '').toUpperCase();
+            const isLab = courseType.includes('LO') || courseType.includes('ELA') || courseType.includes('LAB');
 
             let marginText = '0';
             if (total > 0) {
-              const margin = Math.floor((4 * attended - 3 * total) / 3);
-              if (margin > 0) {
-                marginText = `+${margin}`;
-              } else if (margin < 0) {
-                const need = Math.ceil(3 * total - 4 * attended);
-                marginText = `-${Math.max(1, need)}`;
+              const rawMargin = Math.floor((4 * attended - 3 * total) / 3);
+              if (rawMargin > 0) {
+                const val = isLab ? Math.floor(rawMargin / 2) : rawMargin;
+                marginText = `+${val}`;
+              } else if (rawMargin < 0) {
+                const rawNeed = Math.ceil(3 * total - 4 * attended);
+                const val = isLab ? Math.floor(rawNeed / 2) : Math.max(1, rawNeed);
+                marginText = `-${val}`;
               }
             }
 
@@ -268,33 +274,90 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   </div>
 
                   {/* Percentage & Margin Pill */}
-                  <div className="flex flex-col items-end shrink-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-black text-textMain">
-                        {course.percentage}%
-                      </span>
-                      <span 
-                        title={marginText}
-                        className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgPrimary text-textMuted"
-                      >
-                        {marginText}
+                  {circularAttendance ? (
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <div className="relative flex items-center justify-center w-11 h-11">
+                        {(() => {
+                          const radius = 17;
+                          const circ = 2 * Math.PI * radius;
+                          const offset = circ - (Math.min(Math.max(percent, 0), 100) / 100) * circ;
+                          return (
+                            <>
+                              <svg className="w-11 h-11 transform -rotate-90">
+                                <circle
+                                  cx="22"
+                                  cy="22"
+                                  r={radius}
+                                  stroke="currentColor"
+                                  strokeWidth="3"
+                                  fill="transparent"
+                                  className="text-borderColor/40"
+                                />
+                                <circle
+                                  cx="22"
+                                  cy="22"
+                                  r={radius}
+                                  stroke="currentColor"
+                                  strokeWidth="3"
+                                  fill="transparent"
+                                  strokeDasharray={circ}
+                                  strokeDashoffset={offset}
+                                  strokeLinecap="round"
+                                  className={`transition-all duration-700 ease-out ${
+                                    isSafe ? 'text-emerald-500' : 'text-rose-500'
+                                  }`}
+                                />
+                              </svg>
+                              <span className="absolute text-[10px] font-black font-mono text-textMain">
+                                {Math.round(percent)}%
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span 
+                          title={marginText}
+                          className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgPrimary text-textMuted"
+                        >
+                          {marginText}
+                        </span>
+                        <span className="text-[10px] text-textMuted font-mono font-medium mt-0.5">
+                          {course.attended_classes}/{course.total_classes}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-end shrink-0">
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-black text-textMain font-mono">
+                          {course.percentage}%
+                        </span>
+                        <span 
+                          title={marginText}
+                          className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgPrimary text-textMuted"
+                        >
+                          {marginText}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-textMuted font-mono font-medium mt-0.5">
+                        {course.attended_classes} / {course.total_classes} hrs
                       </span>
                     </div>
-                    <span className="text-[10px] text-textMuted font-mono font-medium mt-0.5">
-                      {course.attended_classes} / {course.total_classes} hrs
-                    </span>
-                  </div>
+                  )}
                 </div>
 
                 {/* Horizontal Progress Bar */}
-                <div className="w-full bg-bgPrimary rounded-full h-1.5 overflow-hidden border border-borderColor/30">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ease-out ${
-                      isSafe ? 'bg-emerald-500' : 'bg-rose-500'
-                    }`}
-                    style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
-                  />
-                </div>
+                {!circularAttendance && (
+                  <div className="w-full bg-bgPrimary rounded-full h-1.5 overflow-hidden border border-borderColor/30">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${
+                        isSafe ? 'bg-emerald-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
+                    />
+                  </div>
+                )}
 
                 {/* Footer: Faculty & History Hint */}
                 <div className="flex items-center justify-between text-xs text-textMuted pt-0.5">

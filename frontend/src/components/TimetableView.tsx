@@ -1,19 +1,23 @@
 import React, { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BookOpen, Calendar, LayoutGrid, CalendarDays, Clock, MapPin, Layers } from 'lucide-react';
-import { getSubjectColor } from '../lib/utils';
+import { getSubjectColor, formatTime, formatTimeRange } from '../lib/utils';
 import { TimetableSkeleton } from './Skeleton';
 
 interface TimetableViewProps {
   timetableQuery: UseQueryResult<any, any>;
   TIMETABLE_SLOTS: any[];
   onOpenCalendar?: () => void;
+  showBlankSlots?: boolean;
+  timeFormat?: '12h' | '24h';
 }
 
 export const TimetableView: React.FC<TimetableViewProps> = ({ 
   timetableQuery, 
   TIMETABLE_SLOTS,
-  onOpenCalendar 
+  onOpenCalendar,
+  showBlankSlots = false,
+  timeFormat = '24h'
 }) => {
   // Determine if Saturday has an instructional day / scheduled classes
   const hasSaturday = (() => {
@@ -74,7 +78,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
   // Compile ordered classes and lunch break for the selected day in Day View
   const getDayScheduleItems = (day: string) => {
     const items: Array<{
-      type: 'class' | 'break';
+      type: 'class' | 'break' | 'free';
       startTime: string;
       endTime: string;
       slotName: string;
@@ -131,6 +135,17 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
 
         // Advance index by rowspan slots
         i += rowspan;
+      } else if (!slotClass) {
+        if (showBlankSlots) {
+          const [startTime, endTime] = (slot.theoryTime || '').split(' - ');
+          items.push({
+            type: 'free',
+            startTime: startTime || '',
+            endTime: endTime || '',
+            slotName: slot.name
+          });
+        }
+        i++;
       } else {
         i++;
       }
@@ -243,6 +258,29 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
           ) : (
             <div className="space-y-3">
               {dayScheduleItems.map((item, idx) => {
+                if (item.type === 'free') {
+                  return (
+                    <div 
+                      key={`free-${idx}`}
+                      className="p-3.5 sm:p-4 rounded-xl border-2 border-dotted border-borderColor/80 bg-bgCard/30 flex items-center justify-between text-xs transition-all hover:bg-bgCard/50"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-2 w-2 rounded-full border border-borderColor bg-textMuted/40" />
+                        <div>
+                          <span className="font-bold text-textMuted text-xs">Free Slot</span>
+                          <span className="ml-2 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-borderColor/60 bg-bgPrimary/60 text-textMuted">
+                            {item.slotName}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 font-mono text-xs text-textMuted">
+                        <Clock className="h-3 w-3 text-textMuted shrink-0" />
+                        <span>{formatTimeRange(`${item.startTime} - ${item.endTime}`, timeFormat)}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
                 if (item.type === 'break') {
                   return (
                     <div 
@@ -250,7 +288,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
                       className="py-2.5 px-4 rounded-xl border border-dashed border-borderColor/60 bg-bgPrimary/40 flex items-center justify-between text-xs text-textMuted"
                     >
                       <span className="font-bold uppercase tracking-wider text-[11px]">Lunch Break</span>
-                      <span className="font-mono text-[11px]">{item.startTime} - {item.endTime}</span>
+                      <span className="font-mono text-[11px]">{formatTimeRange(`${item.startTime} - ${item.endTime}`, timeFormat)}</span>
                     </div>
                   );
                 }
@@ -265,9 +303,9 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
                   >
                     {/* Header Row: Time Slot & Course Type Badge */}
                     <div className="flex items-center justify-between gap-2 border-b border-borderColor/50 pb-2.5">
-                      <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 font-mono">
                         <Clock className="h-3.5 w-3.5 shrink-0" />
-                        <span>{item.startTime} - {item.endTime}</span>
+                        <span>{formatTimeRange(`${item.startTime} - ${item.endTime}`, timeFormat)}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border border-borderColor bg-bgPrimary text-textMuted">
@@ -323,12 +361,12 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
                       <div className="font-extrabold text-[11px] text-textMain">{slot.name}</div>
                       <div className="text-[9px] text-textMuted font-mono mt-0.5 leading-tight">
                         {slot.id === 'break' ? (
-                          <span>13:25 - 14:00</span>
+                          <span>{formatTimeRange('13:25 - 14:00', timeFormat)}</span>
                         ) : (
                           <>
-                            <span>T: {slot.theoryTime.split(' - ')[0]}</span>
+                            <span>T: {formatTime(slot.theoryTime.split(' - ')[0], timeFormat)}</span>
                             <br />
-                            <span>L: {slot.labTime.split(' - ')[0]}</span>
+                            <span>L: {formatTime(slot.labTime.split(' - ')[0], timeFormat)}</span>
                           </>
                         )}
                       </div>

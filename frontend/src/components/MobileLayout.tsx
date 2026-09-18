@@ -358,7 +358,7 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
       items: [
         { id: 'marks', label: 'Marks', icon: Award, color: 'text-amber-500 bg-amber-500/10' },
         { id: 'grades', label: 'Grades', icon: FileText, color: 'text-indigo-500 bg-indigo-500/10' },
-        { id: 'exams', label: 'Exam Schedule', icon: CalendarDays, color: 'text-rose-500 bg-rose-500/10' },
+        { id: 'exams', label: 'Exam Schedule', icon: CalendarDays, color: 'text-orange-500 bg-orange-500/10' },
       ]
     },
     {

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Activity, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { DashboardSkeleton, SkeletonBox } from './Skeleton';
+import { formatTime } from '../lib/utils';
 
 interface DashboardViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
@@ -10,14 +11,19 @@ interface DashboardViewProps {
   TIMETABLE_SLOTS: any[];
   setActiveTab?: (tab: any) => void;
   showCardAttendance?: boolean;
+  circularAttendance?: boolean;
+  timeFormat?: '12h' | '24h';
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   attendanceQuery,
   timetableQuery,
   odSnapshotQuery,
+  TIMETABLE_SLOTS: _TIMETABLE_SLOTS,
   setActiveTab,
-  showCardAttendance = true
+  showCardAttendance = true,
+  circularAttendance = false,
+  timeFormat = '24h'
 }) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   
@@ -203,14 +209,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 >
                   <div className="flex justify-between text-sm font-semibold mb-2">
                     <span className="text-textMuted group-hover:text-textMain transition-colors">Attendance</span>
-                    <span className="text-textMain font-bold group-hover:text-accentColor transition-colors">{attSum.percentage}%</span>
+                    <span className="text-textMain font-bold group-hover:text-accentColor transition-colors font-mono">{attSum.percentage}%</span>
                   </div>
-                  <div className="w-full bg-bgPrimary rounded-full h-2 overflow-hidden border border-borderColor/40">
-                    <div 
-                      className="h-full rounded-full transition-all duration-500 bg-yellow-500"
-                      style={{ width: `${attSum.percentage}%` }}
-                    />
-                  </div>
+                  {circularAttendance ? (
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="relative flex items-center justify-center w-10 h-10">
+                        {(() => {
+                          const radius = 15;
+                          const circ = 2 * Math.PI * radius;
+                          const pct = Math.min(Math.max(Number(attSum.percentage) || 0, 0), 100);
+                          const offset = circ - (pct / 100) * circ;
+                          return (
+                            <>
+                              <svg className="w-10 h-10 transform -rotate-90">
+                                <circle cx="20" cy="20" r={radius} stroke="currentColor" strokeWidth="3" fill="transparent" className="text-borderColor/40" />
+                                <circle cx="20" cy="20" r={radius} stroke="currentColor" strokeWidth="3" fill="transparent" strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" className="text-emerald-500 transition-all duration-700 ease-out" />
+                              </svg>
+                              <span className="absolute text-[9px] font-black font-mono text-textMain">{Math.round(pct)}%</span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <span className="text-xs text-textMuted font-medium">Overall semester attendance status</span>
+                    </div>
+                  ) : (
+                    <div className="w-full bg-bgPrimary rounded-full h-2 overflow-hidden border border-borderColor/40">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500 bg-emerald-500"
+                        style={{ width: `${attSum.percentage}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2">
@@ -288,13 +317,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="flex flex-row w-[300%] -ml-[100%]"
               >
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={prevDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} />
+                  <SchedulePanel dayInfo={prevDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} circularAttendance={circularAttendance} timeFormat={timeFormat} />
                 </div>
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={currDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} />
+                  <SchedulePanel dayInfo={currDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} circularAttendance={circularAttendance} timeFormat={timeFormat} />
                 </div>
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={nextDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} />
+                  <SchedulePanel dayInfo={nextDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} circularAttendance={circularAttendance} timeFormat={timeFormat} />
                 </div>
               </div>
             </div>
@@ -327,7 +356,7 @@ function findAttendanceForClass(cls: { code: string; type?: string }, attendance
   return exact || matches[0];
 }
 
-function calculateAttendanceMetrics(att: any | null) {
+function calculateAttendanceMetrics(att: any | null, isLabCourse: boolean = false) {
   if (!att) return null;
   const attended = parseInt(att.attended_classes, 10);
   const total = parseInt(att.total_classes, 10);
@@ -344,19 +373,23 @@ function calculateAttendanceMetrics(att: any | null) {
     };
   }
 
-  // Margin calculation based on standard 75% cutoff:
-  const margin = Math.floor((4 * attended - 3 * total) / 3);
+  const courseType = ((att.course_type || '') + ' ' + (att.type || '')).toLowerCase();
+  const isLab = isLabCourse || courseType.includes('lab') || courseType.endsWith('la') || courseType === 'ela' || courseType === 'lo';
 
-  if (margin > 0) {
+  // Margin calculation based on standard 75% cutoff:
+  const rawMargin = Math.floor((4 * attended - 3 * total) / 3);
+
+  if (rawMargin > 0) {
+    const canMiss = isLab ? Math.floor(rawMargin / 2) : rawMargin;
     return {
       percentage,
       attended,
       total,
-      canMiss: margin,
+      canMiss,
       needAttend: 0,
       status: 'safe' as const
     };
-  } else if (margin === 0) {
+  } else if (rawMargin === 0) {
     return {
       percentage,
       attended,
@@ -367,13 +400,14 @@ function calculateAttendanceMetrics(att: any | null) {
     };
   } else {
     // Under 75%: classes needed consecutively to reach 75%
-    const need = Math.ceil(3 * total - 4 * attended);
+    const rawNeed = Math.ceil(3 * total - 4 * attended);
+    const needAttend = isLab ? Math.floor(rawNeed / 2) : Math.max(1, rawNeed);
     return {
       percentage,
       attended,
       total,
       canMiss: 0,
-      needAttend: Math.max(1, need),
+      needAttend,
       status: 'danger' as const
     };
   }
@@ -383,115 +417,167 @@ const SchedulePanel: React.FC<{
   dayInfo: { displayTitle: string; list: any[]; loading: boolean };
   attendanceList?: any[];
   showCardAttendance?: boolean;
-}> = ({ dayInfo, attendanceList = [], showCardAttendance = true }) => {
+  circularAttendance?: boolean;
+  timeFormat?: '12h' | '24h';
+}> = ({ dayInfo, attendanceList = [], showCardAttendance = true, circularAttendance = false, timeFormat = '24h' }) => {
   if (dayInfo.loading) {
     return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="p-3.5 rounded-xl border border-borderColor/40 bg-bgPrimary/40 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-14 space-y-1">
-                <SkeletonBox className="h-4 w-12" />
-                <SkeletonBox className="h-3 w-8" />
+        <div className="space-y-3 py-1">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="p-3.5 rounded-xl border border-borderColor/40 bg-bgPrimary/40 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-14 space-y-1">
+                  <SkeletonBox className="h-4 w-12" />
+                  <SkeletonBox className="h-3 w-8" />
+                </div>
+                <div className="space-y-1">
+                  <SkeletonBox className="h-4 w-36" />
+                  <SkeletonBox className="h-3 w-20" />
+                </div>
               </div>
-              <div className="space-y-1">
-                <SkeletonBox className="h-4 w-36" />
-                <SkeletonBox className="h-3 w-20" />
-              </div>
+              <SkeletonBox className="h-6 w-14 rounded-lg" />
             </div>
-            <SkeletonBox className="h-6 w-14 rounded-lg" />
-          </div>
-        ))}
-      </div>
-    );
-  }
+          ))}
+        </div>
+      );
+    }
 
-  if (dayInfo.list.length === 0) {
+    if (dayInfo.list.length === 0) {
+      return (
+        <div className="py-8 text-center bg-bgPrimary/30 rounded-xl border border-dashed border-borderColor">
+          <p className="text-sm font-semibold text-textMain">{dayInfo.displayTitle}</p>
+          <p className="text-xs text-textMuted italic mt-1">No classes scheduled for this day.</p>
+        </div>
+      );
+    }
+
     return (
-      <div className="py-8 text-center bg-bgPrimary/30 rounded-xl border border-dashed border-borderColor">
-        <p className="text-sm font-semibold text-textMain">{dayInfo.displayTitle}</p>
-        <p className="text-xs text-textMuted italic mt-1">No classes scheduled for this day.</p>
-      </div>
-    );
-  }
+      <div className={`space-y-3 ${dayInfo.list.length > 8 ? 'max-h-[520px] overflow-y-auto pr-1 custom-scrollbar' : ''}`}>
+        {dayInfo.list.map((cls, idx) => {
+          const isLab = (cls.type || '').toLowerCase().includes('l');
+          const att = findAttendanceForClass(cls, attendanceList);
+          const metrics = calculateAttendanceMetrics(att, isLab);
 
-  return (
-    <div className={`space-y-3 ${dayInfo.list.length > 8 ? 'max-h-[520px] overflow-y-auto pr-1 custom-scrollbar' : ''}`}>
-      {dayInfo.list.map((cls, idx) => {
-        const att = findAttendanceForClass(cls, attendanceList);
-        const metrics = calculateAttendanceMetrics(att);
+          let barColor = 'bg-emerald-500';
+          if (metrics) {
+            if (metrics.status === 'danger') barColor = 'bg-rose-500';
+            else if (metrics.status === 'warning') barColor = 'bg-amber-500';
+            else barColor = 'bg-emerald-500';
+          }
 
-        let barColor = 'bg-emerald-500';
-        if (metrics) {
-          if (metrics.status === 'danger') barColor = 'bg-rose-500';
-          else if (metrics.status === 'warning') barColor = 'bg-amber-500';
-          else barColor = 'bg-emerald-500';
-        }
+          return (
+            <div 
+              key={idx} 
+              className="group relative flex flex-col rounded-xl bg-bgPrimary/60 hover:bg-bgPrimary transition-all border border-borderColor/40 hover:border-borderColor overflow-hidden shadow-xs"
+            >
+              <div className="flex items-center p-3 sm:p-3.5">
+                {/* Time Slot */}
+                <div className="w-16 text-center border-r border-borderColor pr-3 shrink-0">
+                  <p className="font-bold text-indigo-600 dark:text-indigo-400 text-xs sm:text-sm leading-tight font-mono">
+                    {formatTime(cls.startTime, timeFormat)}
+                  </p>
+                  <p className="text-[10px] text-textMuted mt-0.5 leading-none font-mono">
+                    {formatTime(cls.endTime, timeFormat)}
+                  </p>
+                </div>
 
-        return (
-          <div 
-            key={idx} 
-            className="group relative flex flex-col rounded-xl bg-bgPrimary/60 hover:bg-bgPrimary transition-all border border-borderColor/40 hover:border-borderColor overflow-hidden shadow-xs"
-          >
-            <div className="flex items-center p-3 sm:p-3.5">
-              {/* Time Slot */}
-              <div className="w-16 text-center border-r border-borderColor pr-3 shrink-0">
-                <p className="font-bold text-indigo-600 dark:text-indigo-400 text-sm leading-tight">
-                  {cls.startTime}
-                </p>
-                <p className="text-[10px] text-textMuted mt-0.5 leading-none">
-                  {cls.endTime}
-                </p>
-              </div>
+                {/* Course Title & Details */}
+                <div className="ml-3 sm:ml-4 flex-grow min-w-0 pr-2">
+                  <p className="font-semibold text-textMain text-sm truncate" title={cls.title}>
+                    {cls.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-textMuted flex-wrap">
+                    <span className="font-mono">{cls.code}</span>
+                    <span>-</span>
+                    <span>{cls.type}</span>
+                  </div>
+                </div>
 
-              {/* Course Title & Details */}
-              <div className="ml-3 sm:ml-4 flex-grow min-w-0 pr-2">
-                <p className="font-semibold text-textMain text-sm truncate" title={cls.title}>
-                  {cls.title}
-                </p>
-                <div className="flex items-center gap-2 mt-0.5 text-xs text-textMuted flex-wrap">
-                  <span className="font-mono">{cls.code}</span>
-                  <span>-</span>
-                  <span>{cls.type}</span>
+                {/* Venue & Percentage + Margin Badge */}
+                <div className="flex flex-col items-end shrink-0 pl-2">
+                  <span className="text-xs font-semibold text-textMain">
+                    {cls.venue}
+                  </span>
+                  {showCardAttendance && metrics ? (
+                    circularAttendance ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div className="relative flex items-center justify-center w-8 h-8">
+                          {(() => {
+                            const radius = 12;
+                            const circ = 2 * Math.PI * radius;
+                            const offset = circ - (Math.min(Math.max(metrics.percentage, 0), 100) / 100) * circ;
+                            const ringCls = metrics.status === 'danger' ? 'text-rose-500' : metrics.status === 'warning' ? 'text-amber-500' : 'text-emerald-500';
+                            return (
+                              <>
+                                <svg className="w-8 h-8 transform -rotate-90">
+                                  <circle
+                                    cx="16"
+                                    cy="16"
+                                    r={radius}
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    fill="transparent"
+                                    className="text-borderColor/40"
+                                  />
+                                  <circle
+                                    cx="16"
+                                    cy="16"
+                                    r={radius}
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    fill="transparent"
+                                    strokeDasharray={circ}
+                                    strokeDashoffset={offset}
+                                    strokeLinecap="round"
+                                    className={`transition-all duration-500 ease-out ${ringCls}`}
+                                  />
+                                </svg>
+                                <span className="absolute text-[8px] font-black font-mono leading-none text-textMain">
+                                  {Math.round(metrics.percentage)}%
+                                </span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        <span 
+                          title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
+                          className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard text-textMuted"
+                        >
+                          {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted font-mono">
+                          {metrics.percentage}%
+                        </span>
+                        <span 
+                          title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
+                          className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted font-mono"
+                        >
+                          {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
+                        </span>
+                      </div>
+                    )
+                  ) : null}
                 </div>
               </div>
 
-              {/* Venue & Percentage + Margin Badge */}
-              <div className="flex flex-col items-end shrink-0 pl-2">
-                <span className="text-xs font-semibold text-textMain">
-                  {cls.venue}
-                </span>
-                {showCardAttendance && metrics ? (
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted">
-                      {metrics.percentage}%
-                    </span>
-                    <span 
-                      title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                      className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted"
-                    >
-                      {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Bottom Border-like Attendance Loading / Progress Bar */}
-            {showCardAttendance && metrics && (
-              <div 
-                className="w-full h-1 bg-borderColor/40 overflow-hidden" 
-                title={`Attendance: ${metrics.percentage}% (${metrics.attended}/${metrics.total})`}
-              >
+              {/* Bottom Border-like Attendance Loading / Progress Bar */}
+              {showCardAttendance && !circularAttendance && metrics && (
                 <div 
-                  className={`h-full ${barColor} transition-all duration-500 ease-out`}
-                  style={{ width: `${Math.min(Math.max(metrics.percentage, 0), 100)}%` }}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
+                  className="w-full h-1 bg-borderColor/40 overflow-hidden" 
+                  title={`Attendance: ${metrics.percentage}% (${metrics.attended}/${metrics.total})`}
+                >
+                  <div 
+                    className={`h-full ${barColor} transition-all duration-500 ease-out`}
+                    style={{ width: `${Math.min(Math.max(metrics.percentage, 0), 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
