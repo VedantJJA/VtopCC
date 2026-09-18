@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Search, Mail, MapPin, Building, Award, GraduationCap, AlertCircle } from 'lucide-react';
+import { Loader2, Search, Mail, MapPin, Building, Award, GraduationCap, AlertCircle, X } from 'lucide-react';
 import { searchFaculty, getFacultyDirectory } from '../lib/api';
 import { safeGetCache, safeSetCache } from '../lib/cache';
 
@@ -43,7 +43,7 @@ export const FacultyView: React.FC = () => {
       if (res.data.status === 'success' && res.data.raw_data) {
         setFaculty(res.data.raw_data);
       } else {
-        setError('Faculty details not found for this Employee ID.');
+        setError('Faculty details not found for this query.');
       }
     } catch (err: any) {
       console.error(err);
@@ -55,12 +55,46 @@ export const FacultyView: React.FC = () => {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const searchTarget = empId || searchQuery;
-    if (/^\d+$/.test(searchTarget.trim())) {
-      triggerSearch(searchTarget);
-    } else {
-      setError('Please select a faculty member from the suggestion list or enter a numeric Employee ID.');
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    // 1. If explicit empId is already set or query is numeric, search directly
+    if (empId.trim()) {
+      triggerSearch(empId.trim());
+      return;
     }
+    if (/^\d+$/.test(query)) {
+      triggerSearch(query);
+      return;
+    }
+
+    // 2. Check directory for exact match (case-insensitive)
+    const lower = query.toLowerCase();
+    const exactMatch = Object.entries(directory).find(
+      ([name]) => name.toLowerCase() === lower
+    );
+    if (exactMatch) {
+      setEmpId(exactMatch[1]);
+      setSearchQuery(exactMatch[0]);
+      setSuggestions([]);
+      triggerSearch(exactMatch[1]);
+      return;
+    }
+
+    // 3. Check directory for partial match
+    const partialMatch = Object.entries(directory).find(
+      ([name, id]) => name.toLowerCase().includes(lower) || id.includes(lower)
+    );
+    if (partialMatch) {
+      setEmpId(partialMatch[1]);
+      setSearchQuery(partialMatch[0]);
+      setSuggestions([]);
+      triggerSearch(partialMatch[1]);
+      return;
+    }
+
+    // 4. Pass directly to backend which performs server-side directory lookup
+    triggerSearch(query);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,16 +139,16 @@ export const FacultyView: React.FC = () => {
     // Delay slightly to let the click handler on suggestion register
     setTimeout(() => {
       setSuggestions([]);
-    }, 200);
+    }, 250);
   };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Search Header panel */}
-      <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4">
+      <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm space-y-4">
         <h3 className="text-lg font-bold text-textMain">Search Faculty Directory</h3>
         <p className="text-xs text-textMuted">
-          Type a name or employee ID to query our live directory. Select from the dropdown for instant lookup.
+          Type a name or employee ID to query our live directory. Select from the dropdown or press search for instant lookup.
         </p>
         <form onSubmit={handleSearchSubmit} className="flex gap-3 max-w-lg relative">
           <div className="relative flex-1">
@@ -136,16 +170,37 @@ export const FacultyView: React.FC = () => {
               onBlur={handleBlur}
               placeholder="e.g. Viswanathan or 50300"
               disabled={loading}
-              className="w-full pl-12 pr-4 py-3 rounded-xl border border-borderColor bg-bgPrimary text-textMain focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all text-sm font-semibold"
+              className="w-full pl-12 pr-10 py-3 rounded-xl border border-borderColor bg-bgPrimary text-textMain focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all text-sm font-semibold"
             />
+
+            {/* Clear Button */}
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setEmpId('');
+                  setSuggestions([]);
+                }}
+                className="absolute right-3 top-3.5 text-textMuted hover:text-textMain p-0.5 rounded transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
 
             {/* Suggestions Overlay Dropdown */}
             {suggestions.length > 0 && (
-              <div className="absolute left-0 right-0 mt-1 bg-bgCard border border-borderColor rounded-2xl shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto divide-y divide-borderColor/60">
+              <div className="absolute left-0 right-0 mt-1 bg-bgCard border border-borderColor rounded-xl shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto divide-y divide-borderColor/60">
                 {suggestions.map((fac) => (
                   <button
                     key={fac.id}
                     type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectFaculty(fac);
+                    }}
+                    onTouchStart={() => selectFaculty(fac)}
                     onClick={() => selectFaculty(fac)}
                     className="w-full text-left px-4 py-3 text-xs hover:bg-bgPrimary text-textMain transition-colors flex justify-between items-center cursor-pointer font-medium"
                   >
@@ -160,7 +215,7 @@ export const FacultyView: React.FC = () => {
           </div>
           <button
             type="submit"
-            disabled={loading || (!empId.trim() && !/^\d+$/.test(searchQuery.trim()))}
+            disabled={loading || !searchQuery.trim()}
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-700/50 text-white rounded-xl font-semibold transition-all flex items-center gap-2 cursor-pointer shadow-sm text-sm shrink-0"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
@@ -170,7 +225,7 @@ export const FacultyView: React.FC = () => {
 
       {/* Error State */}
       {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-2xl flex gap-2 text-sm animate-in fade-in duration-300">
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-200 dark:border-rose-900 rounded-xl flex gap-2 text-sm animate-in fade-in duration-300">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -178,7 +233,7 @@ export const FacultyView: React.FC = () => {
 
       {/* Results View */}
       {faculty && (
-        <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-borderColor">
+        <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-borderColor">
           {/* Avatar side */}
           <div className="p-6 flex flex-col items-center justify-center space-y-4 bg-bgPrimary/20 md:col-span-1">
             <div className="h-32 w-32 rounded-2xl bg-bgCard border border-borderColor overflow-hidden relative shadow-inner flex items-center justify-center">

@@ -21,7 +21,7 @@ export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
         <div className="space-y-6">
           {/* Estimated Consolidated Scores summary (if combined scores exist) */}
           {marksQuery.data?.combined_scores?.length > 0 && (
-            <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4">
+            <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-500" />
                 <h3 className="text-sm font-bold text-textMain">Aggregated Subject Performance</h3>
@@ -47,7 +47,7 @@ export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
           {marksQuery.data?.courses && marksQuery.data.courses.length > 0 ? (
             <div className="space-y-6">
               {marksQuery.data.courses.map((course: any, idx: number) => (
-                <div key={idx} className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4">
+                <div key={idx} className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm space-y-4">
                   <div className="flex justify-between items-start border-b border-borderColor pb-3">
                     <div>
                       <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted uppercase">{course.code} ({course.type})</span>
@@ -96,7 +96,7 @@ export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
               ))}
             </div>
           ) : (
-            <div className="bg-bgCard border border-borderColor rounded-3xl p-8 text-center space-y-2 shadow-sm">
+            <div className="bg-bgCard border border-borderColor rounded-xl p-8 text-center space-y-2 shadow-sm">
               <TrendingUp className="h-12 w-12 text-textMuted mx-auto" />
               <h4 className="font-bold text-textMain">No Marks Available</h4>
               <p className="text-xs text-textMuted">There are currently no active marks records for this semester.</p>

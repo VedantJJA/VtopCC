@@ -22,7 +22,7 @@ export function trackUser(rollNumber: string): void {
 
 /**
  * GET /api/admin/user-count
- * Public endpoint — returns just the total count of unique users.
+ * Public endpoint - returns just the total count of unique users.
  */
 export const getUserCount = (_req: Request, res: Response): void => {
   res.json({ count: trackedUsers.size });
@@ -30,7 +30,7 @@ export const getUserCount = (_req: Request, res: Response): void => {
 
 /**
  * GET /api/admin/stats
- * Admin-only — returns full user list with timestamps.
+ * Admin-only - returns full user list with timestamps.
  */
 export const getAdminStats = (_req: Request, res: Response): void => {
   const users = Array.from(trackedUsers).map(rollNumber => ({

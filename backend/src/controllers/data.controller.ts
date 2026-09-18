@@ -964,15 +964,60 @@ export const searchFaculty = async (req: Request, res: Response) => {
   const { client, authorizedId, csrfToken } = session;
   const { empId } = req.body;
   
-  if (!empId) {
-    return res.status(400).json({ status: 'error', message: 'Employee ID is required.' });
+  if (!empId || typeof empId !== 'string' || !empId.trim()) {
+    return res.status(400).json({ status: 'error', message: 'Employee ID or Faculty Name is required.' });
+  }
+
+  let resolvedId = empId.trim();
+
+  // If not purely numeric, attempt resolution against local faculty directory
+  if (!/^\d+$/.test(resolvedId)) {
+    try {
+      const dirPath = path.join(__dirname, '../../../faculty_data');
+      if (fs.existsSync(dirPath)) {
+        const files = fs.readdirSync(dirPath);
+        const searchLower = resolvedId.toLowerCase();
+        let matched: { name: string; id: string } | null = null;
+
+        for (const file of files) {
+          if (file.endsWith('.json')) {
+            try {
+              const content = fs.readFileSync(path.join(dirPath, file), 'utf8');
+              const data = JSON.parse(content);
+              for (const [name, id] of Object.entries(data)) {
+                const nameLower = name.toLowerCase();
+                if (nameLower === searchLower) {
+                  matched = { name, id: String(id) };
+                  break;
+                }
+                if (!matched && nameLower.includes(searchLower)) {
+                  matched = { name, id: String(id) };
+                }
+              }
+              if (matched) break;
+            } catch {}
+          }
+        }
+
+        if (matched) {
+          resolvedId = matched.id;
+        }
+      }
+    } catch (resolveErr) {
+      console.warn('Faculty name resolution fallback failed:', resolveErr);
+    }
+  }
+
+  // If still not numeric, inform user cleanly
+  if (!/^\d+$/.test(resolvedId)) {
+    return res.status(404).json({ status: 'error', message: 'Could not resolve faculty name to an Employee ID. Please select from directory suggestions.' });
   }
 
   try {
     const payload = new URLSearchParams();
     payload.append('_csrf', csrfToken);
     payload.append('authorizedID', authorizedId);
-    payload.append('empId', empId);
+    payload.append('empId', resolvedId);
     payload.append('x', new Date().toUTCString());
 
     const response = await client.post('hrms/EmployeeSearch1ForStudent', payload, {
@@ -985,7 +1030,7 @@ export const searchFaculty = async (req: Request, res: Response) => {
 
     const parsedData = parsers.parseFacultyDetails(response.data);
     if (!parsedData) {
-      return res.status(404).json({ status: 'error', message: 'Faculty not found.' });
+      return res.status(404).json({ status: 'error', message: 'Faculty details not found on HRMS portal.' });
     }
 
     return res.json({ status: 'success', raw_data: parsedData });

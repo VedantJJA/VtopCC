@@ -24,7 +24,7 @@ function decryptCredentials(token: string): { u: string; p: string } {
 }
 
 function encryptState(state: VtopState): string {
-  // 1h expiry — VTOP sessions rarely last longer. Re-auth flow handles expiry.
+  // 1h expiry - VTOP sessions rarely last longer. Re-auth flow handles expiry.
   return jwt.sign({ s: state }, JWT_SECRET, { expiresIn: '1h' });
 }
 

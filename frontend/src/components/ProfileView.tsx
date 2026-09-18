@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, User as UserIcon, Key, Users, Phone, Mail, UserCheck, MapPin, Home, Utensils } from 'lucide-react';
+import { Loader2, AlertTriangle, User as UserIcon, Key, Users, Phone, Mail, UserCheck, MapPin, Home, Utensils, Trophy } from 'lucide-react';
 import { StudentDirectory } from './StudentDirectory';
 
 interface ProfileViewProps {
@@ -39,7 +39,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery, setActiv
       {showToast && (
         <div className="fixed top-6 right-6 z-[100] animate-in slide-in-from-right-8 fade-in duration-300">
           <div className="bg-amber-400 text-amber-950 font-black px-5 py-3 rounded-xl shadow-2xl border-2 border-amber-300 flex items-center gap-3">
-            <span className="text-xl">🏏</span>
+            <Trophy className="h-5 w-5 text-amber-950 shrink-0" />
             <span>Thala For a reason</span>
           </div>
         </div>
@@ -59,7 +59,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery, setActiv
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             {/* Left profile block */}
             <div className="xl:col-span-1 space-y-6">
-              <div className="bg-bgCard border border-borderColor rounded-3xl p-6 text-center space-y-4 shadow-sm">
+              <div className="bg-bgCard border border-borderColor rounded-xl p-6 text-center space-y-4 shadow-sm">
                 <div 
                   onClick={handleProfileClick}
                   className="h-28 w-28 rounded-full bg-bgPrimary border border-borderColor overflow-hidden mx-auto relative flex items-center justify-center cursor-pointer select-none transition-transform hover:scale-105 active:scale-95"
@@ -102,7 +102,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery, setActiv
 
               {/* Hostel Info Card */}
               {profileQuery.data?.hostel && (
-                <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4">
+                <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm space-y-4">
                   <h4 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2 text-textMain">
                     <Home className="h-4 w-4 text-accentColor" /> Hostel Details
                   </h4>
@@ -133,7 +133,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery, setActiv
             {/* Right details grids */}
             <div className="xl:col-span-2 space-y-6">
               {/* Personal Details list */}
-              <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm">
+              <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
                 <div className="px-6 py-4 border-b border-borderColor bg-bgPrimary/30">
                   <h3 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2 text-textMain">
                     <UserIcon className="h-4 w-4 text-textMuted" /> Personal Information
@@ -163,7 +163,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery, setActiv
 
               {/* Parents details */}
               {profileQuery.data?.family && (
-                <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm">
+                <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
                   <div className="px-6 py-4 border-b border-borderColor bg-bgPrimary/30">
                     <h3 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2 text-textMain">
                       <Users className="h-4 w-4 text-textMuted" /> Family Information
@@ -215,7 +215,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profileQuery, setActiv
 
               {/* Proctor details */}
               {profileQuery.data?.proctor && (
-                <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm">
+                <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
                   <div className="px-6 py-4 border-b border-borderColor bg-indigo-50 dark:bg-indigo-950/10">
                     <h3 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2 text-indigo-900 dark:text-indigo-300">
                       <UserCheck className="h-4 w-4" /> Proctor Information

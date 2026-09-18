@@ -39,7 +39,7 @@ export const GradesView: React.FC<GradesViewProps> = ({ gradesQuery }) => {
         <div className="space-y-6">
           {/* GPA Top Banner */}
           {gradesQuery.data?.gpa && (
-            <div className="p-6 bg-bgCard border border-borderColor rounded-3xl flex justify-between items-center shadow-sm">
+            <div className="p-6 bg-bgCard border border-borderColor rounded-xl flex justify-between items-center shadow-sm">
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Academic Merit</span>
                 <h3 className="text-lg font-black text-textMain">Cumulative Semester GPA</h3>
@@ -50,7 +50,7 @@ export const GradesView: React.FC<GradesViewProps> = ({ gradesQuery }) => {
 
           {/* Grades Table or Empty Placeholder */}
           {gradesQuery.data?.grades && gradesQuery.data.grades.length > 0 ? (
-            <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm">
+            <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
@@ -84,7 +84,7 @@ export const GradesView: React.FC<GradesViewProps> = ({ gradesQuery }) => {
               </div>
             </div>
           ) : (
-            <div className="bg-bgCard border border-borderColor rounded-3xl p-8 text-center space-y-2 shadow-sm">
+            <div className="bg-bgCard border border-borderColor rounded-xl p-8 text-center space-y-2 shadow-sm">
               <GraduationCap className="h-12 w-12 text-textMuted mx-auto" />
               <h4 className="font-bold text-textMain">No Grades Available</h4>
               <p className="text-xs text-textMuted">There are currently no active grades records for this semester.</p>

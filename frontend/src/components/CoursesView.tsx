@@ -87,14 +87,14 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
     return (
       <div className="flex flex-col items-center justify-center py-24 animate-in fade-in duration-300">
         <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-textMuted mt-3">Loading registered courses…</p>
+        <p className="text-sm text-textMuted mt-3">Loading registered courses...</p>
       </div>
     );
   }
 
   if (!courses || courses.length === 0) {
     return (
-      <div className="bg-bgCard border border-borderColor rounded-3xl p-12 text-center space-y-3 max-w-lg mx-auto my-12 shadow-sm animate-in fade-in duration-300">
+      <div className="bg-bgCard border border-borderColor rounded-xl p-12 text-center space-y-3 max-w-lg mx-auto my-12 shadow-sm animate-in fade-in duration-300">
         <BookOpen className="h-12 w-12 text-textMuted mx-auto" />
         <h3 className="font-bold text-textMain text-lg">No Registered Courses</h3>
         <p className="text-xs text-textMuted leading-relaxed">

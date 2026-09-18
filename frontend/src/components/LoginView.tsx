@@ -127,7 +127,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
         {/* Saved Credentials Card */}
         {hasSavedCreds && !showManualForm ? (
-          <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-xl space-y-6">
+          <div className="bg-bgCard border border-borderColor rounded-2xl p-6 shadow-xl space-y-6">
             <div className="text-center space-y-1">
               <h2 className="text-lg font-bold text-textMain">Welcome Back!</h2>
               <p className="text-xs text-textMuted">You have saved VTOP credentials on this device.</p>
@@ -162,7 +162,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
           </div>
         ) : (
           /* Manual Login Form */
-          <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-xl space-y-6">
+          <div className="bg-bgCard border border-borderColor rounded-2xl p-6 shadow-xl space-y-6">
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-textMain mb-1">

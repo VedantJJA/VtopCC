@@ -54,7 +54,7 @@ export const HostelView: React.FC<HostelViewProps> = ({ profileQuery, leavesQuer
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {stats.map((stat, i) => (
-              <div key={i} className="bg-bgCard rounded-3xl p-6 shadow-sm border border-borderColor flex flex-col justify-center items-center text-center hover:-translate-y-1 transition-transform duration-200">
+              <div key={i} className="bg-bgCard rounded-xl p-6 shadow-sm border border-borderColor flex flex-col justify-center items-center text-center hover:-translate-y-1 transition-transform duration-200">
                 <span className="text-[11px] font-bold text-textMuted uppercase tracking-widest mb-2 flex items-center gap-1.5">
                   <stat.icon className="w-3.5 h-3.5 text-accentColor" /> {stat.label}
                 </span>
@@ -69,13 +69,13 @@ export const HostelView: React.FC<HostelViewProps> = ({ profileQuery, leavesQuer
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {roommates.map((rm, i) => (
-                <div key={i} className="p-5 bg-bgCard border border-borderColor rounded-3xl shadow-sm flex items-center gap-4">
+                <div key={i} className="p-5 bg-bgCard border border-borderColor rounded-xl shadow-sm flex items-center gap-4">
                   <div className="h-12 w-12 rounded-full bg-bgPrimary flex items-center justify-center text-textMuted font-bold text-lg border border-borderColor">
                     {rm.name.charAt(0)}
                   </div>
                   <div>
                     <p className="font-bold text-textMain">{rm.name}</p>
-                    <p className="text-xs font-mono text-textMuted mt-0.5">{rm.regNo} • {rm.program}</p>
+                    <p className="text-xs font-mono text-textMuted mt-0.5">{rm.regNo} | {rm.program}</p>
                   </div>
                 </div>
               ))}
@@ -91,7 +91,7 @@ export const HostelView: React.FC<HostelViewProps> = ({ profileQuery, leavesQuer
             </div>
 
             {leavesQuery?.isPending ? (
-              <div className="p-8 bg-bgCard rounded-3xl border border-borderColor flex justify-center">
+              <div className="p-8 bg-bgCard rounded-xl border border-borderColor flex justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
               </div>
             ) : leavesQuery?.isError ? (
@@ -99,7 +99,7 @@ export const HostelView: React.FC<HostelViewProps> = ({ profileQuery, leavesQuer
                 Failed to load leave history.
               </div>
             ) : leavesQuery?.data && leavesQuery.data.length > 0 ? (
-              <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm">
+              <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse min-w-[800px]">
                     <thead>
@@ -142,7 +142,7 @@ export const HostelView: React.FC<HostelViewProps> = ({ profileQuery, leavesQuer
                 </div>
               </div>
             ) : (
-              <div className="bg-bgCard border border-borderColor rounded-3xl p-8 text-center space-y-2 shadow-sm">
+              <div className="bg-bgCard border border-borderColor rounded-xl p-8 text-center space-y-2 shadow-sm">
                 <CalendarClock className="h-10 w-10 text-textMuted mx-auto opacity-50" />
                 <h4 className="font-bold text-textMain">No Leave Records</h4>
                 <p className="text-xs text-textMuted">You do not have any active or past leave requests.</p>

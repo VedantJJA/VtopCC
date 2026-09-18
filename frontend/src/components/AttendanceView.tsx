@@ -21,7 +21,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
       ) : !attendanceQuery.data || attendanceQuery.data.length === 0 ? (
-        <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
+        <div className="p-8 bg-bgCard border border-borderColor rounded-xl text-center space-y-2 shadow-sm">
           <Clock className="h-12 w-12 text-textMuted mx-auto" />
           <h4 className="font-bold text-textMain">Attendance Not Available</h4>
           <p className="text-xs text-textMuted">No attendance record found for this semester.</p>
@@ -31,6 +31,25 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           {attendanceQuery.data.map((course: any, idx: number) => {
             const percent = parseFloat(course.percentage) || 0;
             const isSafe = percent >= 75;
+            const attended = parseInt(course.attended_classes, 10) || 0;
+            const total = parseInt(course.total_classes, 10) || 0;
+
+            let marginText = '';
+            let marginClass = '';
+            if (total > 0) {
+              const margin = Math.floor((4 * attended - 3 * total) / 3);
+              if (margin > 0) {
+                marginText = `+${margin}`;
+                marginClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+              } else if (margin === 0) {
+                marginText = '0';
+                marginClass = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+              } else {
+                const need = Math.ceil(3 * total - 4 * attended);
+                marginText = `-${Math.max(1, need)}`;
+                marginClass = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+              }
+            }
 
             return (
               <div
@@ -94,9 +113,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                     }`}>
                       {course.percentage}%
                     </span>
-                    <span className="block text-[10px] text-textMuted font-mono font-medium mt-1.5 whitespace-nowrap">
+                    <span className="block text-[10px] text-textMuted font-mono font-medium mt-1 whitespace-nowrap">
                       {course.attended_classes} / {course.total_classes}
                     </span>
+                    {marginText && (
+                      <span 
+                        title={marginText}
+                        className={`inline-block text-[10px] font-bold font-mono px-1.5 py-0.5 rounded border mt-1.5 ${marginClass}`}
+                      >
+                        {marginText}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

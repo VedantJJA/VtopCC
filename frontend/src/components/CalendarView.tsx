@@ -142,7 +142,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
     enabled: !!activeSemester && activeSemester !== 'UNAVAILABLE' && !!activeUser
   });
 
-  // Background buffer pre-fetch for ±1 month after current month completes loading
+  // Background buffer pre-fetch for +/- 1 month after current month completes loading
   useEffect(() => {
     if (calendarQuery.data && !calendarQuery.isFetching && activeSemester && activeUser) {
       const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -256,7 +256,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ semesters: propSemes
       className="space-y-6 select-none overflow-hidden touch-pan-y"
     >
       {!activeSemester || activeSemester === 'UNAVAILABLE' ? (
-        <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
+        <div className="p-8 bg-bgCard border border-borderColor rounded-xl text-center space-y-2 shadow-sm">
           <AlertTriangle className="h-12 w-12 text-textMuted mx-auto" />
           <h4 className="font-bold text-textMain">Calendar Not Available</h4>
           <p className="text-xs text-textMuted">No academic calendar can be loaded without an active semester selection.</p>

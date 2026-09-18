@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Sun, Moon, Trash2, HardDrive } from 'lucide-react';
+import { ChevronDown, Sun, Moon, Trash2, HardDrive, RefreshCw, Smartphone } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { safeClearCachePrefix, getStorageUsage } from '../lib/cache';
 
@@ -9,6 +9,10 @@ interface SettingsViewProps {
   activeSemester: string;
   setActiveSemester: (sem: string) => void;
   semestersQuery: UseQueryResult<any[], any>;
+  autoRefresh?: boolean;
+  setAutoRefresh?: (val: boolean) => void;
+  mobileOptimization?: boolean;
+  setMobileOptimization?: (val: boolean) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -16,7 +20,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setTheme,
   activeSemester,
   setActiveSemester,
-  semestersQuery
+  semestersQuery,
+  autoRefresh = false,
+  setAutoRefresh,
+  mobileOptimization = false,
+  setMobileOptimization
 }) => {
   const [storageInfo, setStorageInfo] = useState(() => getStorageUsage());
 
@@ -45,7 +53,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             disabled={semestersQuery.isPending || !semestersQuery.data || semestersQuery.data.length === 0}
           >
             {semestersQuery.isPending ? (
-              <option>Loading semesters…</option>
+              <option>Loading semesters...</option>
             ) : !semestersQuery.data || semestersQuery.data.length === 0 ? (
               <option value="UNAVAILABLE">Unavailable</option>
             ) : (
@@ -86,6 +94,72 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
+      {/* Auto Refresh Toggle */}
+      <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1 pr-4">
+            <h3 className="text-sm font-bold text-textMain uppercase tracking-wider flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-accentColor" /> Auto Refresh
+            </h3>
+            <p className="text-xs text-textMuted leading-relaxed">
+              When disabled (default), data won't refetch automatically in the background, only when you click the manual Refresh button beside the theme switch.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoRefresh}
+            onClick={() => setAutoRefresh && setAutoRefresh(!autoRefresh)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accentColor focus:ring-offset-2 ${
+              autoRefresh ? 'bg-accentColor' : 'bg-borderColor'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                autoRefresh ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+        <div className="text-[11px] font-semibold text-textMuted flex items-center gap-2 pt-1">
+          <span className={`inline-block w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+          <span>Status: {autoRefresh ? 'Automatic refetch enabled' : 'Manual refresh only (Default)'}</span>
+        </div>
+      </div>
+
+      {/* Mobile Optimization UI Toggle */}
+      <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1 pr-4">
+            <h3 className="text-sm font-bold text-textMain uppercase tracking-wider flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-accentColor" /> Mobile Optimization UI
+            </h3>
+            <p className="text-xs text-textMuted leading-relaxed">
+              Enable the modern mobile layout with bottom navigation tabs and touch swipe gestures between screens.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={mobileOptimization}
+            onClick={() => setMobileOptimization && setMobileOptimization(!mobileOptimization)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accentColor focus:ring-offset-2 ${
+              mobileOptimization ? 'bg-accentColor' : 'bg-borderColor'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                mobileOptimization ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+        <div className="text-[11px] font-semibold text-textMuted flex items-center gap-2 pt-1">
+          <span className={`inline-block w-2 h-2 rounded-full ${mobileOptimization ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+          <span>Status: {mobileOptimization ? 'Mobile bottom tabs & swipe active' : 'Standard sidebar layout (Default)'}</span>
+        </div>
+      </div>
+
       {/* Cache Management */}
       <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
         <h3 className="text-sm font-bold text-textMain uppercase tracking-wider">Cache</h3>
@@ -108,7 +182,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-2">
         <h3 className="text-sm font-bold text-textMain uppercase tracking-wider">About</h3>
         <p className="text-xs text-textMuted leading-relaxed">
-          <strong className="text-textMain">VTOP Client CC</strong> — A personal VTOP client for VIT students.
+          <strong className="text-textMain">VTOP Client CC</strong> - A personal VTOP client for VIT students.
           Built with React, TypeScript, Express, and Tailwind CSS.
         </p>
         <p className="text-[11px] text-textMuted font-mono">v2.0.0</p>

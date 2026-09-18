@@ -172,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </nav>
 
-      {/* Bottom Actions — Logout only (semester dropdown moved to Settings) */}
+      {/* Bottom Actions - Logout only (semester dropdown moved to Settings) */}
       <div className="p-4 border-t border-borderColor shrink-0 mt-auto">
         <button 
           onClick={() => logoutMutation.mutate()}

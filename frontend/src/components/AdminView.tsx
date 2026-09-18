@@ -17,7 +17,7 @@ export const AdminView: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center py-24 animate-in fade-in duration-300">
         <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-textMuted mt-3">Loading admin stats…</p>
+        <p className="text-sm text-textMuted mt-3">Loading admin stats...</p>
       </div>
     );
   }
@@ -106,7 +106,7 @@ export const AdminView: React.FC = () => {
                     <td className="px-5 py-3 text-xs text-textMuted">
                       {user.firstSeen !== 'unknown'
                         ? new Date(user.firstSeen).toLocaleString()
-                        : '—'}
+                        : '-'}
                     </td>
                   </tr>
                 ))}

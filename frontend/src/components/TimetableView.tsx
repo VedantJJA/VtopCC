@@ -59,7 +59,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
       ) : !timetableQuery.data || !timetableQuery.data.timetable ? (
-        <div className="p-8 bg-bgCard border border-borderColor rounded-3xl text-center space-y-2 shadow-sm">
+        <div className="p-8 bg-bgCard border border-borderColor rounded-xl text-center space-y-2 shadow-sm">
           <BookOpen className="h-12 w-12 text-textMuted mx-auto" />
           <h4 className="font-bold text-textMain">Timetable Not Available</h4>
           <p className="text-xs text-textMuted">No timetable data could be found for this semester.</p>
@@ -76,7 +76,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
           </div>
 
           {/* Desktop Timetable grid */}
-          <div className="bg-bgCard border border-borderColor rounded-3xl overflow-hidden shadow-sm">
+          <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm">
             <div className="overflow-auto w-full relative">
               <table className="w-full border-collapse text-left text-xs table-fixed min-w-[1200px]">
                 <thead>

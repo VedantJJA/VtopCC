@@ -20,7 +20,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ debugQuery }) => {
       ) : (
         <div className="space-y-6 animate-fade-in">
           {/* Header */}
-          <div className="p-5 bg-bgCard border border-borderColor rounded-3xl shadow-sm space-y-2">
+          <div className="p-5 bg-bgCard border border-borderColor rounded-xl shadow-sm space-y-2">
             <h3 className="text-sm font-bold text-accentColor">VTOP Session Credentials (Debug)</h3>
             <p className="text-xs text-textMuted leading-relaxed">
               Below are the active session variables parsed by the backend after successful login, along with the raw HTML retrieved from the timetable menu route.
@@ -29,7 +29,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ debugQuery }) => {
 
           {/* Meta details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-3">
+            <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm space-y-3">
               <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted uppercase">Authorized ID</span>
               <div className="text-base font-mono font-extrabold text-textMain select-all">
                 {debugQuery.data?.authorizedId || 'N/A'}
@@ -39,7 +39,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ debugQuery }) => {
               </p>
             </div>
 
-            <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-3">
+            <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm space-y-3">
               <span className="text-[10px] bg-bgPrimary border border-borderColor font-bold px-2 py-0.5 rounded text-textMuted uppercase">Active CSRF Token</span>
               <div className="text-base font-mono font-extrabold text-textMain select-all truncate" title={debugQuery.data?.csrfToken}>
                 {debugQuery.data?.csrfToken || 'N/A'}
@@ -51,7 +51,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ debugQuery }) => {
           </div>
 
           {/* Raw response html */}
-          <div className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-borderColor pb-3">
               <h4 className="text-sm font-bold text-textMain">Timetable Endpoint Response HTML</h4>
               <button

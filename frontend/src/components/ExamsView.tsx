@@ -32,7 +32,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery }) => {
       ) : (
         <div className="space-y-6">
           {exams.length === 0 ? (
-            <div className="bg-bgCard border border-borderColor rounded-3xl p-8 text-center space-y-2 shadow-sm">
+            <div className="bg-bgCard border border-borderColor rounded-xl p-8 text-center space-y-2 shadow-sm">
               <CalendarIcon className="h-12 w-12 text-textMuted mx-auto" />
               <h4 className="font-bold text-textMain">No Exams Scheduled</h4>
               <p className="text-xs text-textMuted">There are currently no active exam schedules for this semester.</p>
@@ -52,7 +52,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery }) => {
                     {groupedExams[examType].map((exam: any, idx: number) => (
                       <div
                         key={idx}
-                        className="bg-bgCard border border-borderColor rounded-3xl p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6 hover:border-accentColor/40 transition-all duration-200"
+                        className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6 hover:border-accentColor/40 transition-all duration-200"
                       >
                         <div className="space-y-3 flex-1">
                           <div className="flex items-center gap-2">

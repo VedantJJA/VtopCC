@@ -93,6 +93,38 @@ function rawRemoveItem(key: string): void {
 }
 
 /**
+ * Safely reads a raw string from storage with fallback. Never throws.
+ */
+export function safeStorageGet(key: string, fallback = ''): string {
+  try {
+    const val = rawGetItem(key);
+    return val !== null ? val : fallback;
+  } catch (_e) {
+    return fallback;
+  }
+}
+
+/**
+ * Safely writes a raw string to storage. Never throws.
+ */
+export function safeStorageSet(key: string, value: string): boolean {
+  try {
+    return rawSetItem(key, value);
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * Safely removes a raw key from storage. Never throws.
+ */
+export function safeStorageRemove(key: string): void {
+  try {
+    rawRemoveItem(key);
+  } catch (_e) {}
+}
+
+/**
  * Evicts oldest cache entries (excluding critical user / auth keys) when quota is full.
  */
 function evictOldestCacheEntries(countToEvict = 3): void {
@@ -261,12 +293,35 @@ export function safeGetCache<T>(
         rawRemoveItem(key);
         return fallback;
       }
+
+      if (key.includes('semesters') && !Array.isArray(actualData)) {
+        console.warn(`[SafeCache] Corrupt structure for "${key}", expected array. Purging.`);
+        rawRemoveItem(key);
+        return fallback;
+      }
+      if (key.includes('profile') && (typeof actualData !== 'object' || actualData === null || Array.isArray(actualData))) {
+        console.warn(`[SafeCache] Corrupt structure for "${key}", expected object. Purging.`);
+        rawRemoveItem(key);
+        return fallback;
+      }
+
       return actualData;
     }
 
     // Legacy un-enveloped cache support
     if (validator && !validator(parsed)) {
       console.warn(`[SafeCache] Validator failed for legacy key "${key}", purging.`);
+      rawRemoveItem(key);
+      return fallback;
+    }
+
+    if (key.includes('semesters') && !Array.isArray(parsed)) {
+      console.warn(`[SafeCache] Corrupt structure for legacy "${key}", expected array. Purging.`);
+      rawRemoveItem(key);
+      return fallback;
+    }
+    if (key.includes('profile') && (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))) {
+      console.warn(`[SafeCache] Corrupt structure for legacy "${key}", expected object. Purging.`);
       rawRemoveItem(key);
       return fallback;
     }

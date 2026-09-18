@@ -222,6 +222,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div 
+          data-no-swipe="true"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -276,13 +277,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="flex flex-row w-[300%] -ml-[100%]"
               >
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={prevDayInfo} />
+                  <SchedulePanel dayInfo={prevDayInfo} attendanceList={attendanceQuery.data || []} />
                 </div>
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={currDayInfo} />
+                  <SchedulePanel dayInfo={currDayInfo} attendanceList={attendanceQuery.data || []} />
                 </div>
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={nextDayInfo} />
+                  <SchedulePanel dayInfo={nextDayInfo} attendanceList={attendanceQuery.data || []} />
                 </div>
               </div>
             </div>
@@ -293,7 +294,88 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
 };
 
-const SchedulePanel: React.FC<{ dayInfo: { displayTitle: string; list: any[]; loading: boolean } }> = ({ dayInfo }) => {
+function findAttendanceForClass(cls: { code: string; type?: string }, attendanceList: any[]): any | null {
+  if (!attendanceList || !Array.isArray(attendanceList) || !cls.code) return null;
+  const matches = attendanceList.filter(
+    (a) => a.course_code?.trim().toUpperCase() === cls.code.trim().toUpperCase()
+  );
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+
+  const clsType = (cls.type || '').toLowerCase();
+  const isLab = clsType.includes('lab') || clsType.endsWith('la') || clsType === 'ela' || clsType === 'lo';
+  const isTheory = clsType.includes('theory') || clsType.endsWith('th') || clsType === 'eth' || clsType === 'th';
+
+  const exact = matches.find((a) => {
+    const aType = (a.course_type || '').toLowerCase();
+    if (isLab && (aType.includes('lab') || aType.endsWith('la') || aType === 'ela' || aType === 'lo')) return true;
+    if (isTheory && (aType.includes('theory') || aType.endsWith('th') || aType === 'eth' || aType === 'th')) return true;
+    return false;
+  });
+
+  return exact || matches[0];
+}
+
+function calculateAttendanceMetrics(att: any | null) {
+  if (!att) return null;
+  const attended = parseInt(att.attended_classes, 10);
+  const total = parseInt(att.total_classes, 10);
+  if (isNaN(attended) || isNaN(total) || total === 0) {
+    const parsedPercent = parseFloat(att.percentage);
+    return {
+      percentage: isNaN(parsedPercent) ? 0 : parsedPercent,
+      attended: 0,
+      total: 0,
+      canMiss: 0,
+      needAttend: 0,
+      status: 'no_data' as const
+    };
+  }
+
+  const rawPercent = (attended / total) * 100;
+  const percentage = parseFloat(att.percentage) || Math.round(rawPercent * 10) / 10;
+
+  // Formula for classes that can be missed while staying >= 75%:
+  // attended / (total + m) >= 0.75 => m <= (4 * attended - 3 * total) / 3
+  const margin = Math.floor((4 * attended - 3 * total) / 3);
+
+  if (margin > 0) {
+    return {
+      percentage,
+      attended,
+      total,
+      canMiss: margin,
+      needAttend: 0,
+      status: 'safe' as const
+    };
+  } else if (margin === 0) {
+    return {
+      percentage,
+      attended,
+      total,
+      canMiss: 0,
+      needAttend: 0,
+      status: 'warning' as const
+    };
+  } else {
+    // Under 75%: classes needed consecutively to reach 75%:
+    // (attended + x) / (total + x) >= 0.75 => x >= 3 * total - 4 * attended
+    const need = Math.ceil(3 * total - 4 * attended);
+    return {
+      percentage,
+      attended,
+      total,
+      canMiss: 0,
+      needAttend: Math.max(1, need),
+      status: 'danger' as const
+    };
+  }
+}
+
+const SchedulePanel: React.FC<{ 
+  dayInfo: { displayTitle: string; list: any[]; loading: boolean };
+  attendanceList?: any[];
+}> = ({ dayInfo, attendanceList = [] }) => {
   if (dayInfo.loading) {
     return (
       <div className="h-24 flex items-center justify-center">
@@ -313,32 +395,93 @@ const SchedulePanel: React.FC<{ dayInfo: { displayTitle: string; list: any[]; lo
 
   return (
     <div className={`space-y-3 ${dayInfo.list.length > 8 ? 'max-h-[520px] overflow-y-auto pr-1 custom-scrollbar' : ''}`}>
-      {dayInfo.list.map((cls, idx) => (
-        <div 
-          key={idx} 
-          className="flex items-center p-3 rounded-lg bg-bgPrimary/60 hover:bg-bgPrimary transition-colors border border-borderColor/40"
-        >
-          <div className="w-16 text-center border-r border-borderColor pr-3 shrink-0">
-            <p className="font-bold text-indigo-600 dark:text-indigo-400 text-sm leading-tight">
-              {cls.startTime}
-            </p>
-            <p className="text-[10px] text-textMuted mt-0.5 leading-none">
-              {cls.endTime}
-            </p>
+      {dayInfo.list.map((cls, idx) => {
+        const att = findAttendanceForClass(cls, attendanceList);
+        const metrics = calculateAttendanceMetrics(att);
+
+        let barColor = 'bg-emerald-500';
+        if (metrics) {
+          if (metrics.status === 'danger') barColor = 'bg-rose-500';
+          else if (metrics.status === 'warning') barColor = 'bg-amber-500';
+          else barColor = 'bg-emerald-500';
+        }
+
+        return (
+          <div 
+            key={idx} 
+            className="group relative flex flex-col rounded-xl bg-bgPrimary/60 hover:bg-bgPrimary transition-all border border-borderColor/40 hover:border-borderColor overflow-hidden shadow-xs"
+          >
+            <div className="flex items-center p-3 sm:p-3.5">
+              {/* Time Slot */}
+              <div className="w-16 text-center border-r border-borderColor pr-3 shrink-0">
+                <p className="font-bold text-indigo-600 dark:text-indigo-400 text-sm leading-tight">
+                  {cls.startTime}
+                </p>
+                <p className="text-[10px] text-textMuted mt-0.5 leading-none">
+                  {cls.endTime}
+                </p>
+              </div>
+
+              {/* Course Title & Details */}
+              <div className="ml-3 sm:ml-4 flex-grow min-w-0 pr-2">
+                <p className="font-semibold text-textMain text-sm truncate" title={cls.title}>
+                  {cls.title}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-textMuted flex-wrap">
+                  <span className="font-mono">{cls.code}</span>
+                  <span>-</span>
+                  <span>{cls.type}</span>
+                </div>
+              </div>
+
+              {/* Venue & Percentage + Margin Badge */}
+              <div className="flex flex-col items-end shrink-0 pl-2">
+                <span className="text-xs font-semibold text-textMain">
+                  {cls.venue}
+                </span>
+                {metrics ? (
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-lg border ${
+                      metrics.status === 'safe'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                        : metrics.status === 'warning'
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                    }`}>
+                      {metrics.percentage}%
+                    </span>
+                    <span 
+                      title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
+                      className={`text-[11px] font-bold px-1.5 py-0.5 rounded-lg border ${
+                        metrics.status === 'safe'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                          : metrics.status === 'warning'
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                      }`}
+                    >
+                      {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Bottom Border-like Attendance Loading / Progress Bar */}
+            {metrics && (
+              <div 
+                className="w-full h-1 bg-borderColor/40 overflow-hidden" 
+                title={`Attendance: ${metrics.percentage}% (${metrics.attended}/${metrics.total})`}
+              >
+                <div 
+                  className={`h-full ${barColor} transition-all duration-500 ease-out`}
+                  style={{ width: `${Math.min(Math.max(metrics.percentage, 0), 100)}%` }}
+                />
+              </div>
+            )}
           </div>
-          <div className="ml-4 flex-grow overflow-hidden">
-            <p className="font-semibold text-textMain text-sm truncate" title={cls.title}>
-              {cls.title}
-            </p>
-            <p className="text-xs text-textMuted mt-0.5 truncate">
-              {cls.code} ({cls.type})
-            </p>
-          </div>
-          <span className="text-sm font-medium text-textMain shrink-0 pl-3">
-            {cls.venue}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
