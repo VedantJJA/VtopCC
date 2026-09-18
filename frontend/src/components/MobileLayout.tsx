@@ -72,24 +72,49 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   // Auto-hiding sticky header state on scroll
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
   const lastScrollYRef = useRef<number>(0);
+  const accumulatedDeltaRef = useRef<number>(0);
 
   useEffect(() => {
     setIsHeaderVisible(true);
     lastScrollYRef.current = 0;
+    accumulatedDeltaRef.current = 0;
   }, [activeTab]);
 
   const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
     const currentScrollY = e.currentTarget.scrollTop;
     const delta = currentScrollY - lastScrollYRef.current;
-
-    if (currentScrollY <= 20) {
-      setIsHeaderVisible(true);
-    } else if (delta > 6 && currentScrollY > 40) {
-      setIsHeaderVisible(false);
-    } else if (delta < -6) {
-      setIsHeaderVisible(true);
-    }
     lastScrollYRef.current = currentScrollY;
+
+    // 1. Near the top: always keep header visible
+    if (currentScrollY <= 20) {
+      accumulatedDeltaRef.current = 0;
+      setIsHeaderVisible(true);
+      return;
+    }
+
+    // 2. Ignore negative overscroll on touch devices
+    if (currentScrollY < 0) return;
+
+    // 3. Accumulate delta with directional threshold to eliminate jitter
+    if (delta > 0) {
+      // Scrolling down
+      if (accumulatedDeltaRef.current < 0) {
+        accumulatedDeltaRef.current = 0;
+      }
+      accumulatedDeltaRef.current += delta;
+      if (accumulatedDeltaRef.current > 35 && currentScrollY > 50) {
+        setIsHeaderVisible(false);
+      }
+    } else if (delta < 0) {
+      // Scrolling up
+      if (accumulatedDeltaRef.current > 0) {
+        accumulatedDeltaRef.current = 0;
+      }
+      accumulatedDeltaRef.current += delta;
+      if (accumulatedDeltaRef.current < -25) {
+        setIsHeaderVisible(true);
+      }
+    }
   };
 
   // Animated Tab Swipe states
@@ -248,110 +273,113 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Top Mobile Header with Smooth Auto-Hiding on Scroll */}
-      <header 
-        className={`flex items-center justify-between px-4 bg-bgCard border-b border-borderColor z-30 shrink-0 shadow-xs transition-all duration-300 ease-in-out ${
-          isHeaderVisible 
-            ? 'h-14 py-2.5 opacity-100 translate-y-0' 
-            : 'h-0 py-0 opacity-0 -translate-y-full pointer-events-none overflow-hidden border-transparent'
-        }`}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          {!isDockTab ? (
-            <button
-              onClick={() => setActiveTab('more')}
-              className="p-1.5 -ml-1 text-accentColor hover:bg-bgPrimary rounded-lg flex items-center gap-1 font-semibold text-xs cursor-pointer transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-2 shrink-0">
-              <VtopLogo size={22} />
-            </div>
-          )}
+      {/* Content wrapper with absolute header overlay */}
+      <div className="relative flex-1 flex flex-col min-h-0 w-full max-w-full overflow-hidden">
+        {/* Top Mobile Header with Smooth Auto-Hiding on Scroll */}
+        <header 
+          className={`absolute top-0 inset-x-0 h-14 flex items-center justify-between px-4 bg-bgCard/95 backdrop-blur-md border-b border-borderColor z-30 shadow-xs transform-gpu transition-transform duration-300 ease-out ${
+            isHeaderVisible 
+              ? 'translate-y-0' 
+              : '-translate-y-full pointer-events-none'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {!isDockTab ? (
+              <button
+                onClick={() => setActiveTab('more')}
+                className="p-1.5 -ml-1 text-accentColor hover:bg-bgPrimary rounded-lg flex items-center gap-1 font-semibold text-xs cursor-pointer transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 shrink-0">
+                <VtopLogo size={22} />
+              </div>
+            )}
 
-          <div className="flex flex-col min-w-0">
-            <h1 className="text-sm sm:text-base font-bold text-textMain capitalize truncate leading-tight">
-              {getHeaderTitle()}
-            </h1>
-            {lastSyncedText && (
-              <span className="text-[10px] text-textMuted font-medium leading-none mt-0.5 flex items-center gap-1">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
-                <span>Synced {lastSyncedText}</span>
-              </span>
+            <div className="flex flex-col min-w-0">
+              <h1 className="text-sm sm:text-base font-bold text-textMain capitalize truncate leading-tight">
+                {getHeaderTitle()}
+              </h1>
+              {lastSyncedText && (
+                <span className="text-[10px] text-textMuted font-medium leading-none mt-0.5 flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
+                  <span>Synced {lastSyncedText}</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Header Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Universal Search Button */}
+            {showUniversalSearch && onOpenSearch && (
+              <button
+                onClick={onOpenSearch}
+                className="p-2 rounded-xl text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor transition-all cursor-pointer"
+                title="Universal Search"
+                aria-label="Universal Search"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            )}
+
+            {/* Refresh Button */}
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="p-2 rounded-xl text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor transition-all cursor-pointer disabled:opacity-50"
+              title="Refresh VTOP Data"
+              aria-label="Refresh Data"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-accentColor' : ''}`} />
+            </button>
+
+            {/* Theme Switcher Button */}
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2 rounded-xl text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor transition-all cursor-pointer"
+              title="Toggle Light/Dark Theme"
+              aria-label="Toggle Theme"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-indigo-500" />}
+            </button>
+          </div>
+        </header>
+
+        {/* Main Content Area with Animated Touch Translation */}
+        <main 
+          onScroll={handleMainScroll}
+          className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-[4.25rem] pb-24 custom-scrollbar relative bg-bgPrimary w-full max-w-full overscroll-y-contain"
+        >
+          <div 
+            style={{
+              transform: targetOffsetPercent !== 0 
+                ? `translate3d(${targetOffsetPercent}%, 0, 0)` 
+                : touchTranslateX !== 0 
+                  ? `translate3d(${touchTranslateX}px, 0, 0)` 
+                  : undefined,
+              transition: isSnapReset || isDragging 
+                ? 'none' 
+                : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)'
+            }}
+            className="min-h-0 flex flex-col flex-1 w-full max-w-full overflow-x-hidden"
+          >
+            {activeTab === 'more' ? (
+              <MobileMoreHub 
+                setActiveTab={setActiveTab} 
+                activeUser={activeUser}
+                profileData={profileData}
+                isAdmin={isAdmin}
+                onLogout={onLogout}
+              />
+            ) : (
+              children
             )}
           </div>
-        </div>
-
-        {/* Header Action Buttons */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Universal Search Button */}
-          {showUniversalSearch && onOpenSearch && (
-            <button
-              onClick={onOpenSearch}
-              className="p-2 rounded-xl text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor transition-all cursor-pointer"
-              title="Universal Search"
-              aria-label="Universal Search"
-            >
-              <Search className="h-4 w-4" />
-            </button>
-          )}
-
-          {/* Refresh Button */}
-          <button
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="p-2 rounded-xl text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor transition-all cursor-pointer disabled:opacity-50"
-            title="Refresh VTOP Data"
-            aria-label="Refresh Data"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-accentColor' : ''}`} />
-          </button>
-
-          {/* Theme Switcher Button */}
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="p-2 rounded-xl text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor transition-all cursor-pointer"
-            title="Toggle Light/Dark Theme"
-            aria-label="Toggle Theme"
-          >
-            {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-indigo-500" />}
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content Area with Animated Touch Translation */}
-      <main 
-        onScroll={handleMainScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-20 custom-scrollbar relative bg-bgPrimary w-full max-w-full overscroll-y-contain"
-      >
-        <div 
-          style={{
-            transform: targetOffsetPercent !== 0 
-              ? `translate3d(${targetOffsetPercent}%, 0, 0)` 
-              : touchTranslateX !== 0 
-                ? `translate3d(${touchTranslateX}px, 0, 0)` 
-                : undefined,
-            transition: isSnapReset || isDragging 
-              ? 'none' 
-              : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)'
-          }}
-          className="min-h-0 flex flex-col flex-1 w-full max-w-full overflow-x-hidden"
-        >
-          {activeTab === 'more' ? (
-            <MobileMoreHub 
-              setActiveTab={setActiveTab} 
-              activeUser={activeUser}
-              profileData={profileData}
-              isAdmin={isAdmin}
-              onLogout={onLogout}
-            />
-          ) : (
-            children
-          )}
-        </div>
-      </main>
+        </main>
+      </div>
 
       {/* Fixed Bottom Tab Bar / Dock with Safe Area */}
       <nav className="fixed bottom-0 inset-x-0 bg-bgCard/95 backdrop-blur-md border-t border-borderColor z-40 px-2 py-1.5 pb-[max(env(safe-area-inset-bottom),0.5rem)] flex items-center justify-around shadow-lg">
