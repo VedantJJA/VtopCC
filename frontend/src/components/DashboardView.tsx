@@ -1,8 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Activity, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, CalendarDays, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { DashboardSkeleton, SkeletonBox } from './Skeleton';
 import { formatTime } from '../lib/utils';
+import { getCustomSchedules, type CustomScheduleItem } from '../services/customScheduleService';
+import { scanLowAttendanceCourses, sendBrowserNotification } from '../services/notificationService';
 
 interface DashboardViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
@@ -13,6 +15,8 @@ interface DashboardViewProps {
   showCardAttendance?: boolean;
   circularAttendance?: boolean;
   timeFormat?: '12h' | '24h';
+  notifyLowAttendance?: boolean;
+  notifySchedule?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -23,9 +27,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   setActiveTab,
   showCardAttendance = true,
   circularAttendance = false,
-  timeFormat = '24h'
+  timeFormat = '24h',
+  notifyLowAttendance = true,
+  notifySchedule = true
 }) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
+
+  // Custom schedules subscription
+  const [customSchedules, setCustomSchedules] = useState<CustomScheduleItem[]>(getCustomSchedules);
+
+  useEffect(() => {
+    const handleUpdate = () => setCustomSchedules(getCustomSchedules());
+    window.addEventListener('vtop_custom_schedules_updated', handleUpdate);
+    return () => window.removeEventListener('vtop_custom_schedules_updated', handleUpdate);
+  }, []);
   
   // Carousel Touch & Animation States
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -136,7 +151,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return { dayName, displayTitle, list: [], loading: timetableQuery.isPending };
     }
     
-    const schedule = timetableQuery.data.timetable[dayName] || {};
+    const schedule = timetableQuery.data?.timetable ? timetableQuery.data.timetable[dayName] || {} : {};
     const time_slot_keys = [
       "08:00 - 08:50", "08:55 - 09:45", "09:50 - 10:40", "10:45 - 11:35",
       "11:40 - 12:30", "12:35 - 13:25", "LUNCH", "14:00 - 14:50",
@@ -160,12 +175,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         });
       }
     }
+
+    // Merge custom schedule entries for this day
+    const customForDay = customSchedules.filter(item => {
+      if (item.isRecurring) return item.dayOfWeek === dayName;
+      return item.date === dateString;
+    });
+
+    for (const cs of customForDay) {
+      list.push({
+        startTime: cs.startTime,
+        endTime: cs.endTime,
+        title: cs.title,
+        code: 'CUSTOM',
+        type: cs.isRecurring ? 'Weekly' : 'Personal',
+        venue: cs.venue || 'Personal',
+        isCustom: true,
+        customColor: cs.color
+      });
+    }
+
+    list.sort((a, b) => a.startTime.replace(':', '').localeCompare(b.startTime.replace(':', '')));
+
     return { dayName, displayTitle, list, loading: false };
   };
 
   const prevDayInfo = getClassesForOffset(selectedDayOffset - 1);
   const currDayInfo = getClassesForOffset(selectedDayOffset);
   const nextDayInfo = getClassesForOffset(selectedDayOffset + 1);
+
+  // Dispatch daily schedule reminder notification if enabled
+  useEffect(() => {
+    if (!notifySchedule) return;
+    const sessionKey = `vtop_notif_sent_${new Date().toDateString()}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+
+    if (currDayInfo.list.length > 0) {
+      sessionStorage.setItem(sessionKey, 'true');
+      sendBrowserNotification('VTOP Daily Schedule', {
+        body: `You have ${currDayInfo.list.length} scheduled events today (${currDayInfo.displayTitle}).`
+      });
+    }
+  }, [notifySchedule, currDayInfo.list.length, currDayInfo.displayTitle]);
 
   const attSum = getAttendanceSummary();
   const odCount = odSnapshotQuery.data?.total_od_count ?? 0;
@@ -186,8 +237,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return <DashboardSkeleton />;
   }
 
+  const lowAttendanceAlerts = notifyLowAttendance && attendanceQuery.data 
+    ? scanLowAttendanceCourses(attendanceQuery.data)
+    : [];
+
   return (
     <div className="space-y-6">
+      {/* Low Attendance Alert Banner */}
+      {notifyLowAttendance && lowAttendanceAlerts.length > 0 && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 shrink-0 mt-0.5">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-rose-500">
+                Low Attendance Alert ({lowAttendanceAlerts.length} {lowAttendanceAlerts.length === 1 ? 'course' : 'courses'} below 75%)
+              </h4>
+              <p className="text-xs text-textMuted mt-0.5 truncate">
+                {lowAttendanceAlerts.map(a => `${a.courseCode} (${a.percentage}%, need ${a.needAttend})`).join(', ')}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab && setActiveTab('attendance')}
+            className="text-xs font-bold text-rose-400 hover:text-rose-300 underline shrink-0 mt-1 cursor-pointer"
+          >
+            View
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm flex flex-col h-fit">
           <div>
@@ -431,6 +512,54 @@ const SchedulePanel: React.FC<{
     return (
       <div className={`space-y-3 ${dayInfo.list.length > 8 ? 'max-h-[520px] overflow-y-auto pr-1 custom-scrollbar' : ''}`}>
         {dayInfo.list.map((cls, idx) => {
+          if (cls.isCustom) {
+            return (
+              <div 
+                key={`custom-${idx}`} 
+                className="group relative flex flex-col rounded-xl bg-bgPrimary/60 hover:bg-bgPrimary transition-all border border-borderColor/50 overflow-hidden shadow-xs"
+              >
+                <div className="flex items-center p-3 sm:p-3.5">
+                  <div className="w-16 text-center border-r border-borderColor pr-3 shrink-0">
+                    <p className="font-bold text-accentColor text-xs sm:text-sm leading-tight font-mono">
+                      {formatTime(cls.startTime, timeFormat)}
+                    </p>
+                    <p className="text-[10px] text-textMuted mt-0.5 leading-none font-mono">
+                      {formatTime(cls.endTime, timeFormat)}
+                    </p>
+                  </div>
+                  <div className="ml-3 sm:ml-4 flex-grow min-w-0 pr-2">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-textMain text-sm truncate" title={cls.title}>
+                        {cls.title}
+                      </p>
+                      <span 
+                        style={{ backgroundColor: cls.customColor }}
+                        className="w-2 h-2 rounded-full shrink-0 shadow-xs" 
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-textMuted flex-wrap">
+                      <span 
+                        style={{ backgroundColor: `${cls.customColor}20`, color: cls.customColor, borderColor: `${cls.customColor}50` }}
+                        className="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase"
+                      >
+                        CUSTOM
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end justify-center shrink-0 pl-3">
+                    <span className="text-xs font-semibold text-textMain mb-1">
+                      {cls.venue}
+                    </span>
+                  </div>
+                </div>
+                <div 
+                  className="w-full h-1" 
+                  style={{ backgroundColor: cls.customColor }}
+                />
+              </div>
+            );
+          }
+
           const isLab = (cls.type || '').toLowerCase().includes('l');
           const att = findAttendanceForClass(cls, attendanceList);
           const metrics = calculateAttendanceMetrics(att, isLab);

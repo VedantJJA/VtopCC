@@ -72,7 +72,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
 
   if (examsQuery.isError && exams.length === 0) {
     return (
-      <div className="p-4 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-xs font-mono">
+      <div className="p-4 bg-neutral-500/10 text-neutral-400 border border-neutral-500/20 rounded-2xl flex items-center gap-3 text-xs font-mono">
         <AlertTriangle className="h-5 w-5 shrink-0" />
         <span>No examination records retrieved or session timed out. Please retry via refresh.</span>
       </div>
@@ -81,8 +81,8 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
 
   if (exams.length === 0) {
     return (
-      <div className="bg-bgCard border-2 border-dashed border-rose-500/30 rounded-2xl p-8 text-center space-y-3">
-        <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto text-rose-500">
+      <div className="bg-bgCard border-2 border-dashed border-neutral-500/30 rounded-2xl p-8 text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-neutral-500/10 border border-neutral-500/20 flex items-center justify-center mx-auto text-neutral-400">
           <CalendarIcon className="h-6 w-6" />
         </div>
         <div className="space-y-1">
@@ -104,8 +104,8 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
             onClick={() => setSelectedType('all')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap border ${
               selectedType === 'all'
-                ? 'bg-rose-600 text-white border-rose-700 shadow-sm'
-                : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain hover:border-rose-500/40'
+                ? 'bg-neutral-800 text-white border-neutral-700 dark:bg-neutral-200 dark:text-neutral-900 dark:border-neutral-300 shadow-sm'
+                : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain hover:border-neutral-500/40'
             }`}
           >
             All Exams ({exams.length})
@@ -119,8 +119,8 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
                 onClick={() => setSelectedType(type)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap border ${
                   selectedType === type
-                    ? 'bg-rose-600 text-white border-rose-700 shadow-sm'
-                    : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain hover:border-rose-500/40'
+                    ? 'bg-neutral-800 text-white border-neutral-700 dark:bg-neutral-200 dark:text-neutral-900 dark:border-neutral-300 shadow-sm'
+                    : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain hover:border-neutral-500/40'
                 }`}
               >
                 {type} ({count})
@@ -131,14 +131,14 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
 
         {/* Count Badge */}
         <div className="flex items-center gap-2 shrink-0 font-mono text-xs">
-          <span className="px-3 py-1 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20 font-bold flex items-center gap-1.5">
+          <span className="px-3 py-1 rounded-xl bg-neutral-500/10 text-neutral-400 dark:text-neutral-300 border border-neutral-500/20 font-bold flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5" />
             <span>{filteredExams.length} Scheduled</span>
           </span>
         </div>
       </div>
 
-      {/* 2. EXAM TICKET CARDS: CRIMSON ACCENT & HIGH READABILITY */}
+      {/* 2. EXAM TICKET CARDS: GREY MONOCHROME PALETTE & HIGH READABILITY */}
       <div className="space-y-3">
         {filteredExams.map((exam: any, idx: number) => {
           const dateMeta = parseExamDate(exam.exam_date);
@@ -149,14 +149,14 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
           return (
             <div
               key={idx}
-              className="bg-bgCard border border-borderColor rounded-2xl shadow-xs overflow-hidden transition-all hover:border-rose-500/50 group"
+              className="bg-bgCard border border-borderColor rounded-2xl shadow-xs overflow-hidden transition-all hover:border-neutral-500/50 group"
             >
               <div className="flex flex-col md:flex-row">
                 {/* Left Date Block */}
                 <div className="bg-bgPrimary/70 border-b md:border-b-0 md:border-r border-borderColor p-3.5 sm:p-4 flex md:flex-col items-center justify-between md:justify-center md:w-24 shrink-0 text-center gap-1 relative">
-                  <div className="hidden md:block w-1.5 h-full absolute left-0 top-0 bg-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="hidden md:block w-1.5 h-full absolute left-0 top-0 bg-neutral-400 dark:bg-neutral-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div>
-                    <span className="text-[10px] font-mono font-black uppercase tracking-widest text-rose-500 block">
+                    <span className="text-[10px] font-mono font-black uppercase tracking-widest text-neutral-400 block">
                       {dateMeta.month}
                     </span>
                     <span className="text-2xl sm:text-3xl font-mono font-black text-textMain leading-none block my-0.5">
@@ -169,7 +169,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
                     )}
                   </div>
                   {exam.exam_session && (
-                    <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-500 border border-rose-500/30 uppercase">
+                    <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-md bg-neutral-500/15 text-neutral-300 border border-neutral-500/30 uppercase">
                       {exam.exam_session}
                     </span>
                   )}
@@ -179,7 +179,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
                 <div className="p-4 sm:p-5 flex-1 space-y-2 min-w-0">
                   {/* Badges bar */}
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-mono font-black px-2.5 py-0.5 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/30 uppercase">
+                    <span className="text-xs font-mono font-black px-2.5 py-0.5 rounded-lg bg-neutral-500/10 text-neutral-300 dark:text-neutral-200 border border-neutral-500/30 uppercase">
                       {exam.course_code}
                     </span>
                     {exam.slot && (
@@ -205,7 +205,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
                   {/* Date & Time line */}
                   <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-textMuted pt-0.5">
                     <div className="flex items-center gap-1.5 text-textMain font-semibold">
-                      <Clock className="h-3.5 w-3.5 text-rose-500" />
+                      <Clock className="h-3.5 w-3.5 text-neutral-400" />
                       <span>{displayTime || exam.exam_time || 'Time TBA'}</span>
                     </div>
                     {exam.exam_session && (
@@ -220,7 +220,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
                 <div className="border-t md:border-t-0 md:border-l border-borderColor bg-bgPrimary/40 p-3.5 sm:p-4 md:w-52 shrink-0 flex md:flex-col items-center md:items-stretch justify-between gap-3">
                   {/* Venue Block */}
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-neutral-500/10 border border-neutral-500/20 flex items-center justify-center text-neutral-400 shrink-0">
                       <MapPin className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
@@ -239,16 +239,16 @@ export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '
                   </div>
 
                   {/* Seat Number Block */}
-                  <div className="flex items-center md:justify-between gap-2.5 bg-bgCard border border-rose-500/30 rounded-xl px-3 py-1.5 md:py-2 shadow-xs">
+                  <div className="flex items-center md:justify-between gap-2.5 bg-bgCard border border-borderColor rounded-xl px-3 py-1.5 md:py-2 shadow-xs">
                     <div>
-                      <span className="text-[9px] font-mono font-black text-rose-500 uppercase tracking-wider block leading-none">
+                      <span className="text-[9px] font-mono font-black text-textMuted uppercase tracking-wider block leading-none">
                         Seat No
                       </span>
-                      <span className={`text-base sm:text-lg font-mono font-black block leading-none mt-0.5 ${hasSeat ? 'text-rose-500' : 'text-textMuted text-xs'}`}>
+                      <span className={`text-base sm:text-lg font-mono font-black block leading-none mt-0.5 ${hasSeat ? 'text-textMain' : 'text-textMuted text-xs'}`}>
                         {exam.seat_no || 'TBA'}
                       </span>
                     </div>
-                    <Armchair className="h-4 w-4 text-rose-500/70 shrink-0" />
+                    <Armchair className="h-4 w-4 text-neutral-400 shrink-0" />
                   </div>
                 </div>
               </div>

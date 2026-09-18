@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   LayoutDashboard, CalendarDays, Activity, Calculator, Grid, 
   RefreshCw, Sun, Moon, ArrowLeft, BookOpen, Award, FileText, 
@@ -68,6 +68,29 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   const dockTabs = propDockTabs && propDockTabs.length > 0 ? propDockTabs : DEFAULT_DOCK_TABS;
   const swipableTabs = dockTabs.filter(t => t !== 'more');
   const isDockTab = dockTabs.includes(activeTab);
+
+  // Auto-hiding sticky header state on scroll
+  const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
+  const lastScrollYRef = useRef<number>(0);
+
+  useEffect(() => {
+    setIsHeaderVisible(true);
+    lastScrollYRef.current = 0;
+  }, [activeTab]);
+
+  const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
+    const currentScrollY = e.currentTarget.scrollTop;
+    const delta = currentScrollY - lastScrollYRef.current;
+
+    if (currentScrollY <= 20) {
+      setIsHeaderVisible(true);
+    } else if (delta > 6 && currentScrollY > 40) {
+      setIsHeaderVisible(false);
+    } else if (delta < -6) {
+      setIsHeaderVisible(true);
+    }
+    lastScrollYRef.current = currentScrollY;
+  };
 
   // Animated Tab Swipe states
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -225,8 +248,14 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Top Mobile Header */}
-      <header className="flex items-center justify-between px-4 py-2.5 bg-bgCard border-b border-borderColor z-30 shrink-0 shadow-xs">
+      {/* Top Mobile Header with Smooth Auto-Hiding on Scroll */}
+      <header 
+        className={`flex items-center justify-between px-4 bg-bgCard border-b border-borderColor z-30 shrink-0 shadow-xs transition-all duration-300 ease-in-out ${
+          isHeaderVisible 
+            ? 'h-14 py-2.5 opacity-100 translate-y-0' 
+            : 'h-0 py-0 opacity-0 -translate-y-full pointer-events-none overflow-hidden border-transparent'
+        }`}
+      >
         <div className="flex items-center gap-2.5 min-w-0">
           {!isDockTab ? (
             <button
@@ -293,7 +322,10 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       </header>
 
       {/* Main Content Area with Animated Touch Translation */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 custom-scrollbar relative bg-bgPrimary w-full max-w-full">
+      <main 
+        onScroll={handleMainScroll}
+        className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-20 custom-scrollbar relative bg-bgPrimary w-full max-w-full overscroll-y-contain"
+      >
         <div 
           style={{
             transform: targetOffsetPercent !== 0 
@@ -305,7 +337,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
               ? 'none' 
               : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)'
           }}
-          className="min-h-full flex flex-col flex-1 w-full max-w-full overflow-x-hidden"
+          className="min-h-0 flex flex-col flex-1 w-full max-w-full overflow-x-hidden"
         >
           {activeTab === 'more' ? (
             <MobileMoreHub 
@@ -382,7 +414,7 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
       items: [
         { id: 'marks', label: 'Marks', icon: Award, color: 'text-amber-500 bg-amber-500/10' },
         { id: 'grades', label: 'Grades', icon: FileText, color: 'text-indigo-500 bg-indigo-500/10' },
-        { id: 'exams', label: 'Exam Schedule', icon: CalendarDays, color: 'text-rose-500 bg-rose-500/10' },
+        { id: 'exams', label: 'Exam Schedule', icon: CalendarDays, color: 'text-neutral-400 bg-neutral-500/10' },
       ]
     },
     {

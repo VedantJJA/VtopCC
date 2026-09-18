@@ -126,6 +126,12 @@ function VtopLoginDashboard() {
   const [showUniversalSearch, setShowUniversalSearch] = useState<boolean>(() => {
     return safeStorageGet('vtop_universal_search', 'true') === 'true';
   });
+  const [notifySchedule, setNotifySchedule] = useState<boolean>(() => {
+    return safeStorageGet('vtop_notif_schedule', 'true') === 'true';
+  });
+  const [notifyLowAttendance, setNotifyLowAttendance] = useState<boolean>(() => {
+    return safeStorageGet('vtop_notif_low_attendance', 'true') === 'true';
+  });
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState<number | null>(() => {
@@ -181,6 +187,14 @@ function VtopLoginDashboard() {
   useEffect(() => {
     safeStorageSet('vtop_universal_search', String(showUniversalSearch));
   }, [showUniversalSearch]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_notif_schedule', String(notifySchedule));
+  }, [notifySchedule]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_notif_low_attendance', String(notifyLowAttendance));
+  }, [notifyLowAttendance]);
 
   useEffect(() => {
     if (!showUniversalSearch) return;
@@ -1079,6 +1093,8 @@ function VtopLoginDashboard() {
               showCardAttendance={showCardAttendance}
               circularAttendance={circularAttendance}
               timeFormat={timeFormat}
+              notifyLowAttendance={notifyLowAttendance}
+              notifySchedule={notifySchedule}
             />
           )}
 
@@ -1192,6 +1208,10 @@ function VtopLoginDashboard() {
               setDockTabs={setDockTabs}
               showUniversalSearch={showUniversalSearch}
               setShowUniversalSearch={setShowUniversalSearch}
+              notifySchedule={notifySchedule}
+              setNotifySchedule={setNotifySchedule}
+              notifyLowAttendance={notifyLowAttendance}
+              setNotifyLowAttendance={setNotifyLowAttendance}
             />
           )}
 
@@ -1288,6 +1308,8 @@ function VtopLoginDashboard() {
                   showCardAttendance={showCardAttendance}
                   circularAttendance={circularAttendance}
                   timeFormat={timeFormat}
+                  notifyLowAttendance={notifyLowAttendance}
+                  notifySchedule={notifySchedule}
                 />
               )}
 
@@ -1401,6 +1423,10 @@ function VtopLoginDashboard() {
                   setDockTabs={setDockTabs}
                   showUniversalSearch={showUniversalSearch}
                   setShowUniversalSearch={setShowUniversalSearch}
+                  notifySchedule={notifySchedule}
+                  setNotifySchedule={setNotifySchedule}
+                  notifyLowAttendance={notifyLowAttendance}
+                  setNotifyLowAttendance={setNotifyLowAttendance}
                 />
               )}
 

@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Calendar, LayoutGrid, CalendarDays, MapPin, Layers, Maximize2, Minimize2 } from 'lucide-react';
+import { Calendar, LayoutGrid, CalendarDays, MapPin, Layers, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { getSubjectColor, formatTime, formatTimeRange } from '../lib/utils';
 import { TimetableSkeleton } from './Skeleton';
+import { getSchedulesForDayOfWeek, type CustomScheduleItem } from '../services/customScheduleService';
 
 interface TimetableViewProps {
   timetableQuery: UseQueryResult<any, any>;
@@ -41,13 +42,59 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
   const [selectedDay, setSelectedDay] = useState<string>(getInitialDay);
   const [viewMode, setViewMode] = useState<'day' | 'grid'>('day');
 
-  // Grid view scaling states to fit screen width
+  // Custom schedules subscription
+  const [customSchedules, setCustomSchedules] = useState<CustomScheduleItem[]>(() => getSchedulesForDayOfWeek(getInitialDay()));
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setCustomSchedules(getSchedulesForDayOfWeek(selectedDay));
+    };
+    handleUpdate();
+    window.addEventListener('vtop_custom_schedules_updated', handleUpdate);
+    return () => window.removeEventListener('vtop_custom_schedules_updated', handleUpdate);
+  }, [selectedDay]);
+
+  // Grid view scaling states to fit screen width & mobile pinch-to-zoom
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const [gridScale, setGridScale] = useState<number>(1);
   const [tableHeight, setTableHeight] = useState<number>(0);
   const [tableWidth, setTableWidth] = useState<number>(1080);
   const [fitToWidth, setFitToWidth] = useState<boolean>(true);
+
+  // Mobile pinch-to-zoom states
+  const [pinchZoom, setPinchZoom] = useState<number>(1);
+  const initialPinchDistRef = useRef<number | null>(null);
+  const initialPinchScaleRef = useRef<number>(1);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      initialPinchDistRef.current = dist;
+      initialPinchScaleRef.current = pinchZoom;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && initialPinchDistRef.current) {
+      const currentDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const ratio = currentDist / initialPinchDistRef.current;
+      const newScale = Math.min(Math.max(initialPinchScaleRef.current * ratio, 1.0), 3.5);
+      setPinchZoom(newScale);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      initialPinchDistRef.current = null;
+    }
+  };
 
   useEffect(() => {
     if (viewMode !== 'grid') return;
@@ -115,11 +162,12 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
   // Compile ordered classes and lunch break for the selected day in Day View
   const getDayScheduleItems = (day: string) => {
     const items: Array<{
-      type: 'class' | 'break' | 'free';
+      type: 'class' | 'break' | 'free' | 'custom';
       startTime: string;
       endTime: string;
       slotName: string;
       data?: any;
+      customData?: CustomScheduleItem;
     }> = [];
 
     let i = 0;
@@ -183,16 +231,32 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
           });
         }
         i++;
-      } else {
-        i++;
       }
     }
+
+    // Merge custom schedules for the day
+    for (const cs of customSchedules) {
+      items.push({
+        type: 'custom' as const,
+        startTime: cs.startTime,
+        endTime: cs.endTime,
+        slotName: 'CUSTOM',
+        customData: cs
+      });
+    }
+
+    // Sort items chronologically by start time
+    items.sort((a, b) => {
+      const timeA = a.startTime.replace(':', '');
+      const timeB = b.startTime.replace(':', '');
+      return timeA.localeCompare(timeB);
+    });
 
     return items;
   };
 
   const dayScheduleItems = getDayScheduleItems(selectedDay);
-  const classCountForDay = dayScheduleItems.filter(item => item.type === 'class').length;
+  const classCountForDay = dayScheduleItems.filter(item => item.type === 'class' || item.type === 'custom').length;
 
   if (timetableQuery.isPending && !timetableQuery.data) {
     return <TimetableSkeleton />;
@@ -381,6 +445,61 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
                   );
                 }
 
+                if (item.type === 'custom') {
+                  const cs = (item as any).customData as CustomScheduleItem;
+                  return (
+                    <div 
+                      key={`custom-${idx}`} 
+                      className="group relative rounded-2xl bg-bgCard border border-borderColor hover:border-borderColor/80 transition-all shadow-xs flex flex-row overflow-hidden"
+                    >
+                      {/* Left Stub: Time with Dotted Trace Divider */}
+                      <div className="w-28 sm:w-36 shrink-0 p-3 sm:p-4 bg-bgPrimary/40 flex flex-col justify-center items-center text-center relative border-r-2 border-dashed border-borderColor/80">
+                        <div className="absolute -top-2.5 -right-2 w-4 h-4 rounded-full bg-bgPrimary border border-borderColor z-10 pointer-events-none" />
+                        <div className="absolute -bottom-2.5 -right-2 w-4 h-4 rounded-full bg-bgPrimary border border-borderColor z-10 pointer-events-none" />
+
+                        <div className="font-mono text-xs sm:text-sm font-black text-textMain tracking-tight">
+                          {formatTime(cs.startTime, timeFormat)}
+                        </div>
+                        <div className="font-mono text-[10px] sm:text-[11px] font-semibold text-textMuted">
+                          {formatTime(cs.endTime, timeFormat)}
+                        </div>
+
+                        <div className="mt-2">
+                          <span 
+                            style={{ backgroundColor: `${cs.color}20`, borderColor: `${cs.color}60`, color: cs.color }}
+                            className="text-[9px] sm:text-[10px] font-mono font-extrabold px-1.5 py-0.5 rounded-md border"
+                          >
+                            CUSTOM
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right Body: Custom Event Details */}
+                      <div className="flex-1 min-w-0 p-3 sm:p-4 flex flex-col justify-between gap-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-bold text-textMain text-xs sm:text-sm leading-snug">
+                            {cs.title}
+                          </h4>
+                          <span 
+                            style={{ backgroundColor: cs.color }}
+                            className="w-2.5 h-2.5 rounded-full shrink-0 mt-1 shadow-xs" 
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-3 text-xs text-textMuted font-mono">
+                          {cs.venue && (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-textMuted/80 shrink-0" />
+                              <span className="truncate">{cs.venue}</span>
+                            </div>
+                          )}
+                          <span className="text-[10px] text-textMuted/60">Personal Schedule</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 const cls = item.data;
                 const color = getSubjectColor(cls.code);
 
@@ -445,25 +564,58 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
         </div>
       )}
 
-      {/* 3. FULL WEEKLY GRID TABLE VIEW (SCALED DOWN TO FIT SCREEN WIDTH) */}
+      {/* 3. FULL WEEKLY GRID TABLE VIEW (SCALED DOWN WITH MOBILE PINCH-TO-ZOOM) */}
       {viewMode === 'grid' && (
-        <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200 w-full max-w-full">
+        <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200 w-full max-w-full relative">
+          {/* Pinch-to-Zoom Float Indicator & Reset Button */}
+          {pinchZoom > 1.05 && (
+            <button
+              type="button"
+              onClick={() => setPinchZoom(1)}
+              className="absolute top-2 right-2 z-30 px-2.5 py-1 bg-bgCard/95 backdrop-blur-md border border-accentColor text-accentColor text-[11px] font-mono font-bold rounded-lg shadow-lg flex items-center gap-1.5 cursor-pointer hover:bg-bgCard transition-all"
+              title="Tap to reset zoom to fit screen"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>{pinchZoom.toFixed(1)}x</span>
+              <span className="text-[9px] text-textMuted font-sans">(Reset)</span>
+            </button>
+          )}
+
           <div 
             ref={gridContainerRef}
-            className={`w-full relative ${fitToWidth ? 'overflow-hidden' : 'overflow-x-auto custom-scrollbar'}`}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className={`w-full relative ${
+              fitToWidth && pinchZoom <= 1.05 
+                ? 'overflow-hidden' 
+                : 'overflow-auto custom-scrollbar touch-pan-x touch-pan-y'
+            }`}
             style={{ 
-              height: fitToWidth && tableHeight > 0 && gridScale < 1 ? `${Math.ceil(tableHeight * gridScale)}px` : 'auto',
-              maxHeight: fitToWidth && tableHeight > 0 && gridScale < 1 ? `${Math.ceil(tableHeight * gridScale)}px` : undefined,
-              overflowY: 'hidden'
+              height: fitToWidth && tableHeight > 0 && gridScale < 1 && pinchZoom <= 1.05 
+                ? `${Math.ceil(tableHeight * gridScale)}px` 
+                : pinchZoom > 1.05 
+                  ? '70vh' 
+                  : 'auto',
+              maxHeight: fitToWidth && tableHeight > 0 && gridScale < 1 && pinchZoom <= 1.05 
+                ? `${Math.ceil(tableHeight * gridScale)}px` 
+                : undefined,
+              overflowY: pinchZoom > 1.05 ? 'auto' : 'hidden'
             }}
           >
             <div
               style={{
                 width: `${tableWidth}px`,
-                transform: fitToWidth && gridScale < 1 ? `scale(${gridScale})` : undefined,
+                transform: fitToWidth && (gridScale < 1 || pinchZoom > 1) 
+                  ? `scale(${gridScale * pinchZoom})` 
+                  : undefined,
                 transformOrigin: 'top left',
-                marginRight: fitToWidth && gridScale < 1 ? `-${Math.round(tableWidth * (1 - gridScale))}px` : undefined,
-                marginBottom: fitToWidth && gridScale < 1 && tableHeight > 0 ? `-${Math.round(tableHeight * (1 - gridScale))}px` : undefined,
+                marginRight: fitToWidth && (gridScale * pinchZoom) < 1 
+                  ? `-${Math.round(tableWidth * (1 - gridScale * pinchZoom))}px` 
+                  : undefined,
+                marginBottom: fitToWidth && (gridScale * pinchZoom) < 1 && tableHeight > 0 
+                  ? `-${Math.round(tableHeight * (1 - gridScale * pinchZoom))}px` 
+                  : undefined,
               }}
             >
               <table 

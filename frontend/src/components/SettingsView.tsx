@@ -3,10 +3,11 @@ import {
   ChevronDown, Sun, Moon, HardDrive, RefreshCw, 
   Smartphone, BarChart2, CalendarDays, Activity, 
   Calendar, Calculator, Award, FileText, BookOpen, Search, Home, Sliders,
-  Clock, CircleDot, LayoutGrid, Trash2
+  Clock, CircleDot, LayoutGrid, Trash2, Bell, AlertTriangle
 } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { safeClearCachePrefix, getStorageUsage, safeStorageSet } from '../lib/cache';
+import { isNotificationSupported, requestNotificationPermission, sendBrowserNotification } from '../services/notificationService';
 
 interface SettingsViewProps {
   theme: 'light' | 'dark';
@@ -30,9 +31,13 @@ interface SettingsViewProps {
   setShowUniversalSearch?: (val: boolean) => void;
   dockTabs?: string[];
   setDockTabs?: (tabs: string[]) => void;
+  notifySchedule?: boolean;
+  setNotifySchedule?: (val: boolean) => void;
+  notifyLowAttendance?: boolean;
+  setNotifyLowAttendance?: (val: boolean) => void;
 }
 
-type SettingsCategory = 'all' | 'appearance' | 'academics' | 'sync' | 'dock';
+type SettingsCategory = 'all' | 'appearance' | 'academics' | 'sync' | 'dock' | 'notifications';
 
 const AVAILABLE_DOCK_ITEMS = [
   { id: 'timetable', label: 'Timetable', icon: CalendarDays },
@@ -68,7 +73,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   showUniversalSearch = true,
   setShowUniversalSearch,
   dockTabs = ['dashboard', 'timetable', 'attendance', 'calendar', 'more'],
-  setDockTabs
+  setDockTabs,
+  notifySchedule = true,
+  setNotifySchedule,
+  notifyLowAttendance = true,
+  setNotifyLowAttendance
 }) => {
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('all');
   const [storageInfo, setStorageInfo] = useState(() => getStorageUsage());
@@ -156,6 +165,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           }`}
         >
           Mobile Dock
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveCategory('notifications')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap border ${
+            activeCategory === 'notifications'
+              ? 'bg-accentColor text-white border-accentColor shadow-xs'
+              : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain'
+          }`}
+        >
+          Notifications
         </button>
       </div>
 
@@ -593,6 +613,122 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 5: NOTIFICATIONS & ALERTS */}
+      {(activeCategory === 'all' || activeCategory === 'notifications') && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <Bell className="h-4 w-4 text-accentColor" />
+            <h3 className="text-xs font-mono font-black text-textMuted uppercase tracking-wider">Notifications & Alerts</h3>
+          </div>
+
+          {/* Schedule Reminders Toggle */}
+          <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 pr-4">
+                <h3 className="text-sm font-bold text-textMain uppercase tracking-wider flex items-center gap-2">
+                  <CalendarDays className="h-4 w-4 text-accentColor" /> Schedule & Class Reminders
+                </h3>
+                <p className="text-xs text-textMuted leading-relaxed">
+                  Receive notifications and reminders for your added custom schedules and university timetable classes.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={notifySchedule}
+                onClick={async () => {
+                  if (!notifySchedule && isNotificationSupported()) {
+                    await requestNotificationPermission();
+                  }
+                  if (setNotifySchedule) setNotifySchedule(!notifySchedule);
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  notifySchedule ? 'bg-accentColor' : 'bg-borderColor'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    notifySchedule ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="text-[11px] font-semibold text-textMuted flex items-center justify-between pt-1 font-mono">
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2 h-2 rounded-full ${notifySchedule ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                <span>Status: {notifySchedule ? 'Schedule alerts active' : 'Disabled'}</span>
+              </div>
+              {notifySchedule && isNotificationSupported() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    sendBrowserNotification('VTOP Schedule Reminder', {
+                      body: 'You have classes and custom schedule events today.'
+                    });
+                  }}
+                  className="text-xs text-accentColor font-bold hover:underline cursor-pointer"
+                >
+                  Test Notification
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Low Attendance Warning Alert Toggle */}
+          <div className="bg-bgCard border border-borderColor rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 pr-4">
+                <h3 className="text-sm font-bold text-textMain uppercase tracking-wider flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-500" /> Low Attendance Alerts
+                </h3>
+                <p className="text-xs text-textMuted leading-relaxed">
+                  Get high-priority alerts and warning banners on home dashboard when course attendance drops below or nears the 75% cutoff margin.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={notifyLowAttendance}
+                onClick={async () => {
+                  if (!notifyLowAttendance && isNotificationSupported()) {
+                    await requestNotificationPermission();
+                  }
+                  if (setNotifyLowAttendance) setNotifyLowAttendance(!notifyLowAttendance);
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  notifyLowAttendance ? 'bg-accentColor' : 'bg-borderColor'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    notifyLowAttendance ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="text-[11px] font-semibold text-textMuted flex items-center justify-between pt-1 font-mono">
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2 h-2 rounded-full ${notifyLowAttendance ? 'bg-rose-500' : 'bg-gray-400'}`} />
+                <span>Status: {notifyLowAttendance ? 'Low attendance auditing active' : 'Disabled'}</span>
+              </div>
+              {notifyLowAttendance && isNotificationSupported() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    sendBrowserNotification('VTOP Low Attendance Warning', {
+                      body: 'Attendance Alert: Courses below 75% require consecutive attendance.'
+                    });
+                  }}
+                  className="text-xs text-rose-400 font-bold hover:underline cursor-pointer"
+                >
+                  Test Alert
+                </button>
+              )}
             </div>
           </div>
         </div>
