@@ -10,7 +10,6 @@ export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const courses: any[] = marksQuery.data?.courses || [];
-  const combinedScores: any[] = marksQuery.data?.combined_scores || [];
 
   // Summary Metrics
   const summary = useMemo(() => {
@@ -112,38 +111,7 @@ export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
         </div>
       )}
 
-      {/* 2. AGGREGATED COMBINED SUBJECT PERFORMANCE (IF ANY) */}
-      {combinedScores.length > 0 && (
-        <div className="bg-bgCard border border-borderColor rounded-2xl p-4 shadow-xs space-y-3">
-          <h4 className="text-xs font-bold text-textMuted uppercase tracking-wider flex items-center gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5 text-accentColor" />
-            <span>Consolidated Subject Scores</span>
-          </h4>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {combinedScores.map((cs: any, idx: number) => (
-              <div
-                key={idx}
-                className="p-3 bg-bgPrimary/60 border border-borderColor rounded-xl flex items-center justify-between text-xs"
-              >
-                <div className="space-y-0.5">
-                  <span className="font-extrabold text-accentColor">{cs.code}</span>
-                  <div className="text-[11px] font-semibold text-textMain line-clamp-1">{cs.title}</div>
-                  <div className="text-[10px] text-textMuted">{cs.total_credits} Credits</div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="text-sm font-black text-textMain">
-                    {cs.converted_score} / {cs.converted_max}
-                  </div>
-                  <span className="text-[10px] text-textMuted font-mono">Normalized</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 3. SEARCH FILTER */}
+      {/* 2. SEARCH FILTER */}
       <div className="relative">
         <Search className="absolute left-3.5 top-3 h-4 w-4 text-textMuted" />
         <input
@@ -163,12 +131,11 @@ export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
         )}
       </div>
 
-      {/* 4. COURSE MARKS CARDS (MOBILE-OPTIMIZED) */}
+      {/* 3. COURSE MARKS CARDS (MOBILE-OPTIMIZED) */}
       <div className="space-y-4">
         {filteredCourses.map((course: any, cIdx: number) => {
           const obtained = parseFloat(course.total_obtained || 0);
           const maxWeight = parseFloat(course.total_max_weightage || 0);
-          const progressPct = maxWeight > 0 ? Math.min(Math.round((obtained / maxWeight) * 100), 100) : 0;
 
           return (
             <div
@@ -196,23 +163,52 @@ export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
                   )}
                 </div>
 
-                {/* Scored Weightage Badge */}
+                {/* Scored Weightage Metrics */}
                 <div className="text-right shrink-0">
-                  <span className="text-[10px] text-textMuted font-bold uppercase tracking-wider block">
-                    Earned Wt
+                  <span className="text-[10px] text-textMuted font-mono uppercase tracking-wider block">
+                    Weightage Status
                   </span>
-                  <span className="text-base font-black text-accentColor">
-                    {course.total_obtained || '0'} / {course.total_max_weightage || '0'}
-                  </span>
+                  <div className="flex items-baseline justify-end gap-1.5 font-mono">
+                    <span className="text-base font-black text-amber-500">
+                      {obtained.toFixed(1)}
+                    </span>
+                    <span className="text-xs text-textMuted font-bold">
+                      / {maxWeight.toFixed(1)}
+                    </span>
+                    <span className="text-[10px] text-textMuted">
+                      (out of 100)
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Course Total Weightage Bar */}
-              <div className="w-full bg-bgPrimary rounded-full h-1.5 overflow-hidden border border-borderColor/30">
-                <div
-                  className="h-full bg-accentColor rounded-full transition-all duration-500"
-                  style={{ width: `${progressPct}%` }}
-                />
+              {/* Dual-Track Course Weightage Bar (Out of 100) */}
+              <div className="space-y-1.5">
+                <div className="w-full bg-bgPrimary rounded-full h-3 relative overflow-hidden border border-borderColor/40">
+                  {/* Track 1: Current Max Weightage Evaluated So Far (Grey Track out of 100) */}
+                  <div
+                    className="absolute top-0 left-0 h-full bg-slate-400/60 dark:bg-slate-700 transition-all duration-700 ease-out rounded-full"
+                    style={{ width: `${Math.min(Math.max(maxWeight, 0), 100)}%` }}
+                    title={`Current Max Evaluated: ${maxWeight.toFixed(1)} Wt`}
+                  />
+                  {/* Track 2: Current Earned Weightage (Colored Track out of 100) */}
+                  <div
+                    className="absolute top-0 left-0 h-full bg-amber-500 transition-all duration-700 ease-out rounded-full z-10"
+                    style={{ width: `${Math.min(Math.max(obtained, 0), 100)}%` }}
+                    title={`Earned: ${obtained.toFixed(1)} Wt`}
+                  />
+                </div>
+                {/* Track Legend & Labels */}
+                <div className="flex items-center justify-between text-[10px] font-mono text-textMuted px-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+                    <span>Earned: <strong className="text-textMain">{obtained.toFixed(1)}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-600" />
+                    <span>Max Evaluated: <strong className="text-textMain">{maxWeight.toFixed(1)}</strong> / 100</span>
+                  </div>
+                </div>
               </div>
 
               {/* Assessment Rows (Mobile Card Layout) */}

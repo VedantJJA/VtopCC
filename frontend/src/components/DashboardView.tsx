@@ -211,35 +211,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="text-textMuted group-hover:text-textMain transition-colors">Attendance</span>
                     <span className="text-textMain font-bold group-hover:text-accentColor transition-colors font-mono">{attSum.percentage}%</span>
                   </div>
-                  {circularAttendance ? (
-                    <div className="flex items-center gap-3 py-1">
-                      <div className="relative flex items-center justify-center w-10 h-10">
-                        {(() => {
-                          const radius = 15;
-                          const circ = 2 * Math.PI * radius;
-                          const pct = Math.min(Math.max(Number(attSum.percentage) || 0, 0), 100);
-                          const offset = circ - (pct / 100) * circ;
-                          return (
-                            <>
-                              <svg className="w-10 h-10 transform -rotate-90">
-                                <circle cx="20" cy="20" r={radius} stroke="currentColor" strokeWidth="3" fill="transparent" className="text-borderColor/40" />
-                                <circle cx="20" cy="20" r={radius} stroke="currentColor" strokeWidth="3" fill="transparent" strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" className="text-emerald-500 transition-all duration-700 ease-out" />
-                              </svg>
-                              <span className="absolute text-[9px] font-black font-mono text-textMain">{Math.round(pct)}%</span>
-                            </>
-                          );
-                        })()}
-                      </div>
-                      <span className="text-xs text-textMuted font-medium">Overall semester attendance status</span>
-                    </div>
-                  ) : (
-                    <div className="w-full bg-bgPrimary rounded-full h-2 overflow-hidden border border-borderColor/40">
-                      <div 
-                        className="h-full rounded-full transition-all duration-500 bg-emerald-500"
-                        style={{ width: `${attSum.percentage}%` }}
-                      />
-                    </div>
-                  )}
+                  <div className="w-full bg-bgPrimary rounded-full h-2 overflow-hidden border border-borderColor/40">
+                    <div 
+                      className="h-full rounded-full transition-all duration-500 bg-emerald-500"
+                      style={{ width: `${attSum.percentage}%` }}
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-2">
@@ -493,58 +470,61 @@ const SchedulePanel: React.FC<{
                   </div>
                 </div>
 
-                {/* Venue & Percentage + Margin Badge */}
-                <div className="flex flex-col items-end shrink-0 pl-2">
-                  <span className="text-xs font-semibold text-textMain">
+                {/* Venue & Prominent Attendance Indicator on Right */}
+                <div className="flex flex-col items-end justify-center shrink-0 pl-3">
+                  <span className="text-xs font-semibold text-textMain mb-1">
                     {cls.venue}
                   </span>
                   {showCardAttendance && metrics ? (
                     circularAttendance ? (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <div className="relative flex items-center justify-center w-8 h-8">
-                          {(() => {
-                            const radius = 12;
-                            const circ = 2 * Math.PI * radius;
-                            const offset = circ - (Math.min(Math.max(metrics.percentage, 0), 100) / 100) * circ;
-                            const ringCls = metrics.status === 'danger' ? 'text-rose-500' : metrics.status === 'warning' ? 'text-amber-500' : 'text-emerald-500';
-                            return (
-                              <>
-                                <svg className="w-8 h-8 transform -rotate-90">
-                                  <circle
-                                    cx="16"
-                                    cy="16"
-                                    r={radius}
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    fill="transparent"
-                                    className="text-borderColor/40"
-                                  />
-                                  <circle
-                                    cx="16"
-                                    cy="16"
-                                    r={radius}
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    fill="transparent"
-                                    strokeDasharray={circ}
-                                    strokeDashoffset={offset}
-                                    strokeLinecap="round"
-                                    className={`transition-all duration-500 ease-out ${ringCls}`}
-                                  />
-                                </svg>
-                                <span className="absolute text-[8px] font-black font-mono leading-none text-textMain">
-                                  {Math.round(metrics.percentage)}%
-                                </span>
-                              </>
-                            );
-                          })()}
-                        </div>
+                      <div className="relative flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 shrink-0 mt-0.5">
+                        {/* Top Right Corner Badge for +/- Margin */}
                         <span 
                           title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                          className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard text-textMuted"
+                          className={`absolute -top-1 -right-1 z-10 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full border shadow-xs ${
+                            metrics.status === 'safe'
+                              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                              : 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                          }`}
                         >
                           {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
                         </span>
+                        {(() => {
+                          const radius = 22;
+                          const circ = 2 * Math.PI * radius;
+                          const offset = circ - (Math.min(Math.max(metrics.percentage, 0), 100) / 100) * circ;
+                          const ringCls = metrics.status === 'danger' ? 'text-rose-500' : metrics.status === 'warning' ? 'text-amber-500' : 'text-emerald-500';
+                          return (
+                            <>
+                              <svg className="w-14 h-14 sm:w-16 sm:h-16 transform -rotate-90">
+                                <circle
+                                  cx="28"
+                                  cy="28"
+                                  r={radius}
+                                  stroke="currentColor"
+                                  strokeWidth="3.5"
+                                  fill="transparent"
+                                  className="text-borderColor/40"
+                                />
+                                <circle
+                                  cx="28"
+                                  cy="28"
+                                  r={radius}
+                                  stroke="currentColor"
+                                  strokeWidth="3.5"
+                                  fill="transparent"
+                                  strokeDasharray={circ}
+                                  strokeDashoffset={offset}
+                                  strokeLinecap="round"
+                                  className={`transition-all duration-500 ease-out ${ringCls}`}
+                                />
+                              </svg>
+                              <span className="absolute text-[11px] sm:text-xs font-black font-mono leading-none text-textMain">
+                                {Math.round(metrics.percentage)}%
+                              </span>
+                            </>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 mt-1">

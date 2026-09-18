@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { 
-  Clock, AlertTriangle, ChevronRight, X, Search, CheckCircle2, 
+  Clock, AlertTriangle, ChevronRight, X, Search, 
   BookOpen, ShieldAlert 
 } from 'lucide-react';
 import { AttendanceSkeleton } from './Skeleton';
@@ -22,6 +22,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   circularAttendance = false
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'warning' | 'theory' | 'lab'>('all');
 
   const courses = attendanceQuery.data || [];
@@ -123,15 +124,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           </div>
 
           <div className="text-right">
-            {summary.warningCount > 0 ? (
+            {summary.warningCount > 0 && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20 text-xs font-bold">
                 <ShieldAlert className="h-3.5 w-3.5" />
                 <span>{summary.warningCount} &lt; 75%</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>All Safe (&gt;=75%)</span>
               </span>
             )}
           </div>
@@ -149,29 +145,43 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       </div>
 
       {/* 2. SEARCH & FILTER CONTROLS */}
-      <div className="space-y-2.5">
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-textMuted" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by course code, title, slot..."
-            className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-borderColor bg-bgCard text-textMain placeholder:text-textMuted/60 text-xs font-semibold outline-none focus:border-accentColor transition-all"
-          />
-          {searchQuery && (
+      <div className="flex items-center gap-2">
+        {/* Expandable Search Button / Field */}
+        {isSearchExpanded ? (
+          <div className="flex-1 flex items-center relative min-w-[160px] animate-in fade-in slide-in-from-left-2 duration-200">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-textMuted" />
+            <input
+              autoFocus
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search code, title, slot..."
+              className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-accentColor bg-bgCard text-textMain placeholder:text-textMuted/60 text-xs font-semibold outline-none transition-all"
+            />
             <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-2.5 text-textMuted hover:text-textMain p-0.5 rounded cursor-pointer"
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setIsSearchExpanded(false);
+              }}
+              className="absolute right-2 top-2 text-textMuted hover:text-textMain p-0.5 rounded cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
             </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsSearchExpanded(true)}
+            className="p-2 rounded-xl bg-bgCard border border-borderColor text-textMuted hover:text-textMain hover:border-accentColor/40 transition-all cursor-pointer shrink-0"
+            title="Search courses"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+        )}
 
         {/* Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar flex-1">
           <button
             onClick={() => setFilterType('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
@@ -273,59 +283,62 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                     </h4>
                   </div>
 
-                  {/* Percentage & Margin Pill */}
+                  {/* Prominent Circular Attendance Gauge on the Right */}
                   {circularAttendance ? (
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <div className="relative flex items-center justify-center w-11 h-11">
-                        {(() => {
-                          const radius = 17;
-                          const circ = 2 * Math.PI * radius;
-                          const offset = circ - (Math.min(Math.max(percent, 0), 100) / 100) * circ;
-                          return (
-                            <>
-                              <svg className="w-11 h-11 transform -rotate-90">
-                                <circle
-                                  cx="22"
-                                  cy="22"
-                                  r={radius}
-                                  stroke="currentColor"
-                                  strokeWidth="3"
-                                  fill="transparent"
-                                  className="text-borderColor/40"
-                                />
-                                <circle
-                                  cx="22"
-                                  cy="22"
-                                  r={radius}
-                                  stroke="currentColor"
-                                  strokeWidth="3"
-                                  fill="transparent"
-                                  strokeDasharray={circ}
-                                  strokeDashoffset={offset}
-                                  strokeLinecap="round"
-                                  className={`transition-all duration-700 ease-out ${
-                                    isSafe ? 'text-emerald-500' : 'text-rose-500'
-                                  }`}
-                                />
-                              </svg>
-                              <span className="absolute text-[10px] font-black font-mono text-textMain">
+                    <div className="relative flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 shrink-0 ml-2">
+                      {/* Top Right Corner Badge for +/- Margin */}
+                      <span 
+                        title={marginText}
+                        className={`absolute -top-1 -right-1 z-10 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border shadow-xs ${
+                          isSafe 
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+                            : 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                        }`}
+                      >
+                        {marginText}
+                      </span>
+                      {(() => {
+                        const radius = 26;
+                        const circ = 2 * Math.PI * radius;
+                        const offset = circ - (Math.min(Math.max(percent, 0), 100) / 100) * circ;
+                        return (
+                          <>
+                            <svg className="w-16 h-16 sm:w-20 sm:h-20 transform -rotate-90">
+                              <circle
+                                cx="32"
+                                cy="32"
+                                r={radius}
+                                stroke="currentColor"
+                                strokeWidth="4.5"
+                                fill="transparent"
+                                className="text-borderColor/40"
+                              />
+                              <circle
+                                cx="32"
+                                cy="32"
+                                r={radius}
+                                stroke="currentColor"
+                                strokeWidth="4.5"
+                                fill="transparent"
+                                strokeDasharray={circ}
+                                strokeDashoffset={offset}
+                                strokeLinecap="round"
+                                className={`transition-all duration-700 ease-out ${
+                                  isSafe ? 'text-emerald-500' : 'text-rose-500'
+                                }`}
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                              <span className="text-xs sm:text-sm font-black font-mono text-textMain leading-none">
                                 {Math.round(percent)}%
                               </span>
-                            </>
-                          );
-                        })()}
-                      </div>
-                      <div className="flex flex-col items-end">
-                        <span 
-                          title={marginText}
-                          className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgPrimary text-textMuted"
-                        >
-                          {marginText}
-                        </span>
-                        <span className="text-[10px] text-textMuted font-mono font-medium mt-0.5">
-                          {course.attended_classes}/{course.total_classes}
-                        </span>
-                      </div>
+                              <span className="text-[8px] font-mono text-textMuted mt-0.5 leading-none">
+                                {course.attended_classes}/{course.total_classes}
+                              </span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <div className="flex flex-col items-end shrink-0">

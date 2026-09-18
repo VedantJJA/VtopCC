@@ -43,6 +43,8 @@ interface MobileLayoutProps {
   isAdmin?: boolean;
   onLogout: () => void;
   dockTabs?: string[];
+  onOpenSearch?: () => void;
+  showUniversalSearch?: boolean;
   children: React.ReactNode;
 }
 
@@ -59,6 +61,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   isAdmin = false,
   onLogout,
   dockTabs: propDockTabs,
+  onOpenSearch,
+  showUniversalSearch = true,
   children
 }) => {
   const dockTabs = propDockTabs && propDockTabs.length > 0 ? propDockTabs : DEFAULT_DOCK_TABS;
@@ -118,6 +122,14 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isBusyRef.current) return;
+    // Disable swiping if current tab is not in the bottom tab bar (e.g. opened from More)
+    if (!swipableTabs.includes(activeTab)) {
+      setTouchStartX(null);
+      touchStartYRef.current = null;
+      isHorizontalSwipeRef.current = null;
+      return;
+    }
+
     const target = e.target as HTMLElement;
     if (target.closest('[data-no-swipe="true"]')) {
       setTouchStartX(null);
@@ -136,7 +148,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX === null || touchStartYRef.current === null || isBusyRef.current) return;
+    if (!swipableTabs.includes(activeTab) || touchStartX === null || touchStartYRef.current === null || isBusyRef.current) return;
     const dx = e.touches[0].clientX - touchStartX;
     const dy = e.touches[0].clientY - touchStartYRef.current;
 
@@ -245,6 +257,18 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Universal Search Button */}
+          {showUniversalSearch && onOpenSearch && (
+            <button
+              onClick={onOpenSearch}
+              className="p-2 rounded-xl text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor transition-all cursor-pointer"
+              title="Universal Search"
+              aria-label="Universal Search"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          )}
+
           {/* Refresh Button */}
           <button
             onClick={onRefresh}
@@ -358,7 +382,7 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
       items: [
         { id: 'marks', label: 'Marks', icon: Award, color: 'text-amber-500 bg-amber-500/10' },
         { id: 'grades', label: 'Grades', icon: FileText, color: 'text-indigo-500 bg-indigo-500/10' },
-        { id: 'exams', label: 'Exam Schedule', icon: CalendarDays, color: 'text-orange-500 bg-orange-500/10' },
+        { id: 'exams', label: 'Exam Schedule', icon: CalendarDays, color: 'text-rose-500 bg-rose-500/10' },
       ]
     },
     {

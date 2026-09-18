@@ -25,7 +25,7 @@ import {
   safeStorageGet, safeStorageSet, safeStorageRemove, safeJsonParse
 } from './lib/cache';
 import { 
-  Menu, Sun, Moon, Loader2, AlertTriangle, RefreshCw
+  Menu, Sun, Moon, Loader2, AlertTriangle, RefreshCw, Search
 } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
@@ -47,6 +47,7 @@ import { SettingsView } from './components/SettingsView';
 import { AdminView } from './components/AdminView';
 import { CoursesView } from './components/CoursesView';
 import LeaveView from './components/LeaveView';
+import { UniversalSearchModal } from './components/UniversalSearchModal';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -122,6 +123,10 @@ function VtopLoginDashboard() {
       ['dashboard', 'timetable', 'attendance', 'calendar', 'more']
     );
   });
+  const [showUniversalSearch, setShowUniversalSearch] = useState<boolean>(() => {
+    return safeStorageGet('vtop_universal_search', 'true') === 'true';
+  });
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState<number | null>(() => {
     const saved = safeStorageGet('vtop_last_synced_time');
@@ -172,6 +177,22 @@ function VtopLoginDashboard() {
   useEffect(() => {
     safeStorageSet('vtop_dock_tabs', JSON.stringify(dockTabs));
   }, [dockTabs]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_universal_search', String(showUniversalSearch));
+  }, [showUniversalSearch]);
+
+  useEffect(() => {
+    if (!showUniversalSearch) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchModalOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showUniversalSearch]);
 
   // Auth state
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
@@ -1045,6 +1066,8 @@ function VtopLoginDashboard() {
           isAdmin={adminCheckQuery.data ?? false}
           onLogout={() => logoutMutation.mutate()}
           dockTabs={dockTabs}
+          onOpenSearch={() => setIsSearchModalOpen(true)}
+          showUniversalSearch={showUniversalSearch}
         >
           {activeTab === 'dashboard' && (
             <DashboardView
@@ -1167,6 +1190,8 @@ function VtopLoginDashboard() {
               setTimeFormat={setTimeFormat}
               dockTabs={dockTabs}
               setDockTabs={setDockTabs}
+              showUniversalSearch={showUniversalSearch}
+              setShowUniversalSearch={setShowUniversalSearch}
             />
           )}
 
@@ -1220,6 +1245,17 @@ function VtopLoginDashboard() {
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                     <span>Synced {formatLastSynced(lastSyncedTime)}</span>
                   </span>
+                )}
+                {showUniversalSearch && (
+                  <button
+                    onClick={() => setIsSearchModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-textMuted hover:text-textMain bg-bgPrimary hover:bg-bgPrimary/60 border border-borderColor transition-colors cursor-pointer"
+                    title="Search (Ctrl+K)"
+                  >
+                    <Search className="h-4 w-4 text-accentColor" />
+                    <span className="hidden md:inline font-medium">Search...</span>
+                    <kbd className="hidden md:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-bgCard border border-borderColor rounded text-textMuted">Ctrl K</kbd>
+                  </button>
                 )}
                 <button 
                   onClick={handleManualRefresh}
@@ -1363,6 +1399,8 @@ function VtopLoginDashboard() {
                   setTimeFormat={setTimeFormat}
                   dockTabs={dockTabs}
                   setDockTabs={setDockTabs}
+                  showUniversalSearch={showUniversalSearch}
+                  setShowUniversalSearch={setShowUniversalSearch}
                 />
               )}
 
@@ -1467,6 +1505,18 @@ function VtopLoginDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Universal Search Palette Modal */}
+      {showUniversalSearch && (
+        <UniversalSearchModal
+          isOpen={isSearchModalOpen}
+          onClose={() => setIsSearchModalOpen(false)}
+          setActiveTab={setActiveTab}
+          courses={attendanceQuery.data || []}
+          timetableData={timetableQuery.data}
+          exams={examsQuery.data || []}
+        />
       )}
     </div>
   );
