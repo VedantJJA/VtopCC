@@ -396,7 +396,7 @@ const SchedulePanel: React.FC<{
   showCardAttendance?: boolean;
   circularAttendance?: boolean;
   timeFormat?: '12h' | '24h';
-}> = ({ dayInfo, attendanceList = [], showCardAttendance = true, circularAttendance = false, timeFormat = '24h' }) => {
+}> = ({ dayInfo, attendanceList = [], showCardAttendance = true, timeFormat = '24h' }) => {
   if (dayInfo.loading) {
     return (
         <div className="space-y-3 py-1">
@@ -435,13 +435,6 @@ const SchedulePanel: React.FC<{
           const att = findAttendanceForClass(cls, attendanceList);
           const metrics = calculateAttendanceMetrics(att, isLab);
 
-          let barColor = 'bg-emerald-500';
-          if (metrics) {
-            if (metrics.status === 'danger') barColor = 'bg-rose-500';
-            else if (metrics.status === 'warning') barColor = 'bg-amber-500';
-            else barColor = 'bg-emerald-500';
-          }
-
           return (
             <div 
               key={idx} 
@@ -470,91 +463,21 @@ const SchedulePanel: React.FC<{
                   </div>
                 </div>
 
-                {/* Venue & Prominent Attendance Indicator on Right */}
+                {/* Venue & Number +/- Card on Right */}
                 <div className="flex flex-col items-end justify-center shrink-0 pl-3">
                   <span className="text-xs font-semibold text-textMain mb-1">
                     {cls.venue}
                   </span>
-                  {showCardAttendance && metrics ? (
-                    circularAttendance ? (
-                      <div className="relative flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 shrink-0 mt-0.5">
-                        {/* Top Right Corner Badge for +/- Margin */}
-                        <span 
-                          title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                          className={`absolute -top-1 -right-1 z-10 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full border shadow-xs ${
-                            metrics.status === 'safe'
-                              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                              : 'bg-rose-500/20 text-rose-400 border-rose-500/40'
-                          }`}
-                        >
-                          {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                        </span>
-                        {(() => {
-                          const radius = 22;
-                          const circ = 2 * Math.PI * radius;
-                          const offset = circ - (Math.min(Math.max(metrics.percentage, 0), 100) / 100) * circ;
-                          const ringCls = metrics.status === 'danger' ? 'text-rose-500' : metrics.status === 'warning' ? 'text-amber-500' : 'text-emerald-500';
-                          return (
-                            <>
-                              <svg className="w-14 h-14 sm:w-16 sm:h-16 transform -rotate-90">
-                                <circle
-                                  cx="28"
-                                  cy="28"
-                                  r={radius}
-                                  stroke="currentColor"
-                                  strokeWidth="3.5"
-                                  fill="transparent"
-                                  className="text-borderColor/40"
-                                />
-                                <circle
-                                  cx="28"
-                                  cy="28"
-                                  r={radius}
-                                  stroke="currentColor"
-                                  strokeWidth="3.5"
-                                  fill="transparent"
-                                  strokeDasharray={circ}
-                                  strokeDashoffset={offset}
-                                  strokeLinecap="round"
-                                  className={`transition-all duration-500 ease-out ${ringCls}`}
-                                />
-                              </svg>
-                              <span className="absolute text-[11px] sm:text-xs font-black font-mono leading-none text-textMain">
-                                {Math.round(metrics.percentage)}%
-                              </span>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 mt-1">
-                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted font-mono">
-                          {metrics.percentage}%
-                        </span>
-                        <span 
-                          title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                          className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted font-mono"
-                        >
-                          {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                        </span>
-                      </div>
-                    )
-                  ) : null}
+                  {showCardAttendance && metrics && (
+                    <span 
+                      title={metrics.status === 'safe' ? `Can miss ${metrics.canMiss} classes` : metrics.status === 'warning' ? 'On margin (0)' : `Need ${metrics.needAttend} classes`}
+                      className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg border border-borderColor bg-bgCard/90 text-textMuted shadow-xs"
+                    >
+                      {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
+                    </span>
+                  )}
                 </div>
               </div>
-
-              {/* Bottom Border-like Attendance Loading / Progress Bar */}
-              {showCardAttendance && !circularAttendance && metrics && (
-                <div 
-                  className="w-full h-1 bg-borderColor/40 overflow-hidden" 
-                  title={`Attendance: ${metrics.percentage}% (${metrics.attended}/${metrics.total})`}
-                >
-                  <div 
-                    className={`h-full ${barColor} transition-all duration-500 ease-out`}
-                    style={{ width: `${Math.min(Math.max(metrics.percentage, 0), 100)}%` }}
-                  />
-                </div>
-              )}
             </div>
           );
         })}

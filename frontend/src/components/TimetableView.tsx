@@ -46,6 +46,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
   const tableRef = useRef<HTMLTableElement>(null);
   const [gridScale, setGridScale] = useState<number>(1);
   const [tableHeight, setTableHeight] = useState<number>(0);
+  const [tableWidth, setTableWidth] = useState<number>(1080);
   const [fitToWidth, setFitToWidth] = useState<boolean>(true);
 
   useEffect(() => {
@@ -53,9 +54,10 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
     const updateDimensions = () => {
       if (gridContainerRef.current) {
         const containerWidth = gridContainerRef.current.clientWidth;
-        const baseWidth = 1060; // compact base width for all slots
-        if (fitToWidth && containerWidth > 0 && containerWidth < baseWidth) {
-          setGridScale(Math.max(containerWidth / baseWidth, 0.28));
+        const actualWidth = tableRef.current ? Math.max(tableRef.current.offsetWidth, 1000) : 1080;
+        setTableWidth(actualWidth);
+        if (fitToWidth && containerWidth > 0 && containerWidth < actualWidth) {
+          setGridScale(containerWidth / actualWidth);
         } else {
           setGridScale(1);
         }
@@ -68,6 +70,7 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
     updateDimensions();
     const ro = new ResizeObserver(updateDimensions);
     if (gridContainerRef.current) ro.observe(gridContainerRef.current);
+    if (tableRef.current) ro.observe(tableRef.current);
     window.addEventListener('resize', updateDimensions);
     return () => {
       ro.disconnect();
@@ -444,31 +447,34 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
 
       {/* 3. FULL WEEKLY GRID TABLE VIEW (SCALED DOWN TO FIT SCREEN WIDTH) */}
       {viewMode === 'grid' && (
-        <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200">
+        <div className="bg-bgCard border border-borderColor rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200 w-full max-w-full">
           <div 
             ref={gridContainerRef}
-            className="w-full relative custom-scrollbar overflow-x-auto"
+            className={`w-full relative ${fitToWidth ? 'overflow-hidden' : 'overflow-x-auto custom-scrollbar'}`}
             style={{ 
-              height: fitToWidth && tableHeight > 0 && gridScale < 1 ? `${Math.ceil(tableHeight * gridScale) + 4}px` : 'auto',
-              overflowY: fitToWidth && gridScale < 1 ? 'hidden' : 'auto'
+              height: fitToWidth && tableHeight > 0 && gridScale < 1 ? `${Math.ceil(tableHeight * gridScale)}px` : 'auto',
+              maxHeight: fitToWidth && tableHeight > 0 && gridScale < 1 ? `${Math.ceil(tableHeight * gridScale)}px` : undefined,
+              overflowY: 'hidden'
             }}
           >
             <div
               style={{
-                width: fitToWidth && gridScale < 1 ? '1060px' : '100%',
+                width: `${tableWidth}px`,
                 transform: fitToWidth && gridScale < 1 ? `scale(${gridScale})` : undefined,
-                transformOrigin: 'top left'
+                transformOrigin: 'top left',
+                marginRight: fitToWidth && gridScale < 1 ? `-${Math.round(tableWidth * (1 - gridScale))}px` : undefined,
+                marginBottom: fitToWidth && gridScale < 1 && tableHeight > 0 ? `-${Math.round(tableHeight * (1 - gridScale))}px` : undefined,
               }}
             >
               <table 
                 ref={tableRef}
-                className="w-full border-collapse text-left text-xs table-fixed min-w-[1060px]"
+                className="w-full border-collapse text-left text-xs table-fixed"
               >
                 <thead>
                   <tr className="bg-bgPrimary border-b border-borderColor">
-                    <th className="p-3 font-bold w-20 text-center border-r border-borderColor text-textMain font-mono text-xs">Day</th>
+                    <th className="p-2 font-bold w-16 text-center border-r border-borderColor text-textMain font-mono text-xs">Day</th>
                     {TIMETABLE_SLOTS.map((slot) => (
-                      <th key={slot.key} className="p-2.5 text-center border-r border-borderColor w-28 min-w-[100px]">
+                      <th key={slot.key} className={`p-2 text-center border-r border-borderColor ${slot.id === 'break' ? 'w-16' : 'w-20'}`}>
                         <div className="font-extrabold text-[11px] text-textMain font-mono">{slot.name}</div>
                         <div className="text-[9px] text-textMuted font-mono mt-0.5 leading-tight">
                           {slot.id === 'break' ? (

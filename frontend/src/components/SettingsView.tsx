@@ -94,14 +94,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
+    <div className="w-full max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10 min-w-0 overflow-x-hidden">
       <div>
         <h2 className="text-2xl font-extrabold text-textMain">Settings</h2>
         <p className="text-sm text-textMuted mt-1">Manage display preferences, academic tools, sync options, and dock customization.</p>
       </div>
 
       {/* CATEGORY SWITCHER PILLS (MULTIPLE OPTIONS FOR DIFFERENT TYPES OF SETTINGS) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+      <div className="w-full max-w-full min-w-0 flex items-center gap-1.5 overflow-x-auto pb-1.5 custom-scrollbar shrink-0">
         <button
           type="button"
           onClick={() => setActiveCategory('all')}

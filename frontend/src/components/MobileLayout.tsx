@@ -220,7 +220,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 
   return (
     <div 
-      className="flex flex-col h-[100dvh] w-screen bg-bgPrimary text-textMain overflow-hidden select-none pt-safe"
+      className="flex flex-col h-[100dvh] w-full max-w-full bg-bgPrimary text-textMain overflow-hidden select-none pt-safe"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -293,7 +293,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       </header>
 
       {/* Main Content Area with Animated Touch Translation */}
-      <main className="flex-1 overflow-y-auto p-4 pb-24 custom-scrollbar relative bg-bgPrimary">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 custom-scrollbar relative bg-bgPrimary w-full max-w-full">
         <div 
           style={{
             transform: targetOffsetPercent !== 0 
@@ -305,7 +305,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
               ? 'none' 
               : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)'
           }}
-          className="min-h-full flex flex-col flex-1"
+          className="min-h-full flex flex-col flex-1 w-full max-w-full overflow-x-hidden"
         >
           {activeTab === 'more' ? (
             <MobileMoreHub 
