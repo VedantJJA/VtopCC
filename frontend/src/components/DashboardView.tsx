@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Activity, CalendarDays, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { DashboardSkeleton, SkeletonBox } from './Skeleton';
 
 interface DashboardViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
@@ -172,6 +173,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     ? 'none'
     : 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)';
 
+  const isInitialLoading = (attendanceQuery.isPending && !attendanceQuery.data) &&
+    (timetableQuery.isPending && !timetableQuery.data);
+
+  if (isInitialLoading) {
+    return <DashboardSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -182,8 +190,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </h3>
             
             {attSum.loading ? (
-              <div className="h-16 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              <div className="space-y-4 py-2">
+                <SkeletonBox className="h-4 w-28" />
+                <SkeletonBox className="h-2 w-full rounded-full" />
               </div>
             ) : (
               <div className="space-y-7">
@@ -377,8 +386,22 @@ const SchedulePanel: React.FC<{
 }> = ({ dayInfo, attendanceList = [], showCardAttendance = true }) => {
   if (dayInfo.loading) {
     return (
-      <div className="h-24 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="p-3.5 rounded-xl border border-borderColor/40 bg-bgPrimary/40 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-14 space-y-1">
+                <SkeletonBox className="h-4 w-12" />
+                <SkeletonBox className="h-3 w-8" />
+              </div>
+              <div className="space-y-1">
+                <SkeletonBox className="h-4 w-36" />
+                <SkeletonBox className="h-3 w-20" />
+              </div>
+            </div>
+            <SkeletonBox className="h-6 w-14 rounded-lg" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -440,24 +463,12 @@ const SchedulePanel: React.FC<{
                 </span>
                 {showCardAttendance && metrics ? (
                   <div className="flex items-center gap-1 mt-1">
-                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-lg border ${
-                      metrics.status === 'safe'
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                        : metrics.status === 'warning'
-                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                    }`}>
+                    <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted">
                       {metrics.percentage}%
                     </span>
                     <span 
                       title={metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
-                      className={`text-[11px] font-bold px-1.5 py-0.5 rounded-lg border ${
-                        metrics.status === 'safe'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                          : metrics.status === 'warning'
-                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                      }`}
+                      className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-borderColor bg-bgCard/80 text-textMuted"
                     >
                       {metrics.status === 'safe' ? `+${metrics.canMiss}` : metrics.status === 'warning' ? '0' : `-${metrics.needAttend}`}
                     </span>

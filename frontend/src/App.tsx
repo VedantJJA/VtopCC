@@ -114,6 +114,27 @@ function VtopLoginDashboard() {
     );
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSyncedTime, setLastSyncedTime] = useState<number | null>(() => {
+    const saved = safeStorageGet('vtop_last_synced_time');
+    return saved ? parseInt(saved, 10) : null;
+  });
+
+  const markSynced = () => {
+    const now = Date.now();
+    setLastSyncedTime(now);
+    safeStorageSet('vtop_last_synced_time', String(now));
+  };
+
+  const formatLastSynced = (timestamp: number | null): string => {
+    if (!timestamp) return '';
+    const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+    if (diffSec < 45) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
 
   useEffect(() => {
     safeStorageSet('vtop_auto_refresh', String(autoRefresh));
@@ -212,6 +233,7 @@ function VtopLoginDashboard() {
             safeStorageSet('vtop_username', res.data.username);
           }
           queryClient.refetchQueries();
+          markSynced();
         } else {
           console.log("Session verification failed, checking for offline cached data...");
           const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters'));
@@ -523,6 +545,7 @@ function VtopLoginDashboard() {
         setTimeout(() => setMessage(null), 3000);
         queryClient.invalidateQueries();
         queryClient.refetchQueries();
+        markSynced();
       } else if (data.status === 'invalid_credentials') {
         manualLoginRetryCount.current = 0;
         setMessage({ text: 'Invalid LoginId/Password', type: 'error' });
@@ -582,6 +605,7 @@ function VtopLoginDashboard() {
         setTimeout(() => setMessage(null), 3000);
         queryClient.invalidateQueries();
         queryClient.refetchQueries();
+        markSynced();
       } else if (data.status === 'invalid_credentials') {
         handleAutoLoginFailure('Invalid LoginId/Password');
       } else if (data.status === 'invalid_captcha') {
@@ -684,6 +708,7 @@ function VtopLoginDashboard() {
         adminCheckQuery.refetch()
       ]);
       setMessage({ text: 'Data refreshed successfully.', type: 'success' });
+      markSynced();
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
       console.error('Manual refresh error:', err);
@@ -926,7 +951,7 @@ function VtopLoginDashboard() {
   const isFormPending = loginMutation.isPending || autoLoginMutation.isPending;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bgPrimary select-none">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-bgPrimary select-none">
       {/* Background restore loader */}
       {isRestoringSession && (
         <div className="fixed top-4 right-4 bg-bgCard border border-borderColor rounded-2xl shadow-xl px-4 py-3 z-50 flex items-center gap-3 animate-in slide-in-from-top duration-300">
@@ -964,6 +989,7 @@ function VtopLoginDashboard() {
           setTheme={setTheme}
           isRefreshing={isRefreshing}
           onRefresh={handleManualRefresh}
+          lastSyncedText={formatLastSynced(lastSyncedTime)}
           activeSemester={activeSemester}
           activeUser={activeUser}
           profileData={profileQuery.data}
@@ -1124,6 +1150,12 @@ function VtopLoginDashboard() {
               </div>
               
               <div className="flex items-center space-x-3">
+                {lastSyncedTime && (
+                  <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-textMuted px-2.5 py-1 rounded-lg bg-bgPrimary border border-borderColor/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span>Synced {formatLastSynced(lastSyncedTime)}</span>
+                  </span>
+                )}
                 <button 
                   onClick={handleManualRefresh}
                   disabled={isRefreshing}

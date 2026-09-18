@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   LayoutDashboard, CalendarDays, Activity, Calculator, Grid, 
   RefreshCw, Sun, Moon, ArrowLeft, BookOpen, Award, FileText, 
@@ -36,6 +36,7 @@ interface MobileLayoutProps {
   setTheme: (theme: 'light' | 'dark') => void;
   isRefreshing: boolean;
   onRefresh: () => void;
+  lastSyncedText?: string;
   activeSemester?: string;
   activeUser: string;
   profileData: any;
@@ -52,6 +53,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   setTheme,
   isRefreshing,
   onRefresh,
+  lastSyncedText,
   activeUser,
   profileData,
   isAdmin = false,
@@ -63,74 +65,122 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   const swipableTabs = dockTabs.filter(t => t !== 'more');
   const isDockTab = dockTabs.includes(activeTab);
 
-  // Swipe gesture tracking
-  const touchStartXRef = useRef<number | null>(null);
+  // Animated Tab Swipe states
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchTranslateX, setTouchTranslateX] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [targetOffsetPercent, setTargetOffsetPercent] = useState<number>(0);
+  const [isSnapReset, setIsSnapReset] = useState<boolean>(false);
+
   const touchStartYRef = useRef<number | null>(null);
   const isHorizontalSwipeRef = useRef<boolean | null>(null);
+  const isBusyRef = useRef<boolean>(false);
+
+  const triggerTabShift = (dir: 'left' | 'right') => {
+    if (isBusyRef.current) return;
+    const currentIdx = swipableTabs.indexOf(activeTab);
+    if (currentIdx === -1) return;
+
+    if (dir === 'left' && currentIdx >= swipableTabs.length - 1) {
+      // At end boundary: bounce back
+      setTouchTranslateX(0);
+      setTargetOffsetPercent(0);
+      return;
+    }
+    if (dir === 'right' && currentIdx <= 0) {
+      // At start boundary: bounce back
+      setTouchTranslateX(0);
+      setTargetOffsetPercent(0);
+      return;
+    }
+
+    isBusyRef.current = true;
+    setTouchTranslateX(0);
+    setTargetOffsetPercent(dir === 'left' ? -35 : 35);
+
+    setTimeout(() => {
+      setIsSnapReset(true);
+      setTargetOffsetPercent(dir === 'left' ? 35 : -35);
+      const nextTab = dir === 'left' ? swipableTabs[currentIdx + 1] : swipableTabs[currentIdx - 1];
+      setActiveTab(nextTab);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsSnapReset(false);
+          setTargetOffsetPercent(0);
+          setTimeout(() => {
+            isBusyRef.current = false;
+          }, 250);
+        });
+      });
+    }, 220);
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    // If user touches inside a component marked as no-swipe (like inner carousels), ignore
+    if (isBusyRef.current) return;
     const target = e.target as HTMLElement;
     if (target.closest('[data-no-swipe="true"]')) {
-      touchStartXRef.current = null;
+      setTouchStartX(null);
       touchStartYRef.current = null;
       isHorizontalSwipeRef.current = null;
       return;
     }
 
-    touchStartXRef.current = e.touches[0].clientX;
+    setTouchStartX(e.touches[0].clientX);
     touchStartYRef.current = e.touches[0].clientY;
     isHorizontalSwipeRef.current = null;
+    setIsDragging(false);
+    setIsSnapReset(false);
+    setTouchTranslateX(0);
+    setTargetOffsetPercent(0);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const dx = e.touches[0].clientX - touchStartXRef.current;
+    if (touchStartX === null || touchStartYRef.current === null || isBusyRef.current) return;
+    const dx = e.touches[0].clientX - touchStartX;
     const dy = e.touches[0].clientY - touchStartYRef.current;
 
-    // Determine swipe direction once threshold reached
+    // Determine direction once past 10px
     if (isHorizontalSwipeRef.current === null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
-      if (Math.abs(dx) > Math.abs(dy) * 1.3) {
+      if (Math.abs(dx) > Math.abs(dy) * 1.2) {
         isHorizontalSwipeRef.current = true;
       } else {
         isHorizontalSwipeRef.current = false;
       }
     }
+
+    if (isHorizontalSwipeRef.current) {
+      setIsDragging(true);
+      const currentIdx = swipableTabs.indexOf(activeTab);
+      let dampenedDx = dx;
+      if ((dx > 0 && currentIdx === 0) || (dx < 0 && currentIdx === swipableTabs.length - 1)) {
+        dampenedDx = dx * 0.25;
+      }
+      setTouchTranslateX(dampenedDx);
+    }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null || !isHorizontalSwipeRef.current) {
-      touchStartXRef.current = null;
-      touchStartYRef.current = null;
-      isHorizontalSwipeRef.current = null;
+  const handleTouchEnd = () => {
+    if (touchStartX === null || isBusyRef.current) {
+      setTouchStartX(null);
+      setIsDragging(false);
+      setTouchTranslateX(0);
       return;
     }
 
-    const endX = e.changedTouches[0].clientX;
-    const endY = e.changedTouches[0].clientY;
-    const dx = endX - touchStartXRef.current;
-    const dy = endY - touchStartYRef.current;
-
-    touchStartXRef.current = null;
+    const dragDistance = touchTranslateX;
+    setTouchStartX(null);
     touchStartYRef.current = null;
     isHorizontalSwipeRef.current = null;
+    setIsDragging(false);
 
-    // Swipe threshold of 50px
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) {
-      const currentIdx = swipableTabs.indexOf(activeTab);
-      if (currentIdx !== -1) {
-        if (dx < 0) {
-          // Swipe left -> next tab
-          if (currentIdx < swipableTabs.length - 1) {
-            setActiveTab(swipableTabs[currentIdx + 1]);
-          }
-        } else {
-          // Swipe right -> prev tab
-          if (currentIdx > 0) {
-            setActiveTab(swipableTabs[currentIdx - 1]);
-          }
-        }
-      }
+    if (dragDistance < -45) {
+      triggerTabShift('left');
+    } else if (dragDistance > 45) {
+      triggerTabShift('right');
+    } else {
+      setTouchTranslateX(0);
+      setTargetOffsetPercent(0);
     }
   };
 
@@ -158,13 +208,13 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 
   return (
     <div 
-      className="flex flex-col h-screen w-screen bg-bgPrimary text-textMain overflow-hidden select-none"
+      className="flex flex-col h-[100dvh] w-screen bg-bgPrimary text-textMain overflow-hidden select-none pt-safe"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {/* Top Mobile Header */}
-      <header className="flex items-center justify-between px-4 py-3 bg-bgCard border-b border-borderColor z-30 shrink-0 shadow-xs">
+      <header className="flex items-center justify-between px-4 py-2.5 bg-bgCard border-b border-borderColor z-30 shrink-0 shadow-xs">
         <div className="flex items-center gap-2.5 min-w-0">
           {!isDockTab ? (
             <button
@@ -175,15 +225,22 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
               <span>Back</span>
             </button>
           ) : (
-            <div className="flex items-center gap-2">
-              <VtopLogo size={24} />
-              <span className="font-extrabold text-sm tracking-tight text-textMain hidden xs:inline">VTOP</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <VtopLogo size={22} />
             </div>
           )}
 
-          <h1 className="text-base font-bold text-textMain capitalize truncate">
-            {getHeaderTitle()}
-          </h1>
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-sm sm:text-base font-bold text-textMain capitalize truncate leading-tight">
+              {getHeaderTitle()}
+            </h1>
+            {lastSyncedText && (
+              <span className="text-[10px] text-textMuted font-medium leading-none mt-0.5 flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
+                <span>Synced {lastSyncedText}</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Header Action Buttons */}
@@ -211,23 +268,35 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-4 pb-20 custom-scrollbar relative bg-bgPrimary">
-        {activeTab === 'more' ? (
-          <MobileMoreHub 
-            setActiveTab={setActiveTab} 
-            activeUser={activeUser}
-            profileData={profileData}
-            isAdmin={isAdmin}
-            onLogout={onLogout}
-          />
-        ) : (
-          children
-        )}
+      {/* Main Content Area with Animated Touch Translation */}
+      <main className="flex-1 overflow-y-auto p-4 pb-24 custom-scrollbar relative bg-bgPrimary">
+        <div 
+          style={{
+            transform: targetOffsetPercent !== 0 
+              ? `translate3d(${targetOffsetPercent}%, 0, 0)` 
+              : `translate3d(${touchTranslateX}px, 0, 0)`,
+            transition: isSnapReset || isDragging 
+              ? 'none' 
+              : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)'
+          }}
+          className="min-h-full flex flex-col flex-1"
+        >
+          {activeTab === 'more' ? (
+            <MobileMoreHub 
+              setActiveTab={setActiveTab} 
+              activeUser={activeUser}
+              profileData={profileData}
+              isAdmin={isAdmin}
+              onLogout={onLogout}
+            />
+          ) : (
+            children
+          )}
+        </div>
       </main>
 
-      {/* Fixed Bottom Tab Bar / Dock */}
-      <nav className="fixed bottom-0 inset-x-0 bg-bgCard/95 backdrop-blur-md border-t border-borderColor z-40 px-2 py-1.5 flex items-center justify-around shadow-lg">
+      {/* Fixed Bottom Tab Bar / Dock with Safe Area */}
+      <nav className="fixed bottom-0 inset-x-0 bg-bgCard/95 backdrop-blur-md border-t border-borderColor z-40 px-2 py-1.5 pb-[max(env(safe-area-inset-bottom),0.5rem)] flex items-center justify-around shadow-lg">
         {dockTabs.map((tabId) => {
           const config = DOCK_ITEMS_MAP[tabId] || { id: tabId, label: tabId, icon: Grid };
           const IconComponent = config.icon;
