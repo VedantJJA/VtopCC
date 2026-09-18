@@ -1,13 +1,18 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Loader2, BookOpen } from 'lucide-react';
+import { Loader2, BookOpen, Calendar } from 'lucide-react';
 import { getSubjectColor } from '../lib/utils';
 
 interface TimetableViewProps {
   timetableQuery: UseQueryResult<any, any>;
   TIMETABLE_SLOTS: any[];
+  onOpenCalendar?: () => void;
 }
 
-export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TIMETABLE_SLOTS }) => {
+export const TimetableView: React.FC<TimetableViewProps> = ({ 
+  timetableQuery, 
+  TIMETABLE_SLOTS,
+  onOpenCalendar 
+}) => {
   // Lookup function to support colSpans and find course detail for slot
   const getClassForSlot = (day: string, slotIndex: number) => {
     const timetable = timetableQuery.data?.timetable?.[day];
@@ -66,13 +71,22 @@ export const TimetableView: React.FC<TimetableViewProps> = ({ timetableQuery, TI
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Courses Credit Stat Bar */}
-          <div className="p-4 bg-bgCard border border-borderColor rounded-2xl flex justify-between items-center shadow-sm">
-            <div className="flex items-center gap-3">
-              <BookOpen className="h-5 w-5 text-accentColor" />
-              <span className="text-sm font-semibold text-textMain">Registered Credits</span>
+          {/* Timetable Header & Action Bar */}
+          <div className="p-4 bg-bgCard border border-borderColor rounded-xl flex flex-wrap gap-3 justify-between items-center shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-textMuted">Total Credits:</span>
+              <span className="text-sm font-black text-accentColor">{timetableQuery.data?.total_credits || 0}</span>
             </div>
-            <div className="text-lg font-black text-accentColor">{timetableQuery.data?.total_credits}</div>
+            {onOpenCalendar && (
+              <button
+                onClick={onOpenCalendar}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-accentColor/10 hover:bg-accentColor/20 text-accentColor border border-accentColor/20 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title="Switch to Calendar Schedule"
+              >
+                <Calendar className="h-4 w-4" />
+                <span>Open Calendar</span>
+              </button>
+            )}
           </div>
 
           {/* Desktop Timetable grid */}

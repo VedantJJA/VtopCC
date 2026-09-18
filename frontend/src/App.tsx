@@ -22,7 +22,7 @@ import api, {
 import { solveCaptchaClient } from './lib/solver';
 import { 
   safeGetCache, safeSetCache, safeFindCachePrefix, safeClearCachePrefix,
-  safeStorageGet, safeStorageSet, safeStorageRemove
+  safeStorageGet, safeStorageSet, safeStorageRemove, safeJsonParse
 } from './lib/cache';
 import { 
   Menu, Sun, Moon, Loader2, AlertTriangle, RefreshCw
@@ -104,6 +104,15 @@ function VtopLoginDashboard() {
   const [mobileOptimization, setMobileOptimization] = useState<boolean>(() => {
     return safeStorageGet('vtop_mobile_optimization', 'false') === 'true';
   });
+  const [showCardAttendance, setShowCardAttendance] = useState<boolean>(() => {
+    return safeStorageGet('vtop_show_card_attendance', 'true') === 'true';
+  });
+  const [dockTabs, setDockTabs] = useState<string[]>(() => {
+    return safeJsonParse<string[]>(
+      safeStorageGet('vtop_dock_tabs'),
+      ['dashboard', 'timetable', 'attendance', 'calendar', 'more']
+    );
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
@@ -113,6 +122,14 @@ function VtopLoginDashboard() {
   useEffect(() => {
     safeStorageSet('vtop_mobile_optimization', String(mobileOptimization));
   }, [mobileOptimization]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_show_card_attendance', String(showCardAttendance));
+  }, [showCardAttendance]);
+
+  useEffect(() => {
+    safeStorageSet('vtop_dock_tabs', JSON.stringify(dockTabs));
+  }, [dockTabs]);
 
   // Auth state
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
@@ -194,6 +211,7 @@ function VtopLoginDashboard() {
             setActiveUser(res.data.username);
             safeStorageSet('vtop_username', res.data.username);
           }
+          queryClient.refetchQueries();
         } else {
           console.log("Session verification failed, checking for offline cached data...");
           const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters'));
@@ -503,6 +521,8 @@ function VtopLoginDashboard() {
         setMessage({ text: data.message, type: 'success' });
         safeStorageSet('vtop_username', username);
         setTimeout(() => setMessage(null), 3000);
+        queryClient.invalidateQueries();
+        queryClient.refetchQueries();
       } else if (data.status === 'invalid_credentials') {
         manualLoginRetryCount.current = 0;
         setMessage({ text: 'Invalid LoginId/Password', type: 'error' });
@@ -560,6 +580,7 @@ function VtopLoginDashboard() {
             }
           });
         setTimeout(() => setMessage(null), 3000);
+        queryClient.invalidateQueries();
         queryClient.refetchQueries();
       } else if (data.status === 'invalid_credentials') {
         handleAutoLoginFailure('Invalid LoginId/Password');
@@ -948,6 +969,7 @@ function VtopLoginDashboard() {
           profileData={profileQuery.data}
           isAdmin={adminCheckQuery.data ?? false}
           onLogout={() => logoutMutation.mutate()}
+          dockTabs={dockTabs}
         >
           {activeTab === 'dashboard' && (
             <DashboardView
@@ -956,6 +978,7 @@ function VtopLoginDashboard() {
               odSnapshotQuery={odSnapshotQuery}
               TIMETABLE_SLOTS={TIMETABLE_SLOTS}
               setActiveTab={setActiveTab}
+              showCardAttendance={showCardAttendance}
             />
           )}
 
@@ -971,6 +994,7 @@ function VtopLoginDashboard() {
             <TimetableView
               timetableQuery={timetableQuery}
               TIMETABLE_SLOTS={TIMETABLE_SLOTS}
+              onOpenCalendar={() => setActiveTab('calendar')}
             />
           )}
 
@@ -1048,6 +1072,10 @@ function VtopLoginDashboard() {
               setAutoRefresh={setAutoRefresh}
               mobileOptimization={mobileOptimization}
               setMobileOptimization={setMobileOptimization}
+              showCardAttendance={showCardAttendance}
+              setShowCardAttendance={setShowCardAttendance}
+              dockTabs={dockTabs}
+              setDockTabs={setDockTabs}
             />
           )}
 
@@ -1124,6 +1152,7 @@ function VtopLoginDashboard() {
                   odSnapshotQuery={odSnapshotQuery}
                   TIMETABLE_SLOTS={TIMETABLE_SLOTS}
                   setActiveTab={setActiveTab}
+                  showCardAttendance={showCardAttendance}
                 />
               )}
 
@@ -1139,6 +1168,7 @@ function VtopLoginDashboard() {
                 <TimetableView
                   timetableQuery={timetableQuery}
                   TIMETABLE_SLOTS={TIMETABLE_SLOTS}
+                  onOpenCalendar={() => setActiveTab('calendar')}
                 />
               )}
 
@@ -1216,6 +1246,10 @@ function VtopLoginDashboard() {
                   setAutoRefresh={setAutoRefresh}
                   mobileOptimization={mobileOptimization}
                   setMobileOptimization={setMobileOptimization}
+                  showCardAttendance={showCardAttendance}
+                  setShowCardAttendance={setShowCardAttendance}
+                  dockTabs={dockTabs}
+                  setDockTabs={setDockTabs}
                 />
               )}
 

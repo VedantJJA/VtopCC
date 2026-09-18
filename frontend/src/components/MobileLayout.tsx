@@ -6,6 +6,29 @@ import {
 } from 'lucide-react';
 import { VtopLogo } from './VtopLogo';
 
+export interface DockItemConfig {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+export const DOCK_ITEMS_MAP: Record<string, DockItemConfig> = {
+  dashboard: { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  timetable: { id: 'timetable', label: 'Timetable', icon: CalendarDays },
+  attendance: { id: 'attendance', label: 'Attendance', icon: Activity },
+  calendar: { id: 'calendar', label: 'Calendar', icon: Calendar },
+  calculator: { id: 'calculator', label: 'Calc', icon: Calculator },
+  marks: { id: 'marks', label: 'Marks', icon: Award },
+  grades: { id: 'grades', label: 'Grades', icon: Award },
+  exams: { id: 'exams', label: 'Exams', icon: FileText },
+  courses: { id: 'courses', label: 'Courses', icon: BookOpen },
+  faculty: { id: 'faculty', label: 'Faculty', icon: Search },
+  'my-room': { id: 'my-room', label: 'Room', icon: Home },
+  more: { id: 'more', label: 'More', icon: Grid }
+};
+
+export const DEFAULT_DOCK_TABS = ['dashboard', 'timetable', 'attendance', 'calendar', 'more'];
+
 interface MobileLayoutProps {
   activeTab: string;
   setActiveTab: (tab: any) => void;
@@ -13,16 +36,14 @@ interface MobileLayoutProps {
   setTheme: (theme: 'light' | 'dark') => void;
   isRefreshing: boolean;
   onRefresh: () => void;
-  activeSemester: string;
+  activeSemester?: string;
   activeUser: string;
   profileData: any;
   isAdmin?: boolean;
   onLogout: () => void;
+  dockTabs?: string[];
   children: React.ReactNode;
 }
-
-const PRIMARY_TABS = ['dashboard', 'timetable', 'attendance', 'calculator', 'more'] as const;
-type PrimaryTab = typeof PRIMARY_TABS[number];
 
 export const MobileLayout: React.FC<MobileLayoutProps> = ({
   activeTab,
@@ -31,14 +52,16 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   setTheme,
   isRefreshing,
   onRefresh,
-  activeSemester,
   activeUser,
   profileData,
   isAdmin = false,
   onLogout,
+  dockTabs: propDockTabs,
   children
 }) => {
-  const isPrimaryTab = PRIMARY_TABS.includes(activeTab as PrimaryTab);
+  const dockTabs = propDockTabs && propDockTabs.length > 0 ? propDockTabs : DEFAULT_DOCK_TABS;
+  const swipableTabs = dockTabs.filter(t => t !== 'more');
+  const isDockTab = dockTabs.includes(activeTab);
 
   // Swipe gesture tracking
   const touchStartXRef = useRef<number | null>(null);
@@ -94,17 +117,17 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 
     // Swipe threshold of 50px
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) {
-      if (isPrimaryTab) {
-        const currentIdx = PRIMARY_TABS.indexOf(activeTab as PrimaryTab);
+      const currentIdx = swipableTabs.indexOf(activeTab);
+      if (currentIdx !== -1) {
         if (dx < 0) {
           // Swipe left -> next tab
-          if (currentIdx < PRIMARY_TABS.length - 1) {
-            setActiveTab(PRIMARY_TABS[currentIdx + 1]);
+          if (currentIdx < swipableTabs.length - 1) {
+            setActiveTab(swipableTabs[currentIdx + 1]);
           }
         } else {
           // Swipe right -> prev tab
           if (currentIdx > 0) {
-            setActiveTab(PRIMARY_TABS[currentIdx - 1]);
+            setActiveTab(swipableTabs[currentIdx - 1]);
           }
         }
       }
@@ -143,7 +166,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       {/* Top Mobile Header */}
       <header className="flex items-center justify-between px-4 py-3 bg-bgCard border-b border-borderColor z-30 shrink-0 shadow-xs">
         <div className="flex items-center gap-2.5 min-w-0">
-          {!isPrimaryTab ? (
+          {!isDockTab ? (
             <button
               onClick={() => setActiveTab('more')}
               className="p-1.5 -ml-1 text-accentColor hover:bg-bgPrimary rounded-lg flex items-center gap-1 font-semibold text-xs cursor-pointer transition-colors"
@@ -165,12 +188,6 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 shrink-0">
-          {activeSemester && (
-            <span className="hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-accentColor/10 text-accentColor border border-accentColor/20 max-w-[120px] truncate">
-              {activeSemester}
-            </span>
-          )}
-
           {/* Refresh Button */}
           <button
             onClick={onRefresh}
@@ -209,82 +226,32 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
         )}
       </main>
 
-      {/* Fixed Bottom Tab Bar */}
+      {/* Fixed Bottom Tab Bar / Dock */}
       <nav className="fixed bottom-0 inset-x-0 bg-bgCard/95 backdrop-blur-md border-t border-borderColor z-40 px-2 py-1.5 flex items-center justify-around shadow-lg">
-        {/* Tab 1: Home/Dashboard */}
-        <button
-          onClick={() => setActiveTab('dashboard')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'dashboard' 
-              ? 'text-accentColor font-bold' 
-              : 'text-textMuted hover:text-textMain font-medium'
-          }`}
-        >
-          <div className={`p-1 rounded-lg transition-transform ${activeTab === 'dashboard' ? 'scale-110 bg-accentColor/10' : ''}`}>
-            <LayoutDashboard className="h-5 w-5" />
-          </div>
-          <span className="text-[10px] mt-0.5 tracking-tight">Home</span>
-        </button>
+        {dockTabs.map((tabId) => {
+          const config = DOCK_ITEMS_MAP[tabId] || { id: tabId, label: tabId, icon: Grid };
+          const IconComponent = config.icon;
+          const isTabActive = tabId === 'more' 
+            ? (!dockTabs.includes(activeTab) || activeTab === 'more')
+            : activeTab === tabId;
 
-        {/* Tab 2: Timetable */}
-        <button
-          onClick={() => setActiveTab('timetable')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'timetable' 
-              ? 'text-accentColor font-bold' 
-              : 'text-textMuted hover:text-textMain font-medium'
-          }`}
-        >
-          <div className={`p-1 rounded-lg transition-transform ${activeTab === 'timetable' ? 'scale-110 bg-accentColor/10' : ''}`}>
-            <CalendarDays className="h-5 w-5" />
-          </div>
-          <span className="text-[10px] mt-0.5 tracking-tight">Timetable</span>
-        </button>
-
-        {/* Tab 3: Attendance */}
-        <button
-          onClick={() => setActiveTab('attendance')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'attendance' 
-              ? 'text-accentColor font-bold' 
-              : 'text-textMuted hover:text-textMain font-medium'
-          }`}
-        >
-          <div className={`p-1 rounded-lg transition-transform ${activeTab === 'attendance' ? 'scale-110 bg-accentColor/10' : ''}`}>
-            <Activity className="h-5 w-5" />
-          </div>
-          <span className="text-[10px] mt-0.5 tracking-tight">Attendance</span>
-        </button>
-
-        {/* Tab 4: Calculator */}
-        <button
-          onClick={() => setActiveTab('calculator')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'calculator' 
-              ? 'text-accentColor font-bold' 
-              : 'text-textMuted hover:text-textMain font-medium'
-          }`}
-        >
-          <div className={`p-1 rounded-lg transition-transform ${activeTab === 'calculator' ? 'scale-110 bg-accentColor/10' : ''}`}>
-            <Calculator className="h-5 w-5" />
-          </div>
-          <span className="text-[10px] mt-0.5 tracking-tight">Calc</span>
-        </button>
-
-        {/* Tab 5: More Hub */}
-        <button
-          onClick={() => setActiveTab('more')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
-            !isPrimaryTab || activeTab === 'more'
-              ? 'text-accentColor font-bold' 
-              : 'text-textMuted hover:text-textMain font-medium'
-          }`}
-        >
-          <div className={`p-1 rounded-lg transition-transform ${!isPrimaryTab || activeTab === 'more' ? 'scale-110 bg-accentColor/10' : ''}`}>
-            <Grid className="h-5 w-5" />
-          </div>
-          <span className="text-[10px] mt-0.5 tracking-tight">More</span>
-        </button>
+          return (
+            <button
+              key={tabId}
+              onClick={() => setActiveTab(tabId)}
+              className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+                isTabActive 
+                  ? 'text-accentColor font-bold' 
+                  : 'text-textMuted hover:text-textMain font-medium'
+              }`}
+            >
+              <div className={`p-1 rounded-lg transition-transform ${isTabActive ? 'scale-110 bg-accentColor/10' : ''}`}>
+                <IconComponent className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] mt-0.5 tracking-tight">{config.label}</span>
+            </button>
+          );
+        })}
       </nav>
     </div>
   );
@@ -307,10 +274,11 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
 }) => {
   const hubSections = [
     {
-      title: 'Academics & Courses',
+      title: 'Academics & Tools',
       items: [
         { id: 'courses', label: 'Registered Courses', icon: BookOpen, color: 'text-blue-500 bg-blue-500/10' },
         { id: 'calendar', label: 'Academic Calendar', icon: Calendar, color: 'text-emerald-500 bg-emerald-500/10' },
+        { id: 'calculator', label: 'Attendance Calculator', icon: Calculator, color: 'text-sky-500 bg-sky-500/10' },
         { id: 'faculty', label: 'Faculty Search', icon: Search, color: 'text-purple-500 bg-purple-500/10' },
       ]
     },

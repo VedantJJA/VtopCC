@@ -8,13 +8,15 @@ interface DashboardViewProps {
   odSnapshotQuery: UseQueryResult<any, any>;
   TIMETABLE_SLOTS: any[];
   setActiveTab?: (tab: any) => void;
+  showCardAttendance?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   attendanceQuery,
   timetableQuery,
   odSnapshotQuery,
-  setActiveTab
+  setActiveTab,
+  showCardAttendance = true
 }) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   
@@ -277,13 +279,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="flex flex-row w-[300%] -ml-[100%]"
               >
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={prevDayInfo} attendanceList={attendanceQuery.data || []} />
+                  <SchedulePanel dayInfo={prevDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} />
                 </div>
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={currDayInfo} attendanceList={attendanceQuery.data || []} />
+                  <SchedulePanel dayInfo={currDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} />
                 </div>
                 <div className="w-[33.333333%] shrink-0 px-2">
-                  <SchedulePanel dayInfo={nextDayInfo} attendanceList={attendanceQuery.data || []} />
+                  <SchedulePanel dayInfo={nextDayInfo} attendanceList={attendanceQuery.data || []} showCardAttendance={showCardAttendance} />
                 </div>
               </div>
             </div>
@@ -320,23 +322,20 @@ function calculateAttendanceMetrics(att: any | null) {
   if (!att) return null;
   const attended = parseInt(att.attended_classes, 10);
   const total = parseInt(att.total_classes, 10);
-  if (isNaN(attended) || isNaN(total) || total === 0) {
-    const parsedPercent = parseFloat(att.percentage);
+  const percentage = parseFloat(att.percentage) || 0;
+
+  if (isNaN(attended) || isNaN(total) || total <= 0) {
     return {
-      percentage: isNaN(parsedPercent) ? 0 : parsedPercent,
+      percentage,
       attended: 0,
       total: 0,
       canMiss: 0,
       needAttend: 0,
-      status: 'no_data' as const
+      status: 'safe' as const
     };
   }
 
-  const rawPercent = (attended / total) * 100;
-  const percentage = parseFloat(att.percentage) || Math.round(rawPercent * 10) / 10;
-
-  // Formula for classes that can be missed while staying >= 75%:
-  // attended / (total + m) >= 0.75 => m <= (4 * attended - 3 * total) / 3
+  // Margin calculation based on standard 75% cutoff:
   const margin = Math.floor((4 * attended - 3 * total) / 3);
 
   if (margin > 0) {
@@ -358,8 +357,7 @@ function calculateAttendanceMetrics(att: any | null) {
       status: 'warning' as const
     };
   } else {
-    // Under 75%: classes needed consecutively to reach 75%:
-    // (attended + x) / (total + x) >= 0.75 => x >= 3 * total - 4 * attended
+    // Under 75%: classes needed consecutively to reach 75%
     const need = Math.ceil(3 * total - 4 * attended);
     return {
       percentage,
@@ -375,7 +373,8 @@ function calculateAttendanceMetrics(att: any | null) {
 const SchedulePanel: React.FC<{ 
   dayInfo: { displayTitle: string; list: any[]; loading: boolean };
   attendanceList?: any[];
-}> = ({ dayInfo, attendanceList = [] }) => {
+  showCardAttendance?: boolean;
+}> = ({ dayInfo, attendanceList = [], showCardAttendance = true }) => {
   if (dayInfo.loading) {
     return (
       <div className="h-24 flex items-center justify-center">
@@ -439,7 +438,7 @@ const SchedulePanel: React.FC<{
                 <span className="text-xs font-semibold text-textMain">
                   {cls.venue}
                 </span>
-                {metrics ? (
+                {showCardAttendance && metrics ? (
                   <div className="flex items-center gap-1 mt-1">
                     <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-lg border ${
                       metrics.status === 'safe'
@@ -468,7 +467,7 @@ const SchedulePanel: React.FC<{
             </div>
 
             {/* Bottom Border-like Attendance Loading / Progress Bar */}
-            {metrics && (
+            {showCardAttendance && metrics && (
               <div 
                 className="w-full h-1 bg-borderColor/40 overflow-hidden" 
                 title={`Attendance: ${metrics.percentage}% (${metrics.attended}/${metrics.total})`}
