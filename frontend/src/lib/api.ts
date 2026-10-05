@@ -152,6 +152,22 @@ export const fetchLeaveHistory = async () => {
   return response.data;
 };
 
+// EventHub API functions
+export const getEventHubEvents = async (creds?: { username?: string; password?: string }) => {
+  const response = await api.post('/data/eventhub/events', creds || {});
+  return response.data;
+};
+
+export const getEventHubPreview = async (eid: string, creds?: { username?: string; password?: string }) => {
+  const response = await api.post('/data/eventhub/preview', { eid, ...(creds || {}) });
+  return response.data;
+};
+
+export const getEventHubProfile = async (creds?: { username?: string; password?: string }) => {
+  const response = await api.post('/data/eventhub/profile', creds || {});
+  return response.data;
+};
+
 // Admin API functions (GET requests, no caching)
 export const getUserCount = () => api.get('/admin/user-count');
 export const getAdminStats = () => api.get('/admin/stats');

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { 
   LayoutDashboard, CalendarDays, Activity, Calculator, Grid, 
   RefreshCw, Sun, Moon, ArrowLeft, BookOpen, Award, FileText, 
-  Home, Calendar, Search, Settings, Shield, User, LogOut, ChevronRight
+  Home, Calendar, Search, Settings, Shield, User, LogOut, ChevronRight, Sparkles
 } from 'lucide-react';
 import { VtopLogo } from './VtopLogo';
 
@@ -16,6 +16,7 @@ export const DOCK_ITEMS_MAP: Record<string, DockItemConfig> = {
   dashboard: { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
   timetable: { id: 'timetable', label: 'Timetable', icon: CalendarDays },
   attendance: { id: 'attendance', label: 'Attendance', icon: Activity },
+  events: { id: 'events', label: 'Events', icon: Sparkles },
   calendar: { id: 'calendar', label: 'Calendar', icon: Calendar },
   calculator: { id: 'calculator', label: 'Calc', icon: Calculator },
   marks: { id: 'marks', label: 'Marks', icon: Award },
@@ -446,8 +447,9 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
       ]
     },
     {
-      title: 'Hostel & Life',
+      title: 'Campus & Life',
       items: [
+        { id: 'events', label: 'Event Hub', icon: Sparkles, color: 'text-amber-500 bg-amber-500/10' },
         { id: 'my-room', label: 'My Room', icon: Home, color: 'text-cyan-500 bg-cyan-500/10' },
         { id: 'leaves', label: 'Leave Requests', icon: FileText, color: 'text-teal-500 bg-teal-500/10' },
       ]

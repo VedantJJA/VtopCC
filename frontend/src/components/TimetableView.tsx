@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Calendar, LayoutGrid, CalendarDays, MapPin, Layers, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { getSubjectColor, formatTime, formatTimeRange } from '../lib/utils';
+import { safeFindCachePrefix } from '../lib/cache';
 import { TimetableSkeleton } from './Skeleton';
 import { getSchedulesForDayOfWeek, type CustomScheduleItem } from '../services/customScheduleService';
 
@@ -27,14 +28,58 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
     return Object.keys(satData).length > 0;
   })();
 
-  const daysToRender = hasSaturday 
+  // Notice for instructional days occurring during current week
+  const instructionalDayNotice = useMemo(() => {
+    if (hasSaturday) {
+      const order = timetableQuery.data?.day_order_active;
+      return {
+        day: 'Saturday',
+        dayCode: 'SAT',
+        order: order ? `${order} Order` : 'Instructional Day',
+        text: `Instructional Day this week: Saturday is active${order ? ` (Following ${order} Order)` : ''}.`
+      };
+    }
+
+    try {
+      const calData = safeFindCachePrefix<any>('vtop_cache_calendar_');
+      if (calData && Array.isArray(calData.days)) {
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+        for (let i = 0; i <= 6; i++) {
+          const d = new Date(startOfWeek);
+          d.setDate(startOfWeek.getDate() + i);
+          const dayObj = calData.days.find((item: any) => item.day === d.getDate());
+          if (dayObj && Array.isArray(dayObj.events)) {
+            for (const ev of dayObj.events) {
+              const txt = (ev.text || '').toUpperCase();
+              if (txt.includes('ORDER') || txt.includes('INSTRUCTIONAL DAY')) {
+                return {
+                  day: days[i],
+                  dayCode: dayCodes[i],
+                  order: ev.text,
+                  text: `Instructional Day this week: ${days[i]} (${ev.text}).`
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch (_e) {}
+    return null;
+  }, [hasSaturday, timetableQuery.data?.day_order_active]);
+
+  const daysToRender = (hasSaturday || instructionalDayNotice?.dayCode === 'SAT')
     ? ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
     : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
 
   const getInitialDay = () => {
     const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const today = days[new Date().getDay()];
-    if (today === 'SAT' && hasSaturday) return 'SAT';
+    if (today === 'SAT' && (hasSaturday || instructionalDayNotice?.dayCode === 'SAT')) return 'SAT';
     if (['MON', 'TUE', 'WED', 'THU', 'FRI'].includes(today)) return today;
     return 'MON';
   };
@@ -333,18 +378,27 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
       {/* 2. MOBILE & DESKTOP CHRONOLOGICAL DAY SCHEDULE VIEW */}
       {viewMode === 'day' && (
         <div className="space-y-3.5">
+          {/* Instructional Day Notice Banner */}
+          {instructionalDayNotice && (
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-2xl text-xs font-semibold shadow-xs">
+              <CalendarDays className="h-4 w-4 shrink-0 text-amber-500" />
+              <span>{instructionalDayNotice.text}</span>
+            </div>
+          )}
+
           {/* Day Selector Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
             {daysToRender.map((day) => {
               const isSelected = selectedDay === day;
               const isToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()] === day;
+              const isInstructional = day === instructionalDayNotice?.dayCode;
 
               return (
                 <button
                   key={day}
                   type="button"
                   onClick={() => setSelectedDay(day)}
-                  className={`flex-1 min-w-[50px] py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center relative border ${
+                  className={`flex-1 min-w-[50px] py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-center relative border ${
                     isSelected
                       ? 'bg-accentColor text-white border-accentColor shadow-xs'
                       : 'bg-bgCard text-textMuted border-borderColor hover:text-textMain'
@@ -357,7 +411,14 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
                       }`} 
                     />
                   )}
-                  {day}
+                  <span>{day}</span>
+                  {isInstructional && (
+                    <span className={`block text-[8px] font-extrabold uppercase tracking-tighter mt-0.5 ${
+                      isSelected ? 'text-amber-200' : 'text-amber-500'
+                    }`}>
+                      Work
+                    </span>
+                  )}
                 </button>
               );
             })}

@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Activity, CalendarDays, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Activity, CalendarDays, ChevronLeft, ChevronRight, AlertTriangle, X } from 'lucide-react';
 import { DashboardSkeleton, SkeletonBox } from './Skeleton';
 import { formatTime } from '../lib/utils';
+import { safeFindCachePrefix } from '../lib/cache';
 import { getCustomSchedules, type CustomScheduleItem } from '../services/customScheduleService';
 import { scanLowAttendanceCourses, sendBrowserNotification } from '../services/notificationService';
 
@@ -10,6 +11,7 @@ interface DashboardViewProps {
   attendanceQuery: UseQueryResult<any[], any>;
   timetableQuery: UseQueryResult<any, any>;
   odSnapshotQuery: UseQueryResult<any, any>;
+  examsQuery?: UseQueryResult<any[], any>;
   TIMETABLE_SLOTS: any[];
   setActiveTab?: (tab: any) => void;
   showCardAttendance?: boolean;
@@ -23,15 +25,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   attendanceQuery,
   timetableQuery,
   odSnapshotQuery,
+  examsQuery,
   TIMETABLE_SLOTS: _TIMETABLE_SLOTS,
   setActiveTab,
   showCardAttendance = true,
   circularAttendance = false,
   timeFormat = '24h',
-  notifyLowAttendance = true,
+  notifyLowAttendance = false,
   notifySchedule = true
 }) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
+  const [alertDismissed, setAlertDismissed] = useState(false);
 
   // Custom schedules subscription
   const [customSchedules, setCustomSchedules] = useState<CustomScheduleItem[]>(getCustomSchedules);
@@ -131,9 +135,107 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         totalConducted += total;
       }
     }
-    const percentage = totalConducted > 0 ? Math.floor((totalAttended / totalConducted) * 100) : 0;
+    const percentage = totalConducted > 0 ? Math.ceil((totalAttended / totalConducted) * 100) : 0;
     return { percentage, loading: false };
   };
+
+  // Helper to compare an exam date string (YYYY-MM-DD or DD-Mon-YYYY) with a Date
+  const isSameDate = (examDateStr: string, d: Date): boolean => {
+    if (!examDateStr) return false;
+    const parts = examDateStr.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const day = parseInt(parts[2], 10);
+        return y === d.getFullYear() && m === (d.getMonth() + 1) && day === d.getDate();
+      } else {
+        // DD-Mon-YYYY or DD-MM-YYYY
+        const day = parseInt(parts[0], 10);
+        const monthPart = parts[1].toUpperCase();
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+        let m = months.indexOf(monthPart) + 1;
+        if (m === 0) m = parseInt(parts[1], 10);
+        const y = parseInt(parts[2], 10);
+        return (y === d.getFullYear() || y < 100) && m === (d.getMonth() + 1) && day === d.getDate();
+      }
+    }
+    return false;
+  };
+
+  // Helper to inspect cached academic calendar events for date
+  const getCalendarEventsForDate = (d: Date): { isExamDay: boolean; isHoliday: boolean; dayOrderCode: string | null; eventText: string } => {
+    try {
+      const calData = safeFindCachePrefix<any>('vtop_cache_calendar_');
+      if (calData && Array.isArray(calData.days)) {
+        const dayNum = d.getDate();
+        const dayObj = calData.days.find((item: any) => item.day === dayNum);
+        if (dayObj) {
+          let isExamDay = false;
+          let isHoliday = dayObj.status === 'holiday';
+          let dayOrderCode: string | null = null;
+          let eventText = '';
+
+          if (Array.isArray(dayObj.events)) {
+            for (const ev of dayObj.events) {
+              const txt = (ev.text || '').toUpperCase();
+              if (ev.text) eventText = ev.text;
+              if (txt.includes('EXAM') || txt.includes('CAT') || txt.includes('FAT')) {
+                isExamDay = true;
+              }
+              if (txt.includes('NO INSTRUCTIONAL') || txt.includes('HOLIDAY') || txt.includes('VACATION')) {
+                isHoliday = true;
+              }
+              if (txt.includes('ORDER')) {
+                if (txt.includes('MON')) dayOrderCode = 'MON';
+                else if (txt.includes('TUE')) dayOrderCode = 'TUE';
+                else if (txt.includes('WED')) dayOrderCode = 'WED';
+                else if (txt.includes('THU')) dayOrderCode = 'THU';
+                else if (txt.includes('FRI')) dayOrderCode = 'FRI';
+              }
+            }
+          }
+          return { isExamDay, isHoliday, dayOrderCode, eventText };
+        }
+      }
+    } catch (_e) {}
+    return { isExamDay: false, isHoliday: false, dayOrderCode: null, eventText: '' };
+  };
+
+  // Notice for instructional days occurring during current week
+  const weeklyInstructionalNotice = useMemo(() => {
+    const hasSat = timetableQuery.data?.timetable?.['SAT'] && Object.keys(timetableQuery.data.timetable['SAT']).length > 0;
+    if (hasSat) {
+      const order = timetableQuery.data?.day_order_active;
+      return `Instructional Day this week: Saturday is active${order ? ` (Following ${order} Order)` : ''}.`;
+    }
+
+    try {
+      const calData = safeFindCachePrefix<any>('vtop_cache_calendar_');
+      if (calData && Array.isArray(calData.days)) {
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        for (let i = 0; i <= 6; i++) {
+          const d = new Date(startOfWeek);
+          d.setDate(startOfWeek.getDate() + i);
+          const dayObj = calData.days.find((item: any) => item.day === d.getDate());
+          if (dayObj && Array.isArray(dayObj.events)) {
+            for (const ev of dayObj.events) {
+              const txt = (ev.text || '').toUpperCase();
+              if (txt.includes('ORDER') || txt.includes('INSTRUCTIONAL DAY')) {
+                return `Instructional Day this week: ${days[i]} (${ev.text}).`;
+              }
+            }
+          }
+        }
+      }
+    } catch (_e) {}
+    return null;
+  }, [timetableQuery.data?.timetable, timetableQuery.data?.day_order_active]);
 
   const getClassesForOffset = (offset: number) => {
     const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -147,11 +249,49 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     else if (offset === 1) displayTitle = `Tomorrow (${dateString})`;
     else if (offset === -1) displayTitle = `Yesterday (${dateString})`;
 
+    // 1. Check for Exams on this specific target date
+    const examsForDay = (examsQuery?.data || []).filter((e: any) => isSameDate(e.exam_date, d));
+    if (examsForDay.length > 0) {
+      const examList = examsForDay.map((e: any) => ({
+        startTime: e.exam_time ? e.exam_time.split(' - ')[0] : (e.exam_session || 'Exam'),
+        endTime: e.exam_time && e.exam_time.includes(' - ') ? e.exam_time.split(' - ')[1] : '',
+        title: e.course_title || e.course_code,
+        code: e.course_code,
+        type: `${e.exam_type || 'Exam'}${e.slot ? ` (${e.slot})` : ''}`,
+        venue: e.venue ? `${e.venue}${e.seat_no ? ` | Seat: ${e.seat_no}` : ''}` : (e.seat_location || 'Venue TBA'),
+        isExam: true,
+        seatNo: e.seat_no,
+        examSession: e.exam_session,
+        examType: e.exam_type
+      }));
+      return { dayName, displayTitle, list: examList, loading: false, isExamDay: true };
+    }
+
+    // 2. Check if it's an Exam day or non-instructional day according to academic calendar
+    const calInfo = getCalendarEventsForDate(d);
+    if (calInfo.isExamDay || (calInfo.isHoliday && calInfo.eventText.toLowerCase().includes('exam'))) {
+      return { 
+        dayName, 
+        displayTitle, 
+        list: [], 
+        loading: false, 
+        isExamPeriod: true, 
+        examPeriodNotice: calInfo.eventText || 'Non-instructional exam day — No regular classes scheduled.' 
+      };
+    }
+
     if (!timetableQuery.data || !timetableQuery.data.timetable) {
       return { dayName, displayTitle, list: [], loading: timetableQuery.isPending };
     }
+
+    // 3. Check for instructional day order (e.g. Saturday working as Wednesday)
+    const effectiveDay = calInfo.dayOrderCode || (dayName === 'SAT' ? timetableQuery.data?.day_order_active : null) || dayName;
+    const isInstructionalDay = !!(calInfo.dayOrderCode || (dayName === 'SAT' && Object.keys(timetableQuery.data?.timetable?.['SAT'] || {}).length > 0));
+    const instructionalNote = calInfo.dayOrderCode 
+      ? `${calInfo.dayOrderCode} Order` 
+      : (dayName === 'SAT' && timetableQuery.data?.day_order_active ? `${timetableQuery.data.day_order_active} Order` : (isInstructionalDay ? 'Instructional Day' : ''));
     
-    const schedule = timetableQuery.data?.timetable ? timetableQuery.data.timetable[dayName] || {} : {};
+    const schedule = timetableQuery.data?.timetable ? timetableQuery.data.timetable[effectiveDay] || {} : {};
     const time_slot_keys = [
       "08:00 - 08:50", "08:55 - 09:45", "09:50 - 10:40", "10:45 - 11:35",
       "11:40 - 12:30", "12:35 - 13:25", "LUNCH", "14:00 - 14:50",
@@ -197,7 +337,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     list.sort((a, b) => a.startTime.replace(':', '').localeCompare(b.startTime.replace(':', '')));
 
-    return { dayName, displayTitle, list, loading: false };
+    return { 
+      dayName, 
+      displayTitle, 
+      list, 
+      loading: false,
+      isInstructionalDay,
+      instructionalNote 
+    };
   };
 
   const prevDayInfo = getClassesForOffset(selectedDayOffset - 1);
@@ -237,14 +384,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return <DashboardSkeleton />;
   }
 
-  const lowAttendanceAlerts = notifyLowAttendance && attendanceQuery.data 
+  const lowAttendanceAlerts = (!alertDismissed && notifyLowAttendance && attendanceQuery.data)
     ? scanLowAttendanceCourses(attendanceQuery.data)
     : [];
 
   return (
     <div className="space-y-6">
       {/* Low Attendance Alert Banner */}
-      {notifyLowAttendance && lowAttendanceAlerts.length > 0 && (
+      {notifyLowAttendance && !alertDismissed && lowAttendanceAlerts.length > 0 && (
         <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start justify-between gap-3 shadow-xs">
           <div className="flex items-start gap-3 min-w-0">
             <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 shrink-0 mt-0.5">
@@ -259,13 +406,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setActiveTab && setActiveTab('attendance')}
-            className="text-xs font-bold text-rose-400 hover:text-rose-300 underline shrink-0 mt-1 cursor-pointer"
-          >
-            View
-          </button>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab && setActiveTab('attendance')}
+              className="text-xs font-bold text-rose-400 hover:text-rose-300 underline shrink-0 mt-0.5 cursor-pointer"
+            >
+              View
+            </button>
+            <button
+              type="button"
+              onClick={() => setAlertDismissed(true)}
+              className="p-1 text-textMuted hover:text-textMain rounded-lg transition-colors cursor-pointer"
+              title="Dismiss Alert"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -327,7 +484,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm md:col-span-2 flex flex-col h-fit select-none overflow-hidden touch-pan-y"
         >
           <div>
-            <div className="flex justify-between items-center mb-6 border-b border-borderColor pb-3">
+            {weeklyInstructionalNotice && (
+              <div className="mb-4 flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-xl text-xs font-semibold shadow-xs">
+                <CalendarDays className="h-4 w-4 shrink-0 text-amber-500" />
+                <span>{weeklyInstructionalNotice}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center mb-6 border-b border-borderColor pb-3 flex-wrap gap-2">
               <div className="flex items-center space-x-3">
                 <h3 className="font-bold text-textMain text-base flex items-center gap-2">
                   <CalendarDays className="h-5 w-5 text-indigo-500" /> Schedule
@@ -361,9 +525,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
               
-              <span className="px-2.5 py-1 text-xs font-extrabold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-900/30 tracking-wide">
-                {currDayInfo.displayTitle}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {currDayInfo.isExamDay && (
+                  <span className="px-2 py-0.5 text-[10px] font-extrabold bg-purple-500/15 text-purple-400 border border-purple-500/30 rounded-md tracking-wider uppercase">
+                    Exam Day
+                  </span>
+                )}
+                {currDayInfo.isInstructionalDay && (
+                  <span className="px-2 py-0.5 text-[10px] font-extrabold bg-amber-500/15 text-amber-500 border border-amber-500/30 rounded-md tracking-wide">
+                    {currDayInfo.instructionalNote || 'Instructional Day'}
+                  </span>
+                )}
+                <span className="px-2.5 py-1 text-xs font-extrabold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-900/30 tracking-wide">
+                  {currDayInfo.displayTitle}
+                </span>
+              </div>
             </div>
 
             <div className="w-full overflow-hidden">
@@ -472,7 +648,16 @@ function calculateAttendanceMetrics(att: any | null, isLabCourse: boolean = fals
 }
 
 const SchedulePanel: React.FC<{ 
-  dayInfo: { displayTitle: string; list: any[]; loading: boolean };
+  dayInfo: { 
+    displayTitle: string; 
+    list: any[]; 
+    loading: boolean;
+    isExamPeriod?: boolean;
+    examPeriodNotice?: string;
+    isExamDay?: boolean;
+    isInstructionalDay?: boolean;
+    instructionalNote?: string;
+  };
   attendanceList?: any[];
   showCardAttendance?: boolean;
   circularAttendance?: boolean;
@@ -504,7 +689,11 @@ const SchedulePanel: React.FC<{
       return (
         <div className="py-8 text-center bg-bgPrimary/30 rounded-xl border border-dashed border-borderColor">
           <p className="text-sm font-semibold text-textMain">{dayInfo.displayTitle}</p>
-          <p className="text-xs text-textMuted italic mt-1">No classes scheduled for this day.</p>
+          <p className="text-xs text-textMuted italic mt-1">
+            {dayInfo.isExamPeriod 
+              ? (dayInfo.examPeriodNotice || 'Non-instructional exam day — No regular classes scheduled.')
+              : 'No classes scheduled for this day.'}
+          </p>
         </div>
       );
     }
@@ -512,6 +701,52 @@ const SchedulePanel: React.FC<{
     return (
       <div className={`space-y-3 ${dayInfo.list.length > 8 ? 'max-h-[520px] overflow-y-auto pr-1 custom-scrollbar' : ''}`}>
         {dayInfo.list.map((cls, idx) => {
+          if (cls.isExam) {
+            return (
+              <div 
+                key={`exam-${idx}`} 
+                className="group relative flex flex-col rounded-xl bg-purple-500/10 hover:bg-purple-500/15 transition-all border border-purple-500/30 overflow-hidden shadow-xs"
+              >
+                <div className="flex items-center p-3 sm:p-3.5">
+                  <div className="w-20 text-center border-r border-purple-500/20 pr-3 shrink-0">
+                    <p className="font-bold text-purple-600 dark:text-purple-400 text-xs sm:text-sm leading-tight font-mono">
+                      {cls.startTime}
+                    </p>
+                    {cls.endTime && (
+                      <p className="text-[10px] text-textMuted mt-0.5 leading-none font-mono">
+                        {cls.endTime}
+                      </p>
+                    )}
+                    <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 uppercase tracking-wider">
+                      EXAM
+                    </span>
+                  </div>
+                  <div className="ml-3 sm:ml-4 flex-grow min-w-0 pr-2">
+                    <p className="font-bold text-textMain text-sm truncate" title={cls.title}>
+                      {cls.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-textMuted flex-wrap">
+                      <span className="font-mono font-bold text-purple-400">{cls.code}</span>
+                      <span>•</span>
+                      <span className="text-[11px] font-medium">{cls.type}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end justify-center shrink-0 pl-3 text-right">
+                    <span className="text-xs font-bold text-textMain">
+                      {cls.venue}
+                    </span>
+                    {cls.seatNo && (
+                      <span className="text-[11px] font-mono text-purple-400 font-semibold mt-0.5">
+                        Seat: {cls.seatNo}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="w-full h-1 bg-purple-500/50" />
+              </div>
+            );
+          }
+
           if (cls.isCustom) {
             return (
               <div 

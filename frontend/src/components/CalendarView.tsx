@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
-  Loader2, AlertTriangle, ChevronLeft, ChevronRight, LayoutGrid, 
-  CalendarDays, Plus, Trash2, Clock, MapPin, X 
+  Loader2, AlertTriangle, ChevronLeft, ChevronRight, 
+  Plus, Trash2, Clock, MapPin, X 
 } from 'lucide-react';
 import { getCalendar } from '../lib/api';
 import { safeGetCache, safeSetCache } from '../lib/cache';
@@ -60,7 +60,7 @@ function findBestSemesterForDate(targetDate: Date, semesters: any[]): string {
 export const CalendarView: React.FC<CalendarViewProps> = ({ 
   semesters: propSemesters, 
   activeUser,
-  mobileOptimization = false,
+  mobileOptimization: _mobileOptimization = false,
   timeFormat = '24h'
 }) => {
   const semesters = propSemesters.length > 0 ? propSemesters : (safeGetCache('vtop_cache_semesters', []) || []);
@@ -69,7 +69,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return semesters[0]?.id || '';
   });
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
-  const [viewMode, setViewMode] = useState<'agenda' | 'grid'>(() => mobileOptimization ? 'agenda' : 'grid');
 
   // Custom schedules subscription
   const [customSchedulesList, setCustomSchedulesList] = useState<CustomScheduleItem[]>(getCustomSchedules);
@@ -364,36 +363,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-
-              {/* View Switcher: Icons Only beside Month Switcher */}
-              <div className="flex items-center p-0.5 sm:p-1 bg-bgPrimary border border-borderColor rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('agenda')}
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'agenda'
-                      ? 'bg-bgCard text-accentColor shadow-xs border border-borderColor/60'
-                      : 'text-textMuted hover:text-textMain'
-                  }`}
-                  title="Agenda View"
-                  aria-label="Agenda View"
-                >
-                  <CalendarDays className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-bgCard text-accentColor shadow-xs border border-borderColor/60'
-                      : 'text-textMuted hover:text-textMain'
-                  }`}
-                  title="Grid View"
-                  aria-label="Grid View"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
             </div>
 
             {/* Add Custom Schedule Button */}
@@ -426,7 +395,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   data={prevData} 
                   calendarDate={prevMonthDate} 
                   customSchedules={customSchedulesList} 
-                  isLegacyGrid={viewMode === 'grid'} 
+                  isLegacyGrid={true} 
                 />
               </div>
 
@@ -438,7 +407,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   customSchedules={customSchedulesList}
                   selectedDay={selectedDay} 
                   onSelectDay={setSelectedDay} 
-                  isLegacyGrid={viewMode === 'grid'}
+                  isLegacyGrid={true}
                 />
               </div>
 
@@ -448,7 +417,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   data={nextData} 
                   calendarDate={nextMonthDate}
                   customSchedules={customSchedulesList} 
-                  isLegacyGrid={viewMode === 'grid'} 
+                  isLegacyGrid={true} 
                 />
               </div>
             </div>
@@ -780,7 +749,7 @@ const CalendarMonthPanel: React.FC<{
   selectedDay?: any;
   onSelectDay?: (dayObj: any) => void;
   isLegacyGrid?: boolean;
-}> = ({ data, calendarDate, customSchedules = [], selectedDay, onSelectDay, isLegacyGrid = false }) => {
+}> = ({ data, calendarDate, customSchedules = [], selectedDay, onSelectDay, isLegacyGrid = true }) => {
   if (!data || !data.days) {
     return (
       <div className="h-64 flex items-center justify-center bg-bgCard border border-borderColor rounded-xl">

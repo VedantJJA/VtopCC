@@ -193,8 +193,13 @@ export const getDevCredentials = async (_req: Request, res: Response) => {
   try {
     const fs = require('fs');
     const path = require('path');
-    const filePath = path.join(__dirname, '../../../.idpass');
-    if (fs.existsSync(filePath)) {
+    const candidatePaths = [
+      path.join(__dirname, '../../../.idpass'),
+      path.join(process.cwd(), '.idpass'),
+      path.join(process.cwd(), '../.idpass')
+    ];
+    const filePath = candidatePaths.find(p => fs.existsSync(p));
+    if (filePath) {
       const content = fs.readFileSync(filePath, 'utf8');
       const lines = content.split('\n');
       let username = '';
@@ -208,8 +213,8 @@ export const getDevCredentials = async (_req: Request, res: Response) => {
       }
       return res.json({ status: 'success', username, password });
     }
-    return res.status(404).json({ status: 'error', message: 'No dev credentials found.' });
+    return res.json({ status: 'not_found', message: 'No dev credentials found.' });
   } catch (error: any) {
-    return res.status(500).json({ status: 'error', message: error.message });
+    return res.json({ status: 'error', message: error.message });
   }
 };

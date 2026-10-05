@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   ChevronDown, LogOut, LayoutDashboard, GraduationCap, 
-  FileText, Home, PlusCircle, Settings, Shield
+  FileText, Home, PlusCircle, Settings, Shield, Sparkles
 } from 'lucide-react';
 import { VtopLogo } from './VtopLogo';
 
@@ -41,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navItems: any[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'events', label: 'Event Hub', icon: Sparkles },
     {
       id: 'academics', label: 'Academics', icon: GraduationCap,
       children: [

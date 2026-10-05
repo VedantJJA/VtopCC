@@ -17,6 +17,11 @@ import {
   getLeaveStatus,   // <-- Added
   getLeaveHistory   // <-- Added
 } from '../controllers/data.controller';
+import {
+  getEvents as getEventHubEvents,
+  getPreview as getEventHubPreview,
+  getProfile as getEventHubProfile
+} from '../controllers/eventhub.controller';
 
 const router = Router();
 
@@ -36,5 +41,10 @@ router.post('/faculty', searchFaculty);
 router.post('/faculty-directory', getFacultyDirectory);
 router.post('/leave-status', getLeaveStatus);   // <-- Endpoint for /hostels/student/leave/4
 router.post('/leave-history', getLeaveHistory); // <-- Endpoint for /hostels/student/leave/6
+
+// EventHub endpoints
+router.post('/eventhub/events', getEventHubEvents);
+router.post('/eventhub/preview', getEventHubPreview);
+router.post('/eventhub/profile', getEventHubProfile);
 
 export default router;

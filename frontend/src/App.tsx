@@ -47,6 +47,7 @@ import { SettingsView } from './components/SettingsView';
 import { AdminView } from './components/AdminView';
 import { CoursesView } from './components/CoursesView';
 import LeaveView from './components/LeaveView';
+import { EventsHubView } from './components/EventsHubView';
 import { UniversalSearchModal } from './components/UniversalSearchModal';
 
 const queryClient = new QueryClient({
@@ -75,7 +76,7 @@ const TIMETABLE_SLOTS = [
   { id: 13, name: 'Slot 12', theoryTime: '18:35 - 19:25', labTime: '18:10 - 18:55', key: '18:35 - 19:25' }
 ];
 
-type DashboardTab = 'dashboard' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'leaves' | 'calculator' | 'courses' | 'faculty' | 'settings' | 'admin' | 'more';
+type DashboardTab = 'dashboard' | 'events' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'leaves' | 'calculator' | 'courses' | 'faculty' | 'settings' | 'admin' | 'more';
 type StartLoginResponse = {
   status: 'captcha_ready';
   captcha_type?: number;
@@ -130,7 +131,7 @@ function VtopLoginDashboard() {
     return safeStorageGet('vtop_notif_schedule', 'true') === 'true';
   });
   const [notifyLowAttendance, setNotifyLowAttendance] = useState<boolean>(() => {
-    return safeStorageGet('vtop_notif_low_attendance', 'true') === 'true';
+    return safeStorageGet('vtop_notif_low_attendance', 'false') === 'true';
   });
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -352,18 +353,19 @@ function VtopLoginDashboard() {
     };
   }, [isLoggedIn, isRestoringSession]);
 
-  // Load dev credentials
+  // Load dev credentials (local dev only)
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
     api.post('/auth/dev-creds')
       .then(res => {
-        if (res.data.status === 'success') {
+        if (res.data?.status === 'success') {
           setUsername(res.data.username || '');
           setPassword(res.data.password || '');
           console.log('[Dev] Local credentials loaded.');
         }
       })
-      .catch(err => {
-        console.warn('[Dev] Local credentials load bypassed:', err);
+      .catch(() => {
+        // Silently bypassed when dev credentials file is not present
       });
   }, []);
 
@@ -872,8 +874,10 @@ function VtopLoginDashboard() {
     },
     initialData: () => {
       const exact = safeGetCache(`vtop_cache_timetable_${activeSemester}`);
-      if (exact !== undefined) return exact;
-      return safeFindCachePrefix('vtop_cache_timetable_');
+      if (exact !== undefined && exact && (!Array.isArray(exact) || exact.length > 0)) return exact;
+      const pref = safeFindCachePrefix<any>('vtop_cache_timetable_');
+      if (pref !== undefined && pref && (!Array.isArray(pref) || pref.length > 0)) return pref;
+      return undefined;
     },
     initialDataUpdatedAt: queryInitialDataUpdatedAt,
     staleTime: queryStaleTime,
@@ -893,8 +897,10 @@ function VtopLoginDashboard() {
     },
     initialData: () => {
       const exact = safeGetCache(`vtop_cache_attendance_${activeSemester}`);
-      if (exact !== undefined) return exact;
-      return safeFindCachePrefix('vtop_cache_attendance_', []);
+      if (exact !== undefined && Array.isArray(exact) && exact.length > 0) return exact;
+      const pref = safeFindCachePrefix<any[]>('vtop_cache_attendance_', undefined);
+      if (pref !== undefined && Array.isArray(pref) && pref.length > 0) return pref;
+      return undefined;
     },
     initialDataUpdatedAt: queryInitialDataUpdatedAt,
     staleTime: queryStaleTime,
@@ -1026,7 +1032,32 @@ function VtopLoginDashboard() {
   //     return res.data || res;
   //   },
   //   enabled: isLoggedIn && (activeTab === 'leaves' || activeTab === 'my-room')
-  // });
+  // Auto-fetch data if not loaded or empty
+  useEffect(() => {
+    if (isLoggedIn && activeSemester && activeSemester !== 'UNAVAILABLE') {
+      if (!attendanceQuery.isFetching && (!attendanceQuery.data || (Array.isArray(attendanceQuery.data) && attendanceQuery.data.length === 0))) {
+        attendanceQuery.refetch();
+      }
+      if (!timetableQuery.isFetching && (!timetableQuery.data || (Array.isArray(timetableQuery.data) && timetableQuery.data.length === 0))) {
+        timetableQuery.refetch();
+      }
+      if (activeTab === 'attendance' && !attendanceQuery.isFetching && (!attendanceQuery.data || attendanceQuery.data.length === 0)) {
+        attendanceQuery.refetch();
+      }
+      if (activeTab === 'timetable' && !timetableQuery.isFetching && !timetableQuery.data) {
+        timetableQuery.refetch();
+      }
+      if (activeTab === 'marks' && !marksQuery.isFetching && (!marksQuery.data || (Array.isArray(marksQuery.data) && marksQuery.data.length === 0))) {
+        marksQuery.refetch();
+      }
+      if (activeTab === 'grades' && !gradesQuery.isFetching && (!gradesQuery.data || (Array.isArray(gradesQuery.data) && gradesQuery.data.length === 0))) {
+        gradesQuery.refetch();
+      }
+      if (activeTab === 'exams' && !examsQuery.isFetching && (!examsQuery.data || (Array.isArray(examsQuery.data) && examsQuery.data.length === 0))) {
+        examsQuery.refetch();
+      }
+    }
+  }, [isLoggedIn, activeSemester, activeTab, attendanceQuery.data, timetableQuery.data, attendanceQuery.isFetching, timetableQuery.isFetching]);
 
   const isMarksLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !marksQuery.isPending && (!marksQuery.data || !marksQuery.data.courses || marksQuery.data.courses.length === 0));
   const isGradesLocked = activeSemester === 'UNAVAILABLE' || (isLoggedIn && !!activeSemester && !gradesQuery.isPending && (!gradesQuery.data || !gradesQuery.data.grades || gradesQuery.data.grades.length === 0));
@@ -1088,6 +1119,7 @@ function VtopLoginDashboard() {
               attendanceQuery={attendanceQuery}
               timetableQuery={timetableQuery}
               odSnapshotQuery={odSnapshotQuery}
+              examsQuery={examsQuery}
               TIMETABLE_SLOTS={TIMETABLE_SLOTS}
               setActiveTab={setActiveTab}
               showCardAttendance={showCardAttendance}
@@ -1096,6 +1128,10 @@ function VtopLoginDashboard() {
               notifyLowAttendance={notifyLowAttendance}
               notifySchedule={notifySchedule}
             />
+          )}
+
+          {activeTab === 'events' && (
+            <EventsHubView activeUser={activeUser} />
           )}
 
           {activeTab === 'profile' && (
@@ -1303,6 +1339,7 @@ function VtopLoginDashboard() {
                   attendanceQuery={attendanceQuery}
                   timetableQuery={timetableQuery}
                   odSnapshotQuery={odSnapshotQuery}
+                  examsQuery={examsQuery}
                   TIMETABLE_SLOTS={TIMETABLE_SLOTS}
                   setActiveTab={setActiveTab}
                   showCardAttendance={showCardAttendance}
@@ -1311,6 +1348,10 @@ function VtopLoginDashboard() {
                   notifyLowAttendance={notifyLowAttendance}
                   notifySchedule={notifySchedule}
                 />
+              )}
+
+              {activeTab === 'events' && (
+                <EventsHubView activeUser={activeUser} />
               )}
 
               {activeTab === 'profile' && (

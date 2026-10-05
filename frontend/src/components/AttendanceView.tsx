@@ -45,7 +45,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
 
     const overallPct = totalConducted > 0 
-      ? Math.floor((totalAttended / totalConducted) * 100) 
+      ? Math.ceil((totalAttended / totalConducted) * 100) 
       : 0;
 
     return {
@@ -330,7 +330,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                             </svg>
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                               <span className="text-xs sm:text-sm font-black font-mono text-textMain leading-none">
-                                {Math.round(percent)}%
+                                {Math.ceil(percent)}%
                               </span>
                               <span className="text-[8px] font-mono text-textMuted mt-0.5 leading-none">
                                 {course.attended_classes}/{course.total_classes}
@@ -344,7 +344,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                     <div className="flex flex-col items-end shrink-0">
                       <div className="flex items-center gap-1">
                         <span className="text-sm font-black text-textMain font-mono">
-                          {course.percentage}%
+                          {Math.ceil(percent)}%
                         </span>
                         <span 
                           title={marginText}
