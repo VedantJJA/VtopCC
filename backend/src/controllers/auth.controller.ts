@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { startLogin, performVtopLogin, VtopState } from '../services/vtop.service';
+import { startLogin, performVtopLogin, VtopState, createClient, VTOP_BASE_URL } from '../services/vtop.service';
 import { trackUser } from './admin.controller';
+import { CookieJar } from 'tough-cookie';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vtopc_default_jwt_secret_key_change_this_in_prod';
 const CREDS_COOKIE = 'vtop_creds';
@@ -65,7 +66,7 @@ export const initLogin = async (_req: Request, res: Response) => {
   console.log('\n[DEBUG] Initiating new login session...');
   try {
     const hasSavedCreds = !!_req.cookies[CREDS_COOKIE];
-    const { state, captchaType, captchaImageData } = await startLogin();
+    const { state, captchaType, captchaImageData, debug } = await startLogin();
 
     // Set state cookie (contains serialized jar + csrf)
     setStateCookie(res, state);
@@ -74,12 +75,54 @@ export const initLogin = async (_req: Request, res: Response) => {
       status: 'captcha_ready',
       captcha_type: captchaType,
       captcha_image_data: captchaImageData,
-      has_saved_creds: hasSavedCreds
+      has_saved_creds: hasSavedCreds,
+      debug
     });
   } catch (error: any) {
+    console.error('[initLogin] Error initializing login:', error.message);
     return res.status(500).json({
       status: 'failure',
-      message: error.message || 'Failed to initialize login'
+      message: error.message || 'Failed to initialize login with VTOP.',
+      debug: {
+        failedStep: error.failedStep || 'connection',
+        code: error.code,
+        message: error.message,
+        vtopUrl: error.vtopUrl || VTOP_BASE_URL,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+};
+
+export const debugVtopConnection = async (_req: Request, res: Response) => {
+  const startTime = Date.now();
+  try {
+    const jar = new CookieJar();
+    const client = createClient(jar);
+    const pageRes = await client.get('open/page');
+    const elapsed = Date.now() - startTime;
+    return res.json({
+      status: 'success',
+      latencyMs: elapsed,
+      vtopUrl: VTOP_BASE_URL,
+      httpStatus: pageRes.status,
+      bodyLength: pageRes.data?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    const elapsed = Date.now() - startTime;
+    return res.status(200).json({
+      status: 'failed',
+      latencyMs: elapsed,
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCode: error.code,
+      responseStatus: error.response?.status,
+      vtopUrl: VTOP_BASE_URL,
+      timestamp: new Date().toISOString(),
+      suggestion: error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED'
+        ? 'VTOP host did not respond within timeout. If this server is hosted in a cloud datacenter (AWS, DigitalOcean, Hetzner, etc.), VIT Chennai firewall often blocks datacenter IP ranges.'
+        : 'Error communicating with VTOP.'
     });
   }
 };

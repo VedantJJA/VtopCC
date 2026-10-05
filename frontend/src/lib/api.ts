@@ -178,4 +178,10 @@ export const getUserCount = () => api.get('/admin/user-count');
 export const getAdminStats = () => api.get('/admin/stats');
 export const checkIsAdmin = () => api.get('/admin/check');
 
+// Diagnostic probe for VTOP connectivity
+export const getVtopDebugInfo = async () => {
+  const response = await api.get('/auth/vtop-debug');
+  return response.data;
+};
+
 export default api;

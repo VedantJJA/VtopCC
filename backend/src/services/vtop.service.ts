@@ -3,8 +3,7 @@ import * as cheerio from 'cheerio';
 import { CookieJar } from 'tough-cookie';
 import { parseLeaves } from './parsers.service';
 import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
-
-const VTOP_BASE_URL = 'https://vtopcc.vit.ac.in/vtop/';
+export const VTOP_BASE_URL = process.env.VTOP_BASE_URL || 'https://vtopcc.vit.ac.in/vtop/';
 
 export const fetchLeaveHistory = async (client: any, csrfToken: string, regNo: string) => {
   // Step 1: Hit the menu endpoint to initialize the module
@@ -56,11 +55,12 @@ export interface VtopState {
 }
 
 // Helper to create a cookie-aware axios client per user
-function createClient(jar: CookieJar) {
+export function createClient(jar: CookieJar) {
   return axios.create({
     baseURL: VTOP_BASE_URL,
+    timeout: 15000, // Fail fast (15s) instead of hanging if datacenter IP is blocked
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36'
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     },
     httpAgent: new HttpCookieAgent({ cookies: { jar }, keepAlive: true, keepAliveMsecs: 60000 }),
     httpsAgent: new HttpsCookieAgent({ 
@@ -87,31 +87,44 @@ export async function startLogin(): Promise<{
   state: VtopState;
   captchaType: number;
   captchaImageData: string;
+  debug?: Record<string, any>;
 }> {
   const jar = new CookieJar();
   const client = createClient(jar);
+  let currentStep = 'init';
 
-  // 1. GET open/page
-  const openPageRes = await client.get('open/page');
-  const csrfPreloginMatch = openPageRes.data.match(/name="_csrf"\s+value="([^"]+)"/) || openPageRes.data.match(/value="([^"]+)"\s+name="_csrf"/);
-  const csrfPrelogin = csrfPreloginMatch ? csrfPreloginMatch[1] : (cheerio.load(openPageRes.data)('input[name="_csrf"]').val() as string);
+  try {
+    // 1. GET open/page
+    currentStep = 'open/page';
+    console.log(`[VTOP] Step 1: GET open/page from ${VTOP_BASE_URL}...`);
+    const openPageRes = await client.get('open/page');
+    
+    currentStep = 'extract_csrf';
+    const csrfPreloginMatch = openPageRes.data.match(/name="_csrf"\s+value="([^"]+)"/) || openPageRes.data.match(/value="([^"]+)"\s+name="_csrf"/);
+    const csrfPrelogin = csrfPreloginMatch ? csrfPreloginMatch[1] : (cheerio.load(openPageRes.data)('input[name="_csrf"]').val() as string);
 
-  // 2. POST prelogin/setup
-  const preloginPayload = new URLSearchParams();
-  preloginPayload.append('_csrf', csrfPrelogin);
-  preloginPayload.append('flag', 'VTOP');
-  
-  const preloginRes = await client.post('prelogin/setup', preloginPayload);
-  const csrfLoginMatch = preloginRes.data.match(/name="_csrf"\s+value="([^"]+)"/) || preloginRes.data.match(/value="([^"]+)"\s+name="_csrf"/);
-  const csrfLogin = csrfLoginMatch ? csrfLoginMatch[1] : (cheerio.load(preloginRes.data)('input[name="_csrf"]').val() as string);
+    if (!csrfPrelogin) {
+      throw new Error(`Failed to extract prelogin CSRF from open/page (Status ${openPageRes.status}, Body length ${openPageRes.data?.length || 0})`);
+    }
 
-  // 3. Parse captchaType from HTML
-  const captchaTypeMatch = preloginRes.data.match(/var\s+captchaType\s*=\s*(\d+)/i) || preloginRes.data.match(/captchaType\s*=\s*(\d+)/i);
-  const captchaType = captchaTypeMatch ? parseInt(captchaTypeMatch[1], 10) : 1;
+    // 2. POST prelogin/setup
+    currentStep = 'prelogin/setup';
+    console.log(`[VTOP] Step 2: POST prelogin/setup...`);
+    const preloginPayload = new URLSearchParams();
+    preloginPayload.append('_csrf', csrfPrelogin);
+    preloginPayload.append('flag', 'VTOP');
+    
+    const preloginRes = await client.post('prelogin/setup', preloginPayload);
+    const csrfLoginMatch = preloginRes.data.match(/name="_csrf"\s+value="([^"]+)"/) || preloginRes.data.match(/value="([^"]+)"\s+name="_csrf"/);
+    const csrfLogin = csrfLoginMatch ? csrfLoginMatch[1] : (cheerio.load(preloginRes.data)('input[name="_csrf"]').val() as string);
 
-  // 4. Extract CAPTCHA image
-  let captchaImageData = '';
-  if (captchaType === 1) {
+    // 3. Parse captchaType from HTML
+    currentStep = 'parse_captcha';
+    const captchaTypeMatch = preloginRes.data.match(/var\s+captchaType\s*=\s*(\d+)/i) || preloginRes.data.match(/captchaType\s*=\s*(\d+)/i);
+    let captchaType = captchaTypeMatch ? parseInt(captchaTypeMatch[1], 10) : 1;
+
+    // 4. Extract CAPTCHA image
+    let captchaImageData = '';
     const $prelogin = cheerio.load(preloginRes.data);
     captchaImageData = $prelogin('#captchaBlock img').attr('src') || 
                        $prelogin('img[src^="data:image"]').attr('src') || '';
@@ -121,8 +134,11 @@ export async function startLogin(): Promise<{
       if (match) captchaImageData = match[1];
     }
 
-    // Fallback: If prelogin didn't contain the captcha image, fetch via get/new/captcha
+    // Fallback: If prelogin didn't contain the captcha image (e.g. if VTOP set captchaType=2/ReCAPTCHA),
+    // always request get/new/captcha to fetch a real image captcha!
     if (!captchaImageData) {
+      currentStep = 'get/new/captcha';
+      console.log('[VTOP] Captcha image not found in prelogin; fetching get/new/captcha...');
       try {
         const captchaRes = await client.get('get/new/captcha');
         const $cap = cheerio.load(captchaRes.data);
@@ -133,18 +149,44 @@ export async function startLogin(): Promise<{
           const match = captchaRes.data.match(/src="(data:image\/[^"]+)"/);
           if (match) captchaImageData = match[1];
         }
+
+        if (captchaImageData) {
+          console.log('[VTOP] Successfully retrieved image CAPTCHA from get/new/captcha!');
+          captchaType = 1; // Mark as image captcha
+        }
       } catch (err: any) {
         console.warn('[VTOP] Fallback get/new/captcha failed:', err?.message || err);
       }
     }
+
+    const state: VtopState = {
+      jar: jar.serializeSync(),
+      csrf: csrfLogin
+    };
+
+    console.log(`[VTOP] Login flow ready: captchaType=${captchaType}, imgLength=${captchaImageData?.length || 0}`);
+
+    return { 
+      state, 
+      captchaType, 
+      captchaImageData,
+      debug: {
+        step: 'success',
+        openPageStatus: openPageRes.status,
+        preloginStatus: preloginRes.status,
+        captchaTypeDetected: captchaType,
+        hasImage: !!captchaImageData,
+        imgLength: captchaImageData?.length || 0,
+        vtopUrl: VTOP_BASE_URL
+      }
+    };
+  } catch (err: any) {
+    console.error(`[VTOP] startLogin failed at step "${currentStep}":`, err?.message || err);
+    throw Object.assign(err, { 
+      failedStep: currentStep,
+      vtopUrl: VTOP_BASE_URL
+    });
   }
-
-  const state: VtopState = {
-    jar: jar.serializeSync(),
-    csrf: csrfLogin
-  };
-
-  return { state, captchaType, captchaImageData };
 }
 
 /**

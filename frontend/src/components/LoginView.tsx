@@ -2,9 +2,21 @@ import React, { useState } from 'react';
 import { 
   User as UserIcon, Lock, Eye, EyeOff, CheckCircle2, 
   AlertTriangle, AlertCircle, Loader2, Sun, Moon, ShieldAlert,
-  RotateCw, ShieldCheck
+  RotateCw, ShieldCheck, Activity, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { VtopLogo } from './VtopLogo';
+import { getVtopDebugInfo } from '../lib/api';
+
+export interface CaptchaErrorInfo {
+  message: string;
+  failedStep?: string;
+  code?: string;
+  vtopUrl?: string;
+  timestamp?: string;
+  status?: number;
+  suggestion?: string;
+  raw?: any;
+}
 
 interface LoginViewProps {
   theme: 'light' | 'dark';
@@ -19,6 +31,8 @@ interface LoginViewProps {
   setPassword: (password: string) => void;
   isPending: boolean;
   isCaptchaSolving: boolean;
+  isCaptchaLoading?: boolean;
+  captchaError?: CaptchaErrorInfo | null;
   handleAutoLoginSubmit: (e: React.FormEvent) => void;
   handleLoginSubmit: (e: React.FormEvent) => void;
   recaptchaRef: React.RefObject<HTMLDivElement | null>;
@@ -27,6 +41,158 @@ interface LoginViewProps {
   setCaptcha: (val: string) => void;
   onRefreshCaptcha?: () => void;
 }
+
+const CaptchaDebugPanel: React.FC<{
+  error: CaptchaErrorInfo;
+  onRetry: () => void;
+  isRetrying: boolean;
+}> = ({ error, onRetry, isRetrying }) => {
+  const [showDetails, setShowDetails] = useState(false);
+  const [isProbing, setIsProbing] = useState(false);
+  const [probeData, setProbeData] = useState<any>(null);
+
+  const handleProbe = async () => {
+    setIsProbing(true);
+    try {
+      const res = await getVtopDebugInfo();
+      setProbeData(res);
+    } catch (err: any) {
+      setProbeData({
+        status: 'failed',
+        errorMessage: err?.response?.data?.message || err.message || 'Probe request failed',
+        errorCode: err?.code || 'CLIENT_NETWORK_ERROR'
+      });
+    } finally {
+      setIsProbing(false);
+    }
+  };
+
+  const isTimeout = error.code === 'ETIMEDOUT' || error.message?.toLowerCase().includes('timeout') || error.code === 'ECONNABORTED';
+  const isConnectionRefused = error.code === 'ECONNREFUSED';
+  const isFirewallSuspected = isTimeout || isConnectionRefused || error.failedStep === 'open/page';
+
+  return (
+    <div className="p-3.5 rounded-2xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs mb-3 space-y-2.5 animate-in fade-in duration-200 text-left">
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-rose-800 dark:text-rose-200 text-xs">
+            CAPTCHA Failed to Load
+          </p>
+          <p className="text-[11px] text-rose-700/90 dark:text-rose-300/80 mt-0.5 break-words">
+            {error.message}
+          </p>
+        </div>
+      </div>
+
+      {isFirewallSuspected && (
+        <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+          <span className="font-bold block mb-0.5">⚠️ Hosted in Cloud / VPS?</span>
+          VIT Chennai's firewall routinely drops connections from cloud datacenters (AWS, DigitalOcean, Hetzner, GCP, Oracle Cloud). Outbound requests to VTOP time out. Host locally or route through an Indian residential proxy to resolve.
+        </div>
+      )}
+
+      {/* Quick Action Buttons */}
+      <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isRetrying}
+          className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-medium text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
+        >
+          <RotateCw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
+          <span>{isRetrying ? 'Retrying...' : 'Retry CAPTCHA'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleProbe}
+          disabled={isProbing}
+          className="px-2.5 py-1.5 rounded-lg bg-bgCard border border-borderColor hover:bg-bgPrimary text-textMain font-medium text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
+          title="Send a test ping directly to VTOP to check if firewall is blocking"
+        >
+          <Activity className={`h-3 w-3 text-blue-500 ${isProbing ? 'animate-spin' : ''}`} />
+          <span>{isProbing ? 'Testing...' : 'Test Connection'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowDetails(!showDetails)}
+          className="ml-auto text-[11px] text-textMuted hover:text-textMain flex items-center gap-1 cursor-pointer font-medium"
+        >
+          <span>{showDetails ? 'Hide Debug' : 'Debug Info'}</span>
+          {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
+      </div>
+
+      {/* Live Probe Result */}
+      {probeData && (
+        <div className={`p-2.5 rounded-xl border text-[11px] ${
+          probeData.status === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+            : 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'
+        }`}>
+          <div className="flex items-center justify-between font-semibold mb-1">
+            <span>VTOP Ping Result: {probeData.status === 'success' ? 'Accessible' : 'Failed'}</span>
+            <span className="font-mono text-[10px]">{probeData.latencyMs}ms</span>
+          </div>
+          {probeData.status === 'success' ? (
+            <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+              VTOP server is reachable (HTTP {probeData.httpStatus}). The CAPTCHA issue may be temporary; try clicking "Retry CAPTCHA".
+            </p>
+          ) : (
+            <div className="space-y-1 text-[10px]">
+              <p>Error: {probeData.errorMessage || probeData.errorCode || 'Connection failure'}</p>
+              {probeData.suggestion && (
+                <p className="text-amber-700 dark:text-amber-400 font-medium">{probeData.suggestion}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expanded Debug Information */}
+      {showDetails && (
+        <div className="p-2.5 rounded-xl bg-bgPrimary/80 border border-borderColor space-y-1.5 text-[10px] font-mono text-textMuted animate-in fade-in duration-150">
+          <div className="flex justify-between">
+            <span className="font-semibold text-textMain">Failed Step:</span>
+            <span>{error.failedStep || 'Unknown'}</span>
+          </div>
+          {error.code && (
+            <div className="flex justify-between">
+              <span className="font-semibold text-textMain">Error Code:</span>
+              <span className="text-rose-600 dark:text-rose-400 font-bold">{error.code}</span>
+            </div>
+          )}
+          {error.status && (
+            <div className="flex justify-between">
+              <span className="font-semibold text-textMain">HTTP Status:</span>
+              <span>{error.status}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <span className="font-semibold text-textMain">Target VTOP:</span>
+            <span className="truncate max-w-[200px]" title={error.vtopUrl}>{error.vtopUrl || 'https://vtopcc.vit.ac.in/vtop/'}</span>
+          </div>
+          {error.timestamp && (
+            <div className="flex justify-between">
+              <span className="font-semibold text-textMain">Timestamp:</span>
+              <span>{new Date(error.timestamp).toLocaleTimeString()}</span>
+            </div>
+          )}
+          {error.raw && (
+            <div className="pt-1 mt-1 border-t border-borderColor/60">
+              <span className="font-semibold text-textMain block mb-0.5">Raw Payload:</span>
+              <pre className="p-1.5 bg-black/10 dark:bg-black/40 rounded overflow-x-auto text-[9px] max-h-24">
+                {JSON.stringify(error.raw, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const LoginView: React.FC<LoginViewProps> = ({
   theme,
@@ -41,6 +207,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   setPassword,
   isPending,
   isCaptchaSolving,
+  isCaptchaLoading = false,
+  captchaError = null,
   handleAutoLoginSubmit,
   handleLoginSubmit,
   recaptchaRef,
@@ -143,7 +311,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </div>
 
             <form onSubmit={handleAutoLoginSubmit} className="space-y-4">
-              {captchaImageData && (
+              {captchaImageData ? (
                 <div className="p-3 bg-bgPrimary/60 border border-borderColor rounded-xl flex items-center justify-between gap-3 shadow-xs">
                   <div className="flex items-center gap-2.5">
                     <img 
@@ -169,7 +337,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     </button>
                   ) : null}
                 </div>
-              )}
+              ) : captchaError ? (
+                <CaptchaDebugPanel
+                  error={captchaError}
+                  onRetry={onRefreshCaptcha || (() => {})}
+                  isRetrying={isCaptchaLoading || isCaptchaSolving}
+                />
+              ) : isCaptchaLoading ? (
+                <div className="p-3 bg-bgPrimary/60 border border-borderColor rounded-xl flex items-center gap-2.5 text-xs text-textMuted shadow-xs">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+                  <span>Loading CAPTCHA from VTOP...</span>
+                </div>
+              ) : null}
 
               <button
                 type="submit"
@@ -259,11 +438,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     <button
                       type="button"
                       onClick={onRefreshCaptcha}
-                      disabled={isPending || isCaptchaSolving}
+                      disabled={isPending || isCaptchaSolving || isCaptchaLoading}
                       className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50 font-semibold"
                       title="Fetch a new CAPTCHA"
                     >
-                      <RotateCw className={`h-3 w-3 ${isCaptchaSolving ? 'animate-spin' : ''}`} />
+                      <RotateCw className={`h-3 w-3 ${isCaptchaSolving || isCaptchaLoading ? 'animate-spin' : ''}`} />
                       <span>Refresh</span>
                     </button>
                   )}
@@ -278,6 +457,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
                         alt="Fetched VTOP CAPTCHA" 
                         className="h-9 object-contain rounded select-none filter contrast-125" 
                       />
+                    ) : isCaptchaLoading ? (
+                      <div className="flex items-center gap-1.5 text-xs text-textMuted py-1 px-3">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                        <span>Fetching...</span>
+                      </div>
+                    ) : captchaError ? (
+                      <div className="flex items-center gap-1.5 text-xs text-rose-500 py-1 px-3 font-semibold">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>Failed to load</span>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-xs text-textMuted py-1 px-3">
                         <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
@@ -296,6 +485,15 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     </span>
                   ) : null}
                 </div>
+
+                {/* Captcha Debug & Diagnostic Panel */}
+                {captchaError && (
+                  <CaptchaDebugPanel
+                    error={captchaError}
+                    onRetry={onRefreshCaptcha || (() => {})}
+                    isRetrying={isCaptchaLoading || isCaptchaSolving}
+                  />
+                )}
 
                 {/* Captcha Input */}
                 <div className="relative">

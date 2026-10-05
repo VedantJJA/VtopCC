@@ -30,7 +30,7 @@ import {
 
 import { Sidebar } from './components/Sidebar';
 import { MobileLayout } from './components/MobileLayout';
-import { LoginView } from './components/LoginView';
+import { LoginView, type CaptchaErrorInfo } from './components/LoginView';
 import { DashboardView } from './components/DashboardView';
 import { ProfileView } from './components/ProfileView';
 import { TimetableView } from './components/TimetableView';
@@ -78,10 +78,12 @@ const TIMETABLE_SLOTS = [
 
 type DashboardTab = 'dashboard' | 'events' | 'profile' | 'timetable' | 'attendance' | 'marks' | 'grades' | 'exams' | 'calendar' | 'credentials' | 'my-room' | 'leaves' | 'calculator' | 'courses' | 'faculty' | 'settings' | 'admin' | 'more';
 type StartLoginResponse = {
-  status: 'captcha_ready';
+  status: 'captcha_ready' | 'failure';
   captcha_type?: number;
   captcha_image_data?: string;
   has_saved_creds: boolean;
+  debug?: Record<string, any>;
+  message?: string;
 };
 
 const MAX_RETRIES = 5;
@@ -225,6 +227,8 @@ function VtopLoginDashboard() {
   const [password, setPassword] = useState('');
   const [captcha, setCaptcha] = useState('');
   const [captchaImageData, setCaptchaImageData] = useState<string>('');
+  const [captchaError, setCaptchaError] = useState<CaptchaErrorInfo | null>(null);
+  const [isCaptchaLoading, setIsCaptchaLoading] = useState(false);
   
   const [showManualForm, setShowManualForm] = useState(false);
   const [captchaType, setCaptchaType] = useState<number>(1);
@@ -373,6 +377,8 @@ function VtopLoginDashboard() {
   // Fetch CSRF & CAPTCHA in background
   const startLoginFlow = async (autoTriggerAfterInit = false) => {
     try {
+      setIsCaptchaLoading(true);
+      setCaptchaError(null);
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready') {
         const currentCaptchaType = res.data.captcha_type || 1;
@@ -387,6 +393,14 @@ function VtopLoginDashboard() {
 
         if (res.data.captcha_image_data) {
           setCaptchaImageData(res.data.captcha_image_data);
+          setCaptchaError(null);
+        } else {
+          setCaptchaError({
+            message: 'VTOP did not return a valid CAPTCHA image.',
+            failedStep: 'parse_captcha',
+            vtopUrl: res.data.debug?.vtopUrl || 'https://vtopcc.vit.ac.in/vtop/',
+            timestamp: new Date().toISOString()
+          });
         }
 
         if (currentCaptchaType === 1 && res.data.captcha_image_data) {
@@ -417,13 +431,43 @@ function VtopLoginDashboard() {
             setIsLoggedIn(false);
           }
         }
+      } else {
+        const errDebug = (res.data as any)?.debug;
+        setCaptchaError({
+          message: (res.data as any)?.message || 'VTOP session initialization failed.',
+          failedStep: errDebug?.failedStep,
+          code: errDebug?.code,
+          vtopUrl: errDebug?.vtopUrl || 'https://vtopcc.vit.ac.in/vtop/',
+          timestamp: errDebug?.timestamp || new Date().toISOString(),
+          raw: res.data
+        });
       }
     } catch (err: any) {
+      const errDebug = err.response?.data?.debug;
+      const isTimeout = errDebug?.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+      const isConnectionRefused = errDebug?.code === 'ECONNREFUSED' || err.code === 'ECONNREFUSED';
+
+      const errorInfo: CaptchaErrorInfo = {
+        message: err.response?.data?.message || err.message || 'Failed to initialize connection to VTOP.',
+        failedStep: errDebug?.failedStep || 'connection',
+        code: errDebug?.code || err.code,
+        vtopUrl: errDebug?.vtopUrl || 'https://vtopcc.vit.ac.in/vtop/',
+        timestamp: errDebug?.timestamp || new Date().toISOString(),
+        status: err.response?.status,
+        suggestion: (isTimeout || isConnectionRefused)
+          ? 'VIT Chennai firewall blocks cloud datacenter IPs (AWS, DigitalOcean, Hetzner, etc.).'
+          : undefined,
+        raw: err.response?.data || err.toJSON?.()
+      };
+
+      setCaptchaError(errorInfo);
       setMessage({
-        text: err.response?.data?.message || 'Failed to initialize connection.',
+        text: errorInfo.message,
         type: 'error'
       });
       setIsRestoringSession(false);
+    } finally {
+      setIsCaptchaLoading(false);
     }
   };
 
@@ -745,20 +789,61 @@ function VtopLoginDashboard() {
   const handleRefreshCaptcha = async () => {
     try {
       setIsCaptchaSolving(true);
+      setIsCaptchaLoading(true);
+      setCaptchaError(null);
       const res = await api.post<StartLoginResponse>('/auth/start-login');
-      if (res.data.status === 'captcha_ready' && res.data.captcha_image_data) {
-        setCaptchaImageData(res.data.captcha_image_data);
-        try {
-          const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
-          setCaptcha(solvedText);
-        } catch (_solveErr) {
-          setCaptcha('');
+      if (res.data.status === 'captcha_ready') {
+        if (res.data.captcha_image_data) {
+          setCaptchaImageData(res.data.captcha_image_data);
+          setCaptchaError(null);
+          try {
+            const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
+            setCaptcha(solvedText);
+          } catch (_solveErr) {
+            setCaptcha('');
+          }
+        } else {
+          setCaptchaError({
+            message: 'VTOP did not return a valid CAPTCHA image.',
+            failedStep: 'parse_captcha',
+            vtopUrl: res.data.debug?.vtopUrl || 'https://vtopcc.vit.ac.in/vtop/',
+            timestamp: new Date().toISOString()
+          });
         }
+      } else {
+        const errDebug = (res.data as any)?.debug;
+        setCaptchaError({
+          message: (res.data as any)?.message || 'VTOP session initialization failed.',
+          failedStep: errDebug?.failedStep,
+          code: errDebug?.code,
+          vtopUrl: errDebug?.vtopUrl || 'https://vtopcc.vit.ac.in/vtop/',
+          timestamp: errDebug?.timestamp || new Date().toISOString(),
+          raw: res.data
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to refresh CAPTCHA:", err);
+      const errDebug = err.response?.data?.debug;
+      const isTimeout = errDebug?.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+      const isConnectionRefused = errDebug?.code === 'ECONNREFUSED' || err.code === 'ECONNREFUSED';
+
+      const errorInfo: CaptchaErrorInfo = {
+        message: err.response?.data?.message || err.message || 'Failed to refresh CAPTCHA from VTOP.',
+        failedStep: errDebug?.failedStep || 'connection',
+        code: errDebug?.code || err.code,
+        vtopUrl: errDebug?.vtopUrl || 'https://vtopcc.vit.ac.in/vtop/',
+        timestamp: errDebug?.timestamp || new Date().toISOString(),
+        status: err.response?.status,
+        suggestion: (isTimeout || isConnectionRefused)
+          ? 'VIT Chennai firewall blocks cloud datacenter IPs.'
+          : undefined,
+        raw: err.response?.data || err.toJSON?.()
+      };
+      setCaptchaError(errorInfo);
+      setMessage({ text: errorInfo.message, type: 'error' });
     } finally {
       setIsCaptchaSolving(false);
+      setIsCaptchaLoading(false);
     }
   };
 
@@ -1120,6 +1205,8 @@ function VtopLoginDashboard() {
           setPassword={setPassword}
           isPending={isFormPending}
           isCaptchaSolving={isCaptchaSolving}
+          isCaptchaLoading={isCaptchaLoading}
+          captchaError={captchaError}
           handleAutoLoginSubmit={handleAutoLoginSubmit}
           handleLoginSubmit={handleLoginSubmit}
           recaptchaRef={recaptchaRef}
