@@ -168,6 +168,11 @@ export const getEventHubProfile = async (creds?: { username?: string; password?:
   return response.data;
 };
 
+export const registerEventHubFree = async (eid: string, typeOfEvent?: string, creds?: { username?: string; password?: string }) => {
+  const response = await api.post('/data/eventhub/register-free', { eid, typeOfEvent, ...(creds || {}) });
+  return response.data;
+};
+
 // Admin API functions (GET requests, no caching)
 export const getUserCount = () => api.get('/admin/user-count');
 export const getAdminStats = () => api.get('/admin/stats');

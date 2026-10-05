@@ -224,6 +224,7 @@ function VtopLoginDashboard() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [captcha, setCaptcha] = useState('');
+  const [captchaImageData, setCaptchaImageData] = useState<string>('');
   
   const [showManualForm, setShowManualForm] = useState(false);
   const [captchaType, setCaptchaType] = useState<number>(1);
@@ -384,6 +385,10 @@ function VtopLoginDashboard() {
         }
         setCaptcha('');
 
+        if (res.data.captcha_image_data) {
+          setCaptchaImageData(res.data.captcha_image_data);
+        }
+
         if (currentCaptchaType === 1 && res.data.captcha_image_data) {
           setIsCaptchaSolving(true);
           try {
@@ -428,6 +433,7 @@ function VtopLoginDashboard() {
       setIsCaptchaSolving(true);
       const res = await api.post<StartLoginResponse>('/auth/start-login');
       if (res.data.status === 'captcha_ready' && res.data.captcha_image_data) {
+        setCaptchaImageData(res.data.captcha_image_data);
         try {
           const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
           setCaptcha(solvedText);
@@ -495,6 +501,7 @@ function VtopLoginDashboard() {
           }
 
           if (res.data.captcha_image_data) {
+            setCaptchaImageData(res.data.captcha_image_data);
             try {
               const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
               setCaptcha(solvedText);
@@ -719,6 +726,7 @@ function VtopLoginDashboard() {
         try {
           const res = await api.post<StartLoginResponse>('/auth/start-login');
           if (res.data.status === 'captcha_ready' && res.data.captcha_image_data) {
+            setCaptchaImageData(res.data.captcha_image_data);
             const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
             setCaptcha(solvedText);
             loginMutation.mutate({ captchaText: solvedText });
@@ -731,6 +739,26 @@ function VtopLoginDashboard() {
           setIsCaptchaSolving(false);
         }
       }
+    }
+  };
+
+  const handleRefreshCaptcha = async () => {
+    try {
+      setIsCaptchaSolving(true);
+      const res = await api.post<StartLoginResponse>('/auth/start-login');
+      if (res.data.status === 'captcha_ready' && res.data.captcha_image_data) {
+        setCaptchaImageData(res.data.captcha_image_data);
+        try {
+          const solvedText = await solveCaptchaClient(res.data.captcha_image_data);
+          setCaptcha(solvedText);
+        } catch (_solveErr) {
+          setCaptcha('');
+        }
+      }
+    } catch (err) {
+      console.error("Failed to refresh CAPTCHA:", err);
+    } finally {
+      setIsCaptchaSolving(false);
     }
   };
 
@@ -1095,6 +1123,10 @@ function VtopLoginDashboard() {
           handleAutoLoginSubmit={handleAutoLoginSubmit}
           handleLoginSubmit={handleLoginSubmit}
           recaptchaRef={recaptchaRef}
+          captchaImageData={captchaImageData}
+          captcha={captcha}
+          setCaptcha={setCaptcha}
+          onRefreshCaptcha={handleRefreshCaptcha}
         />
       ) : mobileOptimization ? (
         <MobileLayout

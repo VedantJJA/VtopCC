@@ -378,13 +378,6 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
       {/* 2. MOBILE & DESKTOP CHRONOLOGICAL DAY SCHEDULE VIEW */}
       {viewMode === 'day' && (
         <div className="space-y-3.5">
-          {/* Instructional Day Notice Banner */}
-          {instructionalDayNotice && (
-            <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-2xl text-xs font-semibold shadow-xs">
-              <CalendarDays className="h-4 w-4 shrink-0 text-amber-500" />
-              <span>{instructionalDayNotice.text}</span>
-            </div>
-          )}
 
           {/* Day Selector Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">

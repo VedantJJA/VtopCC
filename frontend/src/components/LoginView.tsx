@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   User as UserIcon, Lock, Eye, EyeOff, CheckCircle2, 
-  AlertTriangle, AlertCircle, Loader2, Sun, Moon, ShieldAlert
+  AlertTriangle, AlertCircle, Loader2, Sun, Moon, ShieldAlert,
+  RotateCw, ShieldCheck
 } from 'lucide-react';
 import { VtopLogo } from './VtopLogo';
 
@@ -21,6 +22,10 @@ interface LoginViewProps {
   handleAutoLoginSubmit: (e: React.FormEvent) => void;
   handleLoginSubmit: (e: React.FormEvent) => void;
   recaptchaRef: React.RefObject<HTMLDivElement | null>;
+  captchaImageData?: string;
+  captcha: string;
+  setCaptcha: (val: string) => void;
+  onRefreshCaptcha?: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -38,7 +43,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
   isCaptchaSolving,
   handleAutoLoginSubmit,
   handleLoginSubmit,
-  recaptchaRef
+  recaptchaRef,
+  captchaImageData,
+  captcha,
+  setCaptcha,
+  onRefreshCaptcha
 }) => {
   const [showPassword, setShowPassword] = useState(false);
 
@@ -134,6 +143,34 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </div>
 
             <form onSubmit={handleAutoLoginSubmit} className="space-y-4">
+              {captchaImageData && (
+                <div className="p-3 bg-bgPrimary/60 border border-borderColor rounded-xl flex items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <img 
+                      src={captchaImageData} 
+                      alt="Fetched CAPTCHA" 
+                      className="h-8 bg-white rounded-lg border border-borderColor/80 object-contain px-1.5 filter contrast-125 shadow-2xs" 
+                    />
+                    <div className="text-[11px] leading-tight font-mono text-textMuted">
+                      <span className="block font-semibold text-textMain">{captcha ? `Detected: ${captcha}` : 'Fetched CAPTCHA'}</span>
+                      <span className="text-[10px] text-textMuted/80">Auto-authenticating</span>
+                    </div>
+                  </div>
+                  {isCaptchaSolving ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+                  ) : onRefreshCaptcha ? (
+                    <button
+                      type="button"
+                      onClick={onRefreshCaptcha}
+                      className="p-1 text-textMuted hover:text-textMain transition-colors cursor-pointer"
+                      title="Fetch new CAPTCHA"
+                    >
+                      <RotateCw className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={isPending || isCaptchaSolving}
@@ -210,6 +247,67 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-textMain">
+                    CAPTCHA Verification
+                  </label>
+                  {onRefreshCaptcha && (
+                    <button
+                      type="button"
+                      onClick={onRefreshCaptcha}
+                      disabled={isPending || isCaptchaSolving}
+                      className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50 font-semibold"
+                      title="Fetch a new CAPTCHA"
+                    >
+                      <RotateCw className={`h-3 w-3 ${isCaptchaSolving ? 'animate-spin' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Fetched Captcha Display */}
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="bg-white rounded-xl border border-borderColor p-1 flex items-center justify-center min-h-[46px] min-w-[130px] shadow-xs">
+                    {captchaImageData ? (
+                      <img 
+                        src={captchaImageData} 
+                        alt="Fetched VTOP CAPTCHA" 
+                        className="h-9 object-contain rounded select-none filter contrast-125" 
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs text-textMuted py-1 px-3">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                        <span>Fetching...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {isCaptchaSolving ? (
+                    <span className="text-[11px] font-mono text-blue-500 flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Auto-solving...
+                    </span>
+                  ) : captcha ? (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">
+                      Auto-detected
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* Captcha Input */}
+                <div className="relative">
+                  <ShieldCheck className="absolute left-3.5 top-3 h-4 w-4 text-textMuted" />
+                  <input
+                    type="text"
+                    value={captcha}
+                    onChange={(e) => setCaptcha(e.target.value.toUpperCase())}
+                    placeholder="Enter CAPTCHA"
+                    required
+                    className="w-full pl-10 pr-3 py-2.5 text-sm border border-borderColor rounded-2xl bg-bgPrimary text-textMain focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono uppercase tracking-widest text-center font-bold"
+                  />
                 </div>
               </div>
 

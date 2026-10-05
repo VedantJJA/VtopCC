@@ -20,7 +20,8 @@ import {
 import {
   getEvents as getEventHubEvents,
   getPreview as getEventHubPreview,
-  getProfile as getEventHubProfile
+  getProfile as getEventHubProfile,
+  registerFree as registerEventHubFree
 } from '../controllers/eventhub.controller';
 
 const router = Router();
@@ -46,5 +47,6 @@ router.post('/leave-history', getLeaveHistory); // <-- Endpoint for /hostels/stu
 router.post('/eventhub/events', getEventHubEvents);
 router.post('/eventhub/preview', getEventHubPreview);
 router.post('/eventhub/profile', getEventHubProfile);
+router.post('/eventhub/register-free', registerEventHubFree);
 
 export default router;

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Activity, CalendarDays, ChevronLeft, ChevronRight, AlertTriangle, X } from 'lucide-react';
 import { DashboardSkeleton, SkeletonBox } from './Skeleton';
@@ -203,39 +203,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return { isExamDay: false, isHoliday: false, dayOrderCode: null, eventText: '' };
   };
 
-  // Notice for instructional days occurring during current week
-  const weeklyInstructionalNotice = useMemo(() => {
-    const hasSat = timetableQuery.data?.timetable?.['SAT'] && Object.keys(timetableQuery.data.timetable['SAT']).length > 0;
-    if (hasSat) {
-      const order = timetableQuery.data?.day_order_active;
-      return `Instructional Day this week: Saturday is active${order ? ` (Following ${order} Order)` : ''}.`;
-    }
-
-    try {
-      const calData = safeFindCachePrefix<any>('vtop_cache_calendar_');
-      if (calData && Array.isArray(calData.days)) {
-        const today = new Date();
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay());
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-        for (let i = 0; i <= 6; i++) {
-          const d = new Date(startOfWeek);
-          d.setDate(startOfWeek.getDate() + i);
-          const dayObj = calData.days.find((item: any) => item.day === d.getDate());
-          if (dayObj && Array.isArray(dayObj.events)) {
-            for (const ev of dayObj.events) {
-              const txt = (ev.text || '').toUpperCase();
-              if (txt.includes('ORDER') || txt.includes('INSTRUCTIONAL DAY')) {
-                return `Instructional Day this week: ${days[i]} (${ev.text}).`;
-              }
-            }
-          }
-        }
-      }
-    } catch (_e) {}
-    return null;
-  }, [timetableQuery.data?.timetable, timetableQuery.data?.day_order_active]);
 
   const getClassesForOffset = (offset: number) => {
     const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -484,12 +451,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="bg-bgCard border border-borderColor rounded-xl p-6 shadow-sm md:col-span-2 flex flex-col h-fit select-none overflow-hidden touch-pan-y"
         >
           <div>
-            {weeklyInstructionalNotice && (
-              <div className="mb-4 flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-xl text-xs font-semibold shadow-xs">
-                <CalendarDays className="h-4 w-4 shrink-0 text-amber-500" />
-                <span>{weeklyInstructionalNotice}</span>
-              </div>
-            )}
 
             <div className="flex justify-between items-center mb-6 border-b border-borderColor pb-3 flex-wrap gap-2">
               <div className="flex items-center space-x-3">

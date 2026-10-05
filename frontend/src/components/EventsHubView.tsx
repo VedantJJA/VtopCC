@@ -2,9 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   Sparkles, Search, Calendar, MapPin, Users, IndianRupee, 
-  ExternalLink, X, RefreshCw, User, AlertCircle, ChevronRight, Lock
+  ExternalLink, X, RefreshCw, User, AlertCircle, ChevronRight, Lock,
+  Ticket, Award, FileText, CheckCircle2
 } from 'lucide-react';
-import { getEventHubEvents, getEventHubPreview, getEventHubProfile } from '../lib/api';
+import { getEventHubEvents, getEventHubPreview, getEventHubProfile, registerEventHubFree } from '../lib/api';
 
 interface EventsHubViewProps {
   activeUser?: string;
@@ -16,6 +17,10 @@ export const EventsHubView: React.FC<EventsHubViewProps> = ({ activeUser }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedEid, setSelectedEid] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState<'registered' | 'profile'>('registered');
+
+  const [registerStatus, setRegisterStatus] = useState<{ eid: string; type: 'success' | 'error'; message: string } | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Manual creds form state in case automatic cookie auth needs input
   const [authNeeded, setAuthNeeded] = useState(false);
@@ -90,6 +95,28 @@ export const EventsHubView: React.FC<EventsHubViewProps> = ({ activeUser }) => {
       setAuthError(err.message || 'Network error during login.');
     } finally {
       setIsAuthenticating(false);
+    }
+  };
+
+  const handleRegisterFree = async (eid: string) => {
+    setIsRegistering(true);
+    setRegisterStatus(null);
+    try {
+      const res = await registerEventHubFree(
+        eid, 
+        '1', 
+        manualUser && manualPass ? { username: manualUser, password: manualPass } : undefined
+      );
+      if (res.status === 'success') {
+        setRegisterStatus({ eid, type: 'success', message: res.message || 'Successfully registered for this event!' });
+        profileQuery.refetch();
+      } else {
+        setRegisterStatus({ eid, type: 'error', message: res.message || 'Registration failed.' });
+      }
+    } catch (err: any) {
+      setRegisterStatus({ eid, type: 'error', message: err.message || 'Network error during registration.' });
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -509,18 +536,73 @@ export const EventsHubView: React.FC<EventsHubViewProps> = ({ activeUser }) => {
                         </div>
                       </div>
 
-                      {/* Register Action */}
-                      <div className="pt-3 border-t border-borderColor flex items-center justify-between gap-4">
-                        <span className="text-xs text-textMuted">Ready to participate?</span>
-                        <a
-                          href={`https://eventhubcc.vit.ac.in/EventHub/eventPreview?typeEvent=0&categoryType=&eid=${p.eid}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accentColor hover:bg-accentColor/90 text-white text-xs font-bold shadow-md transition-all active:scale-95"
-                        >
-                          <span>Register on Event Hub</span>
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
+                      {/* Register Action & Feedback */}
+                      {registerStatus && registerStatus.eid === p.eid && (
+                        <div className={`p-3.5 rounded-2xl border text-xs flex items-start gap-2.5 shadow-xs ${
+                          registerStatus.type === 'success' 
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                        }`}>
+                          {registerStatus.type === 'success' ? (
+                            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-400" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
+                          )}
+                          <div>
+                            <span className="font-bold block">
+                              {registerStatus.type === 'success' ? 'Registration Result' : 'Registration Notice'}
+                            </span>
+                            <span className="text-[11px] leading-snug">{registerStatus.message}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-3 border-t border-borderColor flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <span className="text-xs font-bold text-textMain block">
+                            {p.totalFees && !p.totalFees.toLowerCase().includes('free') && p.totalFees !== '0' 
+                              ? `Paid Event (₹${p.totalFees})` 
+                              : 'Free Event Registration'}
+                          </span>
+                          <span className="text-[10px] text-textMuted">
+                            {p.totalFees && !p.totalFees.toLowerCase().includes('free') && p.totalFees !== '0'
+                              ? 'Complete payment via VIT Event Hub portal'
+                              : 'One-click registration with your VIT credentials'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {(!p.totalFees || p.totalFees.toLowerCase().includes('free') || p.totalFees === '0') ? (
+                            <button
+                              type="button"
+                              disabled={isRegistering}
+                              onClick={() => handleRegisterFree(p.eid)}
+                              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                            >
+                              {isRegistering ? (
+                                <>
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                  <span>Registering...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  <span>Register (Free)</span>
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <a
+                              href={`https://eventhubcc.vit.ac.in/EventHub/eventPreview?typeEvent=0&categoryType=&eid=${p.eid}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accentColor hover:bg-accentColor/90 text-white text-xs font-bold shadow-md transition-all active:scale-95"
+                            >
+                              <span>Pay on Event Hub</span>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -537,14 +619,40 @@ export const EventsHubView: React.FC<EventsHubViewProps> = ({ activeUser }) => {
           <div className="bg-bgCard border border-borderColor rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="p-4 sm:p-5 border-b border-borderColor flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-accentColor" />
-                <h3 className="font-bold text-sm text-textMain">Event Hub Profile & Teams</h3>
+                <Ticket className="h-4 w-4 text-accentColor" />
+                <h3 className="font-bold text-sm text-textMain">Event Hub Portal</h3>
               </div>
               <button
                 onClick={() => setIsProfileOpen(false)}
                 className="p-1.5 text-textMuted hover:text-textMain rounded-xl border border-borderColor hover:bg-bgPrimary transition-colors cursor-pointer"
               >
                 <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Subtabs */}
+            <div className="px-5 pt-2 pb-0 border-b border-borderColor flex items-center gap-2 bg-bgPrimary/20 shrink-0">
+              <button
+                type="button"
+                onClick={() => setProfileTab('registered')}
+                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  profileTab === 'registered'
+                    ? 'border-accentColor text-accentColor'
+                    : 'border-transparent text-textMuted hover:text-textMain'
+                }`}
+              >
+                Registered Events ({profileQuery.data?.registeredEvents?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfileTab('profile')}
+                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  profileTab === 'profile'
+                    ? 'border-accentColor text-accentColor'
+                    : 'border-transparent text-textMuted hover:text-textMain'
+                }`}
+              >
+                Profile & Teams
               </button>
             </div>
 
@@ -561,6 +669,111 @@ export const EventsHubView: React.FC<EventsHubViewProps> = ({ activeUser }) => {
               ) : (
                 (() => {
                   const prof = profileQuery.data;
+
+                  if (profileTab === 'registered') {
+                    const regEvents = prof.registeredEvents || [];
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-xs text-textMain flex items-center gap-1.5">
+                            <Ticket className="h-3.5 w-3.5 text-accentColor" />
+                            <span>My Registered Events ({regEvents.length})</span>
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => profileQuery.refetch()}
+                            className="text-[11px] text-accentColor hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <RefreshCw className="h-3 w-3" /> Refresh
+                          </button>
+                        </div>
+
+                        {regEvents.length === 0 ? (
+                          <div className="p-8 text-center bg-bgPrimary/30 rounded-2xl border border-borderColor/60 space-y-2">
+                            <Ticket className="h-8 w-8 text-textMuted/40 mx-auto" />
+                            <p className="text-xs text-textMuted">No events registered yet.</p>
+                            <p className="text-[11px] text-textMuted/70">Browse events and click "Register (Free)" to enroll!</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {regEvents.map((ev: any, idx: number) => {
+                              const isFree = ev.paymentStatus?.toLowerCase().includes('free');
+                              const isPaid = ev.paymentStatus?.toLowerCase().includes('paid');
+                              const isPayNow = ev.paymentStatus?.toLowerCase().includes('pay now');
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className="p-4 rounded-2xl bg-bgPrimary/50 border border-borderColor hover:border-accentColor/30 transition-all space-y-2.5 shadow-xs"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <h5 className="font-bold text-xs sm:text-sm text-textMain">
+                                        {ev.eventName}
+                                      </h5>
+                                      <span className="text-[10px] text-textMuted font-mono">
+                                        Order #{ev.orderId}
+                                      </span>
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold font-mono tracking-tight uppercase border ${
+                                      isFree
+                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                        : isPaid
+                                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                        : isPayNow
+                                        ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                        : 'bg-bgCard text-textMuted border-borderColor'
+                                    }`}>
+                                      {ev.paymentStatus}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-textMuted">
+                                    <div className="flex items-center gap-1.5 font-mono">
+                                      <Calendar className="h-3 w-3 text-accentColor shrink-0" />
+                                      <span>{ev.eventDate} {ev.eventTime ? `• ${ev.eventTime}` : ''}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <MapPin className="h-3 w-3 text-accentColor shrink-0" />
+                                      <span className="truncate" title={ev.eventVenue}>{ev.eventVenue}</span>
+                                    </div>
+                                  </div>
+
+                                  {(ev.receiptUrl || ev.certificateUrl) && (
+                                    <div className="pt-2 border-t border-borderColor/60 flex items-center gap-2">
+                                      {ev.receiptUrl && (
+                                        <a
+                                          href={ev.receiptUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-bgCard border border-borderColor hover:border-accentColor/40 text-[10px] font-semibold text-textMain transition-colors"
+                                        >
+                                          <FileText className="h-3 w-3 text-blue-400" />
+                                          <span>Receipt</span>
+                                        </a>
+                                      )}
+                                      {ev.certificateUrl && (
+                                        <a
+                                          href={ev.certificateUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-[10px] font-semibold text-emerald-400 transition-colors"
+                                        >
+                                          <Award className="h-3 w-3 text-emerald-400" />
+                                          <span>Certificate</span>
+                                        </a>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
                   return (
                     <div className="space-y-5">
                       {/* User Info Card */}

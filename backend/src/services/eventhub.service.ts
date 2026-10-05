@@ -32,6 +32,18 @@ export interface EventPreviewDetails {
   registerEid?: string;
 }
 
+export interface RegisteredEvent {
+  sno: string;
+  eventName: string;
+  orderId: string;
+  eventDate: string;
+  eventVenue: string;
+  eventTime: string;
+  paymentStatus: string;
+  receiptUrl?: string;
+  certificateUrl?: string;
+}
+
 export interface EventHubProfile {
   userId: string;
   name: string;
@@ -39,6 +51,7 @@ export interface EventHubProfile {
   phone: string;
   college: string;
   teams: { id: string; name: string; size: string }[];
+  registeredEvents: RegisteredEvent[];
 }
 
 // In-memory session store by username to avoid relogging in on every click
@@ -253,12 +266,97 @@ export async function fetchEventHubProfile(client: AxiosInstance): Promise<Event
     }
   });
 
+  const registeredEvents: RegisteredEvent[] = [];
+  $('#regTable tbody tr').each((_, tr) => {
+    const tds = $(tr).find('td');
+    if (tds.length >= 7) {
+      const sno = $(tds[0]).text().trim();
+      const eventName = $(tds[1]).text().trim();
+      const orderId = $(tds[2]).text().trim();
+      const eventDate = $(tds[3]).text().trim();
+      const eventVenue = $(tds[4]).text().trim();
+      const eventTime = $(tds[5]).text().trim();
+      const paymentStatus = $(tds[6]).text().trim();
+      const receiptA = $(tds[7]).find('a').attr('href');
+      const certA = $(tds[8]).find('a').attr('href');
+
+      if (eventName) {
+        registeredEvents.push({
+          sno,
+          eventName,
+          orderId,
+          eventDate,
+          eventVenue,
+          eventTime,
+          paymentStatus,
+          receiptUrl: receiptA ? `https://eventhubcc.vit.ac.in${receiptA}` : undefined,
+          certificateUrl: certA ? `https://eventhubcc.vit.ac.in${certA}` : undefined
+        });
+      }
+    }
+  });
+
   return {
     userId,
     name,
     email,
     phone,
     college,
-    teams
+    teams,
+    registeredEvents
+  };
+}
+
+export async function registerFreeEvent(
+  client: AxiosInstance,
+  eid: string,
+  typeOfEvent: string = '1'
+): Promise<{ success: boolean; message: string }> {
+  const params = new URLSearchParams();
+  params.append('id', eid);
+  params.append('EventFees1', '0');
+  params.append('EventFees2', '0');
+  params.append('typeOfEvent', typeOfEvent);
+
+  const res = await client.post('/EventHub/registerEvent', params.toString(), {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Referer': 'https://eventhubcc.vit.ac.in/EventHub/eventPreview'
+    },
+    validateStatus: () => true
+  });
+
+  const html = typeof res.data === 'string' ? res.data : '';
+  const $ = cheerio.load(html);
+
+  const swalMatch = html.match(/Swal\.fire\(\{[\s\S]*?text:\s*["']([^"']+)["']/i);
+  const alertText = $('.alert').text().trim() || $('p.error').text().trim();
+
+  if (swalMatch && swalMatch[1]) {
+    const isError = html.includes('icon: "error"') || html.includes("icon: 'error'");
+    return {
+      success: !isError,
+      message: swalMatch[1]
+    };
+  }
+
+  if (alertText) {
+    const isError = alertText.toLowerCase().includes('already') || alertText.toLowerCase().includes('error');
+    return {
+      success: !isError,
+      message: alertText
+    };
+  }
+
+  if (res.status === 200 || res.status === 302) {
+    return {
+      success: true,
+      message: 'Registration completed successfully!'
+    };
+  }
+
+  return {
+    success: false,
+    message: `Registration failed (Status ${res.status})`
   };
 }
