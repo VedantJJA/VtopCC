@@ -4,6 +4,9 @@ import axios from 'axios';
 
 dotenv.config();
 
+// Ensure Node TLS does not reject VTOP intranet certificates
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const port = process.env.PORT || 5000;
 
 app.listen(port, () => {

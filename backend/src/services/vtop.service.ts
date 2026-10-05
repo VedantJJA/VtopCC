@@ -63,7 +63,12 @@ function createClient(jar: CookieJar) {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36'
     },
     httpAgent: new HttpCookieAgent({ cookies: { jar }, keepAlive: true, keepAliveMsecs: 60000 }),
-    httpsAgent: new HttpsCookieAgent({ cookies: { jar }, keepAlive: true, keepAliveMsecs: 60000 }),
+    httpsAgent: new HttpsCookieAgent({ 
+      cookies: { jar }, 
+      keepAlive: true, 
+      keepAliveMsecs: 60000,
+      rejectUnauthorized: false
+    }),
     withCredentials: true,
     maxRedirects: 5
   });
@@ -100,17 +105,46 @@ export async function startLogin(): Promise<{
   const csrfLoginMatch = preloginRes.data.match(/name="_csrf"\s+value="([^"]+)"/) || preloginRes.data.match(/value="([^"]+)"\s+name="_csrf"/);
   const csrfLogin = csrfLoginMatch ? csrfLoginMatch[1] : (cheerio.load(preloginRes.data)('input[name="_csrf"]').val() as string);
 
-  // 3. Get CAPTCHA
-  const captchaRes = await client.get('get/new/captcha');
-  const captchaSrcMatch = captchaRes.data.match(/img\s+src="([^"]+)"/);
-  const captchaSrc = captchaSrcMatch ? captchaSrcMatch[1] : (cheerio.load(captchaRes.data)('img').attr('src') || '');
+  // 3. Parse captchaType from HTML
+  const captchaTypeMatch = preloginRes.data.match(/var\s+captchaType\s*=\s*(\d+)/i) || preloginRes.data.match(/captchaType\s*=\s*(\d+)/i);
+  const captchaType = captchaTypeMatch ? parseInt(captchaTypeMatch[1], 10) : 1;
+
+  // 4. Extract CAPTCHA image
+  let captchaImageData = '';
+  if (captchaType === 1) {
+    const $prelogin = cheerio.load(preloginRes.data);
+    captchaImageData = $prelogin('#captchaBlock img').attr('src') || 
+                       $prelogin('img[src^="data:image"]').attr('src') || '';
+
+    if (!captchaImageData) {
+      const match = preloginRes.data.match(/src="(data:image\/[^"]+)"/);
+      if (match) captchaImageData = match[1];
+    }
+
+    // Fallback: If prelogin didn't contain the captcha image, fetch via get/new/captcha
+    if (!captchaImageData) {
+      try {
+        const captchaRes = await client.get('get/new/captcha');
+        const $cap = cheerio.load(captchaRes.data);
+        captchaImageData = $cap('#captchaBlock img').attr('src') || 
+                           $cap('img[src^="data:image"]').attr('src') || 
+                           $cap('img').attr('src') || '';
+        if (!captchaImageData) {
+          const match = captchaRes.data.match(/src="(data:image\/[^"]+)"/);
+          if (match) captchaImageData = match[1];
+        }
+      } catch (err: any) {
+        console.warn('[VTOP] Fallback get/new/captcha failed:', err?.message || err);
+      }
+    }
+  }
 
   const state: VtopState = {
     jar: jar.serializeSync(),
     csrf: csrfLogin
   };
 
-  return { state, captchaType: 1, captchaImageData: captchaSrc };
+  return { state, captchaType, captchaImageData };
 }
 
 /**
