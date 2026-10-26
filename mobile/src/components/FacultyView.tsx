@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, Search, Mail, MapPin, Building, Award, GraduationCap, AlertCircle, X } from 'lucide-react';
 import { searchFaculty, getFacultyDirectory } from '../lib/api';
 import { safeGetCache, safeSetCache } from '../lib/cache';
+import { facultyDirectory } from '../data/facultyDirectory';
 
 export const FacultyView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -11,21 +12,27 @@ export const FacultyView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [faculty, setFaculty] = useState<any | null>(null);
   const [directory, setDirectory] = useState<Record<string, string>>(() => {
-    // Load from cache optimistically for offline compatibility
-    return safeGetCache('vtop_cache_faculty_directory', {}) || {};
+    // Optimistic offline loading from bundled directory or cache
+    const cached = safeGetCache<Record<string, string>>('vtop_cache_faculty_directory');
+    const valid = cached && typeof cached === 'object' && !('status' in cached) && Object.keys(cached).length > 0
+      ? cached
+      : (cached && typeof cached === 'object' && (cached as any).directory ? (cached as any).directory : null);
+    return valid || facultyDirectory;
   });
 
-  // Fetch full consolidated directory map from backend on mount
+  // Background directory refresh
   useEffect(() => {
     const fetchDirectory = async () => {
       try {
         const res = await getFacultyDirectory();
-        if (res.data.status === 'success' && res.data.directory) {
-          setDirectory(res.data.directory);
-          safeSetCache('vtop_cache_faculty_directory', res.data.directory);
+        const resData: any = res?.data;
+        const dir = resData?.directory || (resData?.status === 'success' ? resData?.raw_data : resData);
+        if (dir && typeof dir === 'object' && !('status' in dir) && Object.keys(dir).length > 0) {
+          setDirectory(dir);
+          safeSetCache('vtop_cache_faculty_directory', dir);
         }
       } catch (err) {
-        console.error('Failed to load faculty directory from backend:', err);
+        console.warn('Faculty directory background sync bypassed:', err);
       }
     };
     fetchDirectory();
@@ -40,14 +47,64 @@ export const FacultyView: React.FC = () => {
 
     try {
       const res = await searchFaculty(targetId.trim());
-      if (res.data.status === 'success' && res.data.raw_data) {
-        setFaculty(res.data.raw_data);
+      const data = res.data?.raw_data || (res.data?.status === 'success' ? res.data.raw_data : res.data);
+      if (data && (data.name || data.email)) {
+        setFaculty(data);
       } else {
-        setError('Faculty details not found for this query.');
+        // Fallback check in local directory
+        const lower = targetId.trim().toLowerCase();
+        let fallbackName = '';
+        let fallbackId = targetId.trim();
+        for (const [name, id] of Object.entries(directory)) {
+          if (id === fallbackId || name.toLowerCase() === lower) {
+            fallbackName = name;
+            fallbackId = id;
+            break;
+          }
+        }
+        if (fallbackName) {
+          setFaculty({
+            name: fallbackName,
+            empId: fallbackId,
+            designation: 'Faculty Member',
+            department: 'VIT Chennai',
+            school: 'VIT Chennai',
+            email: `${fallbackId}@vit.ac.in`,
+            cabin: 'Connect to VTOP for cabin',
+            image: null,
+            isOfflineRecord: true
+          });
+        } else {
+          setError('Faculty details not found for this query.');
+        }
       }
     } catch (err: any) {
-      console.error(err);
-      setError(err.response?.data?.message || 'Faculty details not found.');
+      console.warn('Faculty live search failed, trying local directory:', err);
+      const lower = targetId.trim().toLowerCase();
+      let fallbackName = '';
+      let fallbackId = targetId.trim();
+      for (const [name, id] of Object.entries(directory)) {
+        if (id === fallbackId || name.toLowerCase() === lower) {
+          fallbackName = name;
+          fallbackId = id;
+          break;
+        }
+      }
+      if (fallbackName) {
+        setFaculty({
+          name: fallbackName,
+          empId: fallbackId,
+          designation: 'Faculty Member',
+          department: 'VIT Chennai',
+          school: 'VIT Chennai',
+          email: `${fallbackId}@vit.ac.in`,
+          cabin: 'Connect to VTOP for cabin',
+          image: null,
+          isOfflineRecord: true
+        });
+      } else {
+        setError(err.response?.data?.message || err.message || 'Faculty details not found.');
+      }
     } finally {
       setLoading(false);
     }
@@ -255,7 +312,14 @@ export const FacultyView: React.FC = () => {
 
           {/* Details side */}
           <div className="p-6 md:col-span-2 space-y-6">
-            <h3 className="font-bold text-sm uppercase tracking-wider text-textMuted border-b border-borderColor pb-2">Faculty Specifications</h3>
+            <div className="flex items-center justify-between border-b border-borderColor pb-2">
+              <h3 className="font-bold text-sm uppercase tracking-wider text-textMuted">Faculty Specifications</h3>
+              {faculty.isOfflineRecord && (
+                <span className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                  Offline Directory
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs">
               <div className="flex items-start space-x-3">
                 <Award className="h-4 w-4 text-accentColor mt-0.5" />

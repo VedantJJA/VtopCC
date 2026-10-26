@@ -5,7 +5,7 @@ import {
   Calendar, Calculator, Award, FileText, BookOpen, Search, Home, Sliders,
   Clock, CircleDot, LayoutGrid, Trash2, Bell, AlertTriangle
 } from 'lucide-react';
-import type { UseQueryResult } from '@tanstack/react-query';
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { safeClearCachePrefix, getStorageUsage, safeStorageSet } from '../lib/cache';
 import { isNotificationSupported, requestNotificationPermission, sendBrowserNotification } from '../services/notificationService';
 
@@ -82,10 +82,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('all');
   const [storageInfo, setStorageInfo] = useState(() => getStorageUsage());
 
+  const queryClient = useQueryClient();
+  const [cacheMessage, setCacheMessage] = useState<string | null>(null);
+
   const handleClearCache = () => {
-    const cleared = safeClearCachePrefix('vtop_cache_');
-    setStorageInfo(getStorageUsage());
-    alert(`Cleared ${cleared} cached entries. Refresh the page to reload fresh data.`);
+    try {
+      const cleared = safeClearCachePrefix('vtop_cache_');
+      queryClient.clear();
+      setStorageInfo(getStorageUsage());
+      setCacheMessage(`Cleared ${cleared} cached entries and purged in-memory cache.`);
+      queryClient.refetchQueries();
+      setTimeout(() => setCacheMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to clear cache:', err);
+    }
   };
 
   const handleUpdateMiddleDockSlot = (index: number, newId: string) => {
@@ -512,12 +522,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <HardDrive className="h-4 w-4 text-blue-500" />
               <span>Storage Usage: <strong className="text-textMain">{storageInfo.usedFormatted}</strong> ({storageInfo.entryCount} entries)</span>
             </div>
-            <button
-              onClick={handleClearCache}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
-            >
-              <Trash2 className="h-4 w-4" /> Clear Cached Data
-            </button>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <button
+                onClick={handleClearCache}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer w-fit"
+              >
+                <Trash2 className="h-4 w-4" /> Clear Cached Data
+              </button>
+              {cacheMessage && (
+                <span className="text-xs font-medium text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg animate-in fade-in">
+                  {cacheMessage}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}

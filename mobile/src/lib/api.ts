@@ -1,13 +1,15 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { safeGetCache, safeSetCache, safeFindCachePrefix } from './cache';
+import { safeGetCache, safeSetCache, safeFindCachePrefix, safeGetCalendarCacheForMonth } from './cache';
 import { 
   directStartLogin, 
   directLoginAttempt, 
   directCheckSession, 
+  ensureDirectSession,
   directGetSemesters,
   directGetTimetable,
   directGetAttendance,
   directGetAttendanceDetail,
+  directGetODSnapshot,
   directGetMarks,
   directGetGrades,
   directGetExams,
@@ -15,10 +17,19 @@ import {
   directGetCredentials,
   directGetCalendar,
   directSearchFaculty,
+  directGetFacultyDirectory,
+  directGetLeaveStatus,
   directGetLeaveHistory,
   directProbeVtop,
   clearDirectSession
 } from '../services/vtopDirect';
+
+import {
+  directGetEventHubEvents,
+  directGetEventHubPreview,
+  directGetEventHubProfile,
+  directRegisterEventHubFree
+} from '../services/eventHubDirect';
 
 // Helper to find cached item in localStorage safely
 function getCachedData(cacheKey?: string): any {
@@ -26,13 +37,24 @@ function getCachedData(cacheKey?: string): any {
   const exact = safeGetCache(cacheKey);
   if (exact !== undefined) return exact;
 
+  // Exact calendar lookup for month and year
+  if (cacheKey.startsWith('vtop_cache_calendar_')) {
+    const parts = cacheKey.split('_');
+    const year = parseInt(parts[parts.length - 1], 10);
+    const month = parseInt(parts[parts.length - 2], 10);
+    if (!isNaN(month) && !isNaN(year)) {
+      const found = safeGetCalendarCacheForMonth(month, year);
+      if (found !== undefined) return found;
+    }
+  }
+
   const prefixes = [
     'vtop_cache_timetable_',
     'vtop_cache_attendance_',
     'vtop_cache_marks_',
     'vtop_cache_grades_',
     'vtop_cache_exams_',
-    'vtop_cache_calendar_'
+    'vtop_cache_od_snapshot_'
   ];
 
   for (const prefix of prefixes) {
@@ -44,31 +66,71 @@ function getCachedData(cacheKey?: string): any {
   return null;
 }
 
-// Network-First, Cache-Fallback Direct Wrapper
+// Normalizes cached data into a resilient Axios-compatible response
+function wrapResponseData(data: any): any {
+  if (data === null || data === undefined) return data;
+  if (typeof data === 'object' && ('status' in data || 'raw_data' in data || 'semesters' in data || 'directory' in data)) {
+    return data;
+  }
+  return {
+    status: 'success',
+    raw_data: data,
+    semesters: Array.isArray(data) ? data : undefined,
+    directory: typeof data === 'object' && !Array.isArray(data) ? data : undefined,
+    ...(typeof data === 'object' && !Array.isArray(data) ? data : {})
+  };
+}
+
+// Atomic Network-First with Auto-Renew and Safe Cache-Fallback
 async function runDirectWithCache<T = any>(
   fetcher: () => Promise<T>,
   cacheKey?: string
 ): Promise<{ data: T }> {
   const cachedData = getCachedData(cacheKey);
 
-  // Offline bypass
+  // Offline bypass: if device reports offline, serve cache immediately without network delay
   if (cacheKey && typeof navigator !== 'undefined' && !navigator.onLine) {
-    if (cachedData) {
+    if (cachedData !== null && cachedData !== undefined) {
       console.log(`[Direct Offline] Returning cached data for '${cacheKey}'`);
-      return { data: cachedData };
+      return { data: wrapResponseData(cachedData) };
     }
   }
 
   try {
     const result = await fetcher();
     if (cacheKey && result) {
-      safeSetCache(cacheKey, result);
+      const toCache = (result as any)?.raw_data ?? (result as any)?.semesters ?? (result as any)?.directory ?? result;
+      safeSetCache(cacheKey, toCache);
     }
     return { data: result };
   } catch (error: any) {
-    if (cachedData) {
-      console.warn(`[Direct Fallback] Returning cached data for '${cacheKey}' due to error:`, error?.message);
-      return { data: cachedData };
+    const isSessionDrop = error?.message?.includes('Session expired or invalid') || 
+                          error?.message?.includes('vtopLoginForm') ||
+                          error?.response?.status === 401;
+
+    // If session expired and credentials exist, attempt silent auto-renewal once
+    if (isSessionDrop) {
+      console.log(`[Direct Auto-Renew] Session expired for '${cacheKey}', attempting recovery...`);
+      try {
+        const renewed = await ensureDirectSession(true);
+        if (renewed) {
+          console.log(`[Direct Auto-Renew] Retrying '${cacheKey}' with fresh session...`);
+          const retryResult = await fetcher();
+          if (cacheKey && retryResult) {
+            const toCache = (retryResult as any)?.raw_data ?? (retryResult as any)?.semesters ?? (retryResult as any)?.directory ?? retryResult;
+            safeSetCache(cacheKey, toCache);
+          }
+          return { data: retryResult };
+        }
+      } catch (renewErr) {
+        console.warn(`[Direct Auto-Renew] Silent renewal attempt failed:`, renewErr);
+      }
+    }
+
+    // Atomic fallback: keep current data completely intact if fetch or renewal fails
+    if (cachedData !== null && cachedData !== undefined) {
+      console.warn(`[Direct Fallback] Retaining cached data for '${cacheKey}' due to error:`, error?.message);
+      return { data: wrapResponseData(cachedData) };
     }
     throw error;
   }
@@ -163,6 +225,22 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig): Promise
     });
   }
 
+  if (url === '/data/leaves' || url === '/data/leave-status') {
+    const res = await directGetLeaveStatus();
+    return Promise.reject({
+      isDirectMock: true,
+      response: { data: { status: 'success', raw_data: res }, status: 200 }
+    });
+  }
+
+  if (url === '/data/leave-history') {
+    const res = await directGetLeaveHistory();
+    return Promise.reject({
+      isDirectMock: true,
+      response: { data: { status: 'success', raw_data: res }, status: 200 }
+    });
+  }
+
   if (url === '/admin/check') {
     return Promise.reject({
       isDirectMock: true,
@@ -218,9 +296,9 @@ export const getCredentials = () =>
     return { status: 'success', raw_data: creds };
   }, 'vtop_cache_credentials');
 
-export const getTimetable = (semesterId: string, _isSaturday = true) =>
+export const getTimetable = (semesterId: string, isSaturday = true) =>
   runDirectWithCache(async () => {
-    const tt = await directGetTimetable(semesterId);
+    const tt = await directGetTimetable(semesterId, isSaturday);
     return { status: 'success', raw_data: tt };
   }, `vtop_cache_timetable_${semesterId}`);
 
@@ -232,8 +310,8 @@ export const getAttendance = (semesterId: string) =>
 
 export const getODSnapshot = (semesterId: string) =>
   runDirectWithCache(async () => {
-    const att = await directGetAttendance(semesterId);
-    return att?.od_details || [];
+    const snapshot = await directGetODSnapshot(semesterId);
+    return snapshot;
   }, `vtop_cache_od_snapshot_${semesterId}`);
 
 export const getAttendanceDetail = (semesterId: string, classId: string, slot: string) =>
@@ -263,25 +341,28 @@ export const getExams = (semesterId: string) =>
 export const getCalendar = (semesterId: string, calDate: string) =>
   runDirectWithCache(async () => {
     const cal = await directGetCalendar(semesterId, calDate);
-    return { status: 'success', raw_data: cal, new_semester_id: undefined as string | undefined };
+    return { status: 'success', raw_data: cal, new_semester_id: cal?.new_semester_id };
   }, `vtop_cache_calendar_${semesterId}_${calDate}`);
 
-export const searchFaculty = (empId: string) =>
+export const searchFaculty = (empIdOrName: string) =>
   runDirectWithCache(async () => {
-    const fac = await directSearchFaculty(empId);
+    const fac = await directSearchFaculty(empIdOrName);
     return { status: 'success', raw_data: fac };
-  }, `vtop_cache_faculty_${empId}`);
+  }, `vtop_cache_faculty_${empIdOrName}`);
 
 export const getFacultyDirectory = () =>
-  runDirectWithCache(async () => ({ status: 'success', directory: {} }), 'vtop_cache_faculty_directory');
+  runDirectWithCache(async () => {
+    const dir = directGetFacultyDirectory();
+    return { status: 'success', directory: dir };
+  }, 'vtop_cache_faculty_directory');
 
 export const fetchLeaves = async () => {
-  const data = await directGetLeaveHistory();
+  const data = await directGetLeaveStatus();
   return { status: 'success', raw_data: data };
 };
 
 export const fetchLeaveStatus = async () => {
-  const data = await directGetLeaveHistory();
+  const data = await directGetLeaveStatus();
   return { status: 'success', raw_data: data };
 };
 
@@ -290,21 +371,21 @@ export const fetchLeaveHistory = async () => {
   return { status: 'success', raw_data: data };
 };
 
-// EventHub Functions
-export const getEventHubEvents = async (_creds?: { username?: string; password?: string }): Promise<any> => {
-  return { status: 'success', events: [], categories: [], message: '' };
+// EventHub Functions directly executing on mobile phone
+export const getEventHubEvents = async (creds?: { username?: string; password?: string }): Promise<any> => {
+  return directGetEventHubEvents(creds);
 };
 
-export const getEventHubPreview = async (_eid: string, _creds?: { username?: string; password?: string }): Promise<any> => {
-  return { status: 'success', details: {}, preview: {} };
+export const getEventHubPreview = async (eid: string, creds?: { username?: string; password?: string }): Promise<any> => {
+  return directGetEventHubPreview(eid, creds);
 };
 
-export const getEventHubProfile = async (_creds?: { username?: string; password?: string }): Promise<any> => {
-  return { status: 'success', profile: {} };
+export const getEventHubProfile = async (creds?: { username?: string; password?: string }): Promise<any> => {
+  return directGetEventHubProfile(creds);
 };
 
-export const registerEventHubFree = async (_eid: string, _typeOfEvent?: string, _creds?: { username?: string; password?: string }): Promise<any> => {
-  return { status: 'success', message: 'Registration submitted' };
+export const registerEventHubFree = async (eid: string, typeOfEvent?: string, creds?: { username?: string; password?: string }): Promise<any> => {
+  return directRegisterEventHubFree(eid, typeOfEvent, creds);
 };
 
 export const getUserCount = () => api.get('/admin/user-count');

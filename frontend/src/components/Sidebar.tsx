@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronDown, LogOut, LayoutDashboard, GraduationCap, 
-  FileText, Home, PlusCircle, Settings, Shield, Sparkles
+  FileText, Home, PlusCircle, Settings, Shield
 } from 'lucide-react';
 import { VtopLogo } from './VtopLogo';
 
@@ -41,7 +41,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navItems: any[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'events', label: 'Event Hub', icon: Sparkles },
     {
       id: 'academics', label: 'Academics', icon: GraduationCap,
       children: [
@@ -70,11 +69,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'extra', label: 'Extra Options', icon: PlusCircle, divider: true,
       children: [
+        { id: 'events', label: 'Event Hub' },
         { id: 'calculator', label: 'Attendance Calculator' }
       ]
     },
     { id: 'settings', label: 'Settings', icon: Settings, divider: true }
   ];
+
+  useEffect(() => {
+    for (const item of navItems) {
+      if (item.children?.some((child: any) => child.id === activeTab)) {
+        setExpandedNav(prev => prev[item.id] ? prev : ({ ...prev, [item.id]: true }));
+        break;
+      }
+    }
+  }, [activeTab]);
 
   // Conditionally add Admin nav item
   if (isAdmin) {

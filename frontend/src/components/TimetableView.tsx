@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Calendar, LayoutGrid, CalendarDays, MapPin, Layers, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { getSubjectColor, formatTime, formatTimeRange } from '../lib/utils';
-import { safeFindCachePrefix } from '../lib/cache';
+import { safeGetCalendarCacheForMonth } from '../lib/cache';
 import { TimetableSkeleton } from './Skeleton';
 import { getSchedulesForDayOfWeek, type CustomScheduleItem } from '../services/customScheduleService';
 
@@ -41,9 +41,9 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
     }
 
     try {
-      const calData = safeFindCachePrefix<any>('vtop_cache_calendar_');
+      const today = new Date();
+      const calData = safeGetCalendarCacheForMonth(today.getMonth(), today.getFullYear());
       if (calData && Array.isArray(calData.days)) {
-        const today = new Date();
         const startOfWeek = new Date(today);
         startOfWeek.setDate(today.getDate() - today.getDay());
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

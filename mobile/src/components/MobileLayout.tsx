@@ -4,7 +4,10 @@ import {
   RefreshCw, Sun, Moon, ArrowLeft, BookOpen, Award, FileText, 
   Home, Calendar, Search, Settings, Shield, User, LogOut, ChevronRight, Sparkles
 } from 'lucide-react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { VtopLogo } from './VtopLogo';
+import { SyncStatusStepper, type SyncStep } from './SyncStatusStepper';
 
 export interface DockItemConfig {
   id: string;
@@ -46,6 +49,9 @@ interface MobileLayoutProps {
   dockTabs?: string[];
   onOpenSearch?: () => void;
   showUniversalSearch?: boolean;
+  syncStep?: SyncStep;
+  syncMessage?: string;
+  onDismissSync?: () => void;
   children: React.ReactNode;
 }
 
@@ -64,11 +70,48 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   dockTabs: propDockTabs,
   onOpenSearch,
   showUniversalSearch = true,
+  syncStep = 'idle',
+  syncMessage,
+  onDismissSync,
   children
 }) => {
   const dockTabs = propDockTabs && propDockTabs.length > 0 ? propDockTabs : DEFAULT_DOCK_TABS;
   const swipableTabs = dockTabs.filter(t => t !== 'more');
   const isDockTab = dockTabs.includes(activeTab);
+
+  // Status bar styling
+  useEffect(() => {
+    try {
+      StatusBar.setStyle({
+        style: theme === 'dark' ? Style.Dark : Style.Light
+      }).catch(() => {});
+      StatusBar.setBackgroundColor({
+        color: theme === 'dark' ? '#0E0E11' : '#FFFFFF'
+      }).catch(() => {});
+    } catch (_e) {}
+  }, [theme]);
+
+  // Handle native Android hardware back button
+  useEffect(() => {
+    let listener: any = null;
+    try {
+      listener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        if (activeTab !== 'dashboard') {
+          setActiveTab('dashboard');
+        } else if (canGoBack) {
+          window.history.back();
+        } else {
+          CapacitorApp.minimizeApp().catch(() => {});
+        }
+      });
+    } catch (_e) {}
+
+    return () => {
+      if (listener && typeof listener.remove === 'function') {
+        listener.remove();
+      }
+    };
+  }, [activeTab, setActiveTab]);
 
   // Auto-hiding sticky header state on scroll
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
@@ -250,6 +293,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       case 'dashboard': return 'Dashboard';
       case 'timetable': return 'Timetable';
       case 'attendance': return 'Attendance';
+      case 'events': return 'Event Hub';
       case 'calculator': return 'Calculator';
       case 'more': return 'Explore & More';
       case 'courses': return 'Registered Courses';
@@ -348,6 +392,19 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
             </button>
           </div>
         </header>
+
+        {/* Sync Status Progress Bar directly below top nav bar */}
+        <div 
+          className={`absolute top-14 inset-x-0 z-30 transition-transform duration-300 ease-out ${
+            isHeaderVisible ? 'translate-y-0' : '-translate-y-14 pointer-events-none'
+          }`}
+        >
+          <SyncStatusStepper 
+            step={syncStep} 
+            message={syncMessage} 
+            onDismiss={onDismissSync} 
+          />
+        </div>
 
         {/* Main Content Area with Animated Touch Translation */}
         <main 

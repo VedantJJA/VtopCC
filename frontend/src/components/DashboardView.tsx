@@ -3,7 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { Activity, CalendarDays, ChevronLeft, ChevronRight, AlertTriangle, X } from 'lucide-react';
 import { DashboardSkeleton, SkeletonBox } from './Skeleton';
 import { formatTime } from '../lib/utils';
-import { safeFindCachePrefix } from '../lib/cache';
+import { safeGetCalendarCacheForMonth } from '../lib/cache';
 import { getCustomSchedules, type CustomScheduleItem } from '../services/customScheduleService';
 import { scanLowAttendanceCourses, sendBrowserNotification } from '../services/notificationService';
 
@@ -167,7 +167,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Helper to inspect cached academic calendar events for date
   const getCalendarEventsForDate = (d: Date): { isExamDay: boolean; isHoliday: boolean; dayOrderCode: string | null; eventText: string } => {
     try {
-      const calData = safeFindCachePrefix<any>('vtop_cache_calendar_');
+      const calData = safeGetCalendarCacheForMonth(d.getMonth(), d.getFullYear());
       if (calData && Array.isArray(calData.days)) {
         const dayNum = d.getDate();
         const dayObj = calData.days.find((item: any) => item.day === dayNum);

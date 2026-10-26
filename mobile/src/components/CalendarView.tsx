@@ -257,9 +257,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   // Auto-select current day or first active day on month change
   useEffect(() => {
     if (currData?.days) {
-      const todayNum = new Date().getDate().toString();
+      const todayDate = new Date().getDate();
       const isThisMonth = new Date().getMonth() === calendarDate.getMonth() && new Date().getFullYear() === calendarDate.getFullYear();
-      const defaultDay = (isThisMonth ? currData.days.find((d: any) => d.day === todayNum && d.status !== 'padding') : null)
+      const defaultDay = (isThisMonth ? currData.days.find((d: any) => Number(d.day) === todayDate && d.status !== 'padding') : null)
         || currData.days.find((d: any) => d.day && d.status !== 'padding')
         || null;
       setSelectedDay(defaultDay);

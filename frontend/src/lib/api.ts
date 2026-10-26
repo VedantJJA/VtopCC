@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { safeGetCache, safeSetCache, safeFindCachePrefix } from './cache';
+import { safeGetCache, safeSetCache, safeFindCachePrefix, safeGetCalendarCacheForMonth } from './cache';
 
 const api = axios.create({
   baseURL: '/api',
@@ -21,14 +21,24 @@ function getCachedData(cacheKey?: string): any {
     return exact;
   }
 
+  // Exact calendar lookup for month and year
+  if (cacheKey.startsWith('vtop_cache_calendar_')) {
+    const parts = cacheKey.split('_');
+    const year = parseInt(parts[parts.length - 1], 10);
+    const month = parseInt(parts[parts.length - 2], 10);
+    if (!isNaN(month) && !isNaN(year)) {
+      const found = safeGetCalendarCacheForMonth(month, year);
+      if (found !== undefined) return found;
+    }
+  }
+
   // Prefix fallbacks for dynamic keys
   const prefixes = [
     'vtop_cache_timetable_',
     'vtop_cache_attendance_',
     'vtop_cache_marks_',
     'vtop_cache_grades_',
-    'vtop_cache_exams_',
-    'vtop_cache_calendar_'
+    'vtop_cache_exams_'
   ];
 
   for (const prefix of prefixes) {
@@ -41,6 +51,21 @@ function getCachedData(cacheKey?: string): any {
   }
 
   return null;
+}
+
+// Normalizes cached data into a resilient Axios-compatible response
+function wrapResponseData(data: any): any {
+  if (data === null || data === undefined) return data;
+  if (typeof data === 'object' && ('status' in data || 'raw_data' in data || 'semesters' in data || 'directory' in data)) {
+    return data;
+  }
+  return {
+    status: 'success',
+    raw_data: data,
+    semesters: Array.isArray(data) ? data : undefined,
+    directory: typeof data === 'object' && !Array.isArray(data) ? data : undefined,
+    ...(typeof data === 'object' && !Array.isArray(data) ? data : {})
+  };
 }
 
 /**
@@ -59,9 +84,9 @@ export async function fetchWithCache<T = any>(
 
   // Step A: Quick offline bypass when navigator.onLine is false
   if (cacheKey && typeof navigator !== 'undefined' && !navigator.onLine) {
-    if (cachedData) {
+    if (cachedData !== null && cachedData !== undefined) {
       console.log(`[Offline Bypass] Returning cached data for '${cacheKey}'`);
-      return { data: cachedData };
+      return { data: wrapResponseData(cachedData) };
     }
   }
 
@@ -79,17 +104,17 @@ export async function fetchWithCache<T = any>(
 
     // If server returned status: 'error' (e.g. session expired on VTOP), but we have cached data,
     // fallback to cached data so the UI remains visible instead of going blank
-    if (cachedData) {
+    if (cachedData !== null && cachedData !== undefined) {
       console.warn(`[Server Error Fallback] Returning cached data for '${cacheKey}' due to server status: ${res?.data?.message}`);
-      return { data: cachedData };
+      return { data: wrapResponseData(cachedData) };
     }
 
     return res;
   } catch (error: any) {
     // Step D: Fallback to cache on network failure (offline / timeout / 500)
-    if (cachedData) {
+    if (cachedData !== null && cachedData !== undefined) {
       console.warn(`[Network Failure Fallback] Returning cached data for '${cacheKey}' due to network error:`, error?.message || error);
-      return { data: cachedData };
+      return { data: wrapResponseData(cachedData) };
     }
 
     // Step E: Only throw if we have no cached data to show

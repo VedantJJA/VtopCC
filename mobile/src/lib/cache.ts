@@ -214,18 +214,30 @@ export function safeSetCache<T>(key: string, data: T, options?: SetCacheOptions)
   }
 
   // Prevent storing error responses
-  if (typeof data === 'object' && (data as any)?.status === 'error' && (data as any)?.message) {
+  if (typeof data === 'object' && ((data as any)?.status === 'error' || (data as any)?.status === 'unauthorized')) {
     console.warn(`[safeSetCache] Skipping write of error response for key "${key}"`);
     return false;
   }
 
   try {
+    // Automatically unwrap API response wrappers ({ status: 'success', raw_data: ... }, semesters, directory)
+    let cleanData: any = data;
+    if (cleanData && typeof cleanData === 'object') {
+      if ('raw_data' in cleanData && cleanData.raw_data !== undefined && cleanData.raw_data !== null) {
+        cleanData = cleanData.raw_data;
+      } else if ('semesters' in cleanData && Array.isArray(cleanData.semesters)) {
+        cleanData = cleanData.semesters;
+      } else if ('directory' in cleanData && typeof cleanData.directory === 'object') {
+        cleanData = cleanData.directory;
+      }
+    }
+
     const envelope: CacheEnvelope<T> = {
       __vtop_envelope: true,
       v: options?.version ?? 1,
       t: Date.now(),
       exp: options?.ttlMs ? Date.now() + options.ttlMs : undefined,
-      data
+      data: cleanData
     };
 
     const serialized = JSON.stringify(envelope);
@@ -278,58 +290,43 @@ export function safeGetCache<T>(
 
     const parsed = JSON.parse(trimmed);
 
-    // Enveloped cache support
-    if (isCacheEnvelope<T>(parsed)) {
-      // Check expiration if TTL was set
-      if (parsed.exp && Date.now() > parsed.exp) {
-        console.log(`[SafeCache] Cache expired for key "${key}", removing.`);
-        rawRemoveItem(key);
-        return fallback;
-      }
+    // Enveloped or raw JSON cache extraction
+    let payload: any = isCacheEnvelope<T>(parsed) ? parsed.data : parsed;
 
-      const actualData = parsed.data;
-      if (validator && !validator(actualData)) {
-        console.warn(`[SafeCache] Validator failed for key "${key}", purging.`);
-        rawRemoveItem(key);
-        return fallback;
-      }
-
-      if (key.includes('semesters') && !Array.isArray(actualData)) {
-        console.warn(`[SafeCache] Corrupt structure for "${key}", expected array. Purging.`);
-        rawRemoveItem(key);
-        return fallback;
-      }
-      if (key.includes('profile') && (typeof actualData !== 'object' || actualData === null || Array.isArray(actualData))) {
-        console.warn(`[SafeCache] Corrupt structure for "${key}", expected object. Purging.`);
-        rawRemoveItem(key);
-        return fallback;
-      }
-
-      return actualData;
-    }
-
-    // Legacy un-enveloped cache support
-    if (validator && !validator(parsed)) {
-      console.warn(`[SafeCache] Validator failed for legacy key "${key}", purging.`);
+    // Check expiration if TTL was set on envelope
+    if (isCacheEnvelope<T>(parsed) && parsed.exp && Date.now() > parsed.exp) {
+      console.log(`[SafeCache] Cache expired for key "${key}", removing.`);
       rawRemoveItem(key);
       return fallback;
     }
 
-    if (key.includes('semesters') && !Array.isArray(parsed)) {
-      console.warn(`[SafeCache] Corrupt structure for legacy "${key}", expected array. Purging.`);
-      rawRemoveItem(key);
-      return fallback;
+    // Smart auto-unwrapper: handle any wrapper structures seamlessly
+    if (payload && typeof payload === 'object') {
+      if (key.includes('semesters')) {
+        if (Array.isArray(payload.semesters)) {
+          payload = payload.semesters;
+        } else if (Array.isArray(payload.raw_data)) {
+          payload = payload.raw_data;
+        }
+      } else if (key.includes('faculty_directory')) {
+        if (payload.directory && typeof payload.directory === 'object') {
+          payload = payload.directory;
+        } else if (payload.raw_data && typeof payload.raw_data === 'object') {
+          payload = payload.raw_data;
+        }
+      } else if ('raw_data' in payload && payload.raw_data !== undefined && payload.raw_data !== null) {
+        payload = payload.raw_data;
+      }
     }
-    if (key.includes('profile') && (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))) {
-      console.warn(`[SafeCache] Corrupt structure for legacy "${key}", expected object. Purging.`);
-      rawRemoveItem(key);
+
+    if (validator && !validator(payload)) {
+      console.warn(`[SafeCache] Validator check failed for key "${key}", returning fallback without purge.`);
       return fallback;
     }
 
-    return parsed as T;
+    return payload as T;
   } catch (err) {
-    console.warn(`[SafeCache] Corrupted cache for key "${key}", purging:`, err);
-    rawRemoveItem(key);
+    console.warn(`[SafeCache] Parse error for key "${key}":`, err);
     return fallback;
   }
 }
@@ -352,11 +349,18 @@ export function safeFindCachePrefix<T>(
   if (!prefix) return fallback;
 
   try {
-    const total = storageAvailable ? window.localStorage.length : memoryStorage.size;
-    
-    for (let i = 0; i < total; i++) {
-      const key = storageAvailable ? window.localStorage.key(i) : Array.from(memoryStorage.keys())[i];
-      if (key && key.startsWith(prefix)) {
+    const keys: string[] = [];
+    if (storageAvailable) {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k) keys.push(k);
+      }
+    } else {
+      keys.push(...memoryStorage.keys());
+    }
+
+    for (const key of keys) {
+      if (key.startsWith(prefix)) {
         const found = safeGetCache<T>(key, undefined, validator);
         if (found !== undefined) {
           return found;
@@ -512,4 +516,36 @@ export function getStorageUsage(): { usedBytes: number; usedFormatted: string; e
       : `${(usedBytes / 1024).toFixed(1)} KB`;
 
   return { usedBytes, usedFormatted, entryCount };
+}
+
+/**
+ * Accurately finds the cached calendar for a specific month and year without prefix collisions.
+ */
+export function safeGetCalendarCacheForMonth(month: number, year: number, semesterId?: string): any {
+  if (semesterId) {
+    const specific = safeGetCache<any>(`vtop_cache_calendar_${semesterId}_${month}_${year}`);
+    if (specific && specific.days && Array.isArray(specific.days)) return specific;
+  }
+  const latest = safeGetCache<any>(`vtop_cache_calendar_latest_${month}_${year}`);
+  if (latest && latest.days && Array.isArray(latest.days)) return latest;
+
+  const targetSuffix = `_${month}_${year}`;
+  const keys: string[] = [];
+  if (storageAvailable) {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k) keys.push(k);
+    }
+  } else {
+    keys.push(...memoryStorage.keys());
+  }
+
+  for (const k of keys) {
+    if (k.startsWith('vtop_cache_calendar_') && k.endsWith(targetSuffix)) {
+      const found = safeGetCache<any>(k);
+      if (found && found.days && Array.isArray(found.days)) return found;
+    }
+  }
+
+  return undefined;
 }

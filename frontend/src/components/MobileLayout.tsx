@@ -251,6 +251,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
       case 'timetable': return 'Timetable';
       case 'attendance': return 'Attendance';
       case 'calculator': return 'Calculator';
+      case 'events': return 'Event Hub';
       case 'more': return 'Explore & More';
       case 'courses': return 'Registered Courses';
       case 'marks': return 'Marks';
