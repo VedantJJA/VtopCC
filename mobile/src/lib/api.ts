@@ -1,5 +1,5 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { safeGetCache, safeSetCache, safeFindCachePrefix, safeGetCalendarCacheForMonth, safeStorageGet } from './cache';
+import { safeGetCache, safeSetCache, safeFindCachePrefix, safeGetCalendarCacheForMonth, safeStorageGet, isMeaningfulData } from './cache';
 import { 
   directStartLogin, 
   directLoginAttempt, 
@@ -98,14 +98,29 @@ async function runDirectWithCache<T = any>(
 
   try {
     const result = await fetcher();
-    if (cacheKey && result) {
+
+    // Verify incoming payload contains real academic data before trusting it
+    const isGood = cacheKey ? isMeaningfulData(cacheKey, result) : (result !== null && result !== undefined);
+
+    if (cacheKey && isGood) {
       const toCache = (result as any)?.raw_data ?? (result as any)?.semesters ?? (result as any)?.directory ?? result;
       safeSetCache(cacheKey, toCache);
+      return { data: result };
     }
+
+    // IF incoming payload is empty, BUT we have valid cached data:
+    // Protect the UI from clearing by returning existing cached data!
+    if (cachedData !== null && cachedData !== undefined && cacheKey && !isGood) {
+      console.warn(`[Direct WithCache] Received empty/incomplete data for '${cacheKey}'. Returning cached data to keep UI populated.`);
+      return { data: wrapResponseData(cachedData) };
+    }
+
     return { data: result };
   } catch (error: any) {
     const isSessionDrop = error?.message?.includes('Session expired or invalid') || 
                           error?.message?.includes('vtopLoginForm') ||
+                          error?.message?.includes('invalid attendance markup') ||
+                          error?.message?.includes('invalid timetable markup') ||
                           error?.response?.status === 401;
 
     // If session expired and credentials exist, attempt silent auto-renewal once
@@ -116,11 +131,12 @@ async function runDirectWithCache<T = any>(
         if (renewed) {
           console.log(`[Direct Auto-Renew] Retrying '${cacheKey}' with fresh session...`);
           const retryResult = await fetcher();
-          if (cacheKey && retryResult) {
+          const isRetryGood = cacheKey ? isMeaningfulData(cacheKey, retryResult) : (retryResult !== null && retryResult !== undefined);
+          if (cacheKey && isRetryGood) {
             const toCache = (retryResult as any)?.raw_data ?? (retryResult as any)?.semesters ?? (retryResult as any)?.directory ?? retryResult;
             safeSetCache(cacheKey, toCache);
+            return { data: retryResult };
           }
-          return { data: retryResult };
         }
       } catch (renewErr) {
         console.warn(`[Direct Auto-Renew] Silent renewal attempt failed:`, renewErr);

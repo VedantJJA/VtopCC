@@ -324,13 +324,33 @@ export async function directLoginAttempt(
   }
 }
 
+export function isVtopHtmlSessionExpired(html: string | undefined | null): boolean {
+  if (!html || typeof html !== 'string') return true;
+  const trimmed = html.trim();
+  if (trimmed.length === 0) return true;
+  if (trimmed.length < 250 && !trimmed.includes('<table')) return true;
+  return (
+    html.includes('vtopLoginForm') ||
+    html.includes('Session timeout') ||
+    html.includes('Session Timeout') ||
+    html.includes('Session Expired') ||
+    html.includes('session expired') ||
+    html.includes('Please Login') ||
+    html.includes('please login') ||
+    html.includes('Invalid Request') ||
+    html.includes('Not Authorized') ||
+    html.includes('open/page') ||
+    (html.includes('<script>') && html.includes('location'))
+  );
+}
+
 export async function directCheckSession(): Promise<{ status: 'success' | 'failure'; username?: string }> {
-  if (!session.authorizedId) {
+  if (!session.authorizedId || !session.csrfToken) {
     return { status: 'failure' };
   }
 
-  // If verified within last 3 minutes, treat as valid to save roundtrips
-  if (session.lastVerified && (Date.now() - session.lastVerified) < 3 * 60 * 1000) {
+  // If verified within last 3 minutes and valid cookies exist, treat as valid to save roundtrips
+  if (session.lastVerified && (Date.now() - session.lastVerified) < 3 * 60 * 1000 && Object.keys(session.cookies || {}).length > 0) {
     return { status: 'success', username: session.username || session.authorizedId };
   }
 
@@ -342,7 +362,7 @@ export async function directCheckSession(): Promise<{ status: 'success' | 'failu
     });
 
     const html = typeof res.data === 'string' ? res.data : '';
-    if (html.includes('vtopLoginForm') || html.length < 500) {
+    if (isVtopHtmlSessionExpired(html) || html.length < 500) {
       return { status: 'failure' };
     }
 
@@ -452,7 +472,7 @@ export async function directGetSemesters(): Promise<any[]> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
 
@@ -488,8 +508,12 @@ export async function directGetTimetable(semesterSubId: string, isSaturday = tru
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
+  }
+
+  if (!html.includes('<table') && !html.includes('course_code') && !html.includes('SLOT')) {
+    throw new Error('VTOP returned invalid timetable markup or unauthenticated redirect.');
   }
 
   const parsedData = parsers.parseCourseData(html) as any;
@@ -579,9 +603,14 @@ export async function directGetAttendance(semesterSubId: string): Promise<any> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
+
+  if (!html.includes('<table') && !html.includes('processViewAttendanceDetail')) {
+    throw new Error('VTOP returned invalid attendance markup or unauthenticated redirect.');
+  }
+
   return parsers.parseAttendanceSummary(html);
 }
 
@@ -603,7 +632,7 @@ export async function directGetAttendanceDetail(semesterSubId: string, classId: 
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
   return parsers.parseAttendanceDetail(html);
@@ -653,7 +682,7 @@ export async function directGetMarks(semesterSubId: string): Promise<{ courses: 
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
 
@@ -810,7 +839,7 @@ export async function directGetGrades(semesterSubId: string): Promise<any> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
 
@@ -863,7 +892,7 @@ export async function directGetExams(semesterSubId: string): Promise<any> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
   return parsers.parseExamSchedule(html);
@@ -886,7 +915,7 @@ export async function directGetProfile(): Promise<any> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
   return parsers.parseProfile(html);
@@ -909,7 +938,7 @@ export async function directGetCredentials(): Promise<any> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
   return parsers.parseCredentials(html);
@@ -990,7 +1019,7 @@ export async function directGetCalendar(semesterSubId: string, calDate: string):
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
 
@@ -1229,7 +1258,7 @@ export async function directGetLeaveStatus(): Promise<any[]> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
   return parsers.parseLeaves(html);
@@ -1268,7 +1297,7 @@ export async function directGetLeaveHistory(): Promise<any[]> {
   });
 
   const html = typeof res.data === 'string' ? res.data : '';
-  if (html.includes('vtopLoginForm')) {
+  if (isVtopHtmlSessionExpired(html)) {
     throw new Error('Session expired or invalid.');
   }
   return parsers.parseLeaveHistory(html);

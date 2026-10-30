@@ -346,8 +346,67 @@ export function normalizeCachedData<T = any>(key: string, raw: any): T {
 }
 
 /**
+ * Validates whether a data payload contains meaningful non-empty academic content.
+ * Prevents empty arrays, blank timetables, and broken network objects from overwriting valid data.
+ */
+export function isMeaningfulData(key: string, data: any): boolean {
+  if (data === null || data === undefined) return false;
+  if (typeof data === 'object' && ((data as any)?.status === 'error' || (data as any)?.status === 'unauthorized')) {
+    return false;
+  }
+
+  let payload = data;
+  if (typeof payload === 'object' && payload?.__vtop_envelope === true && 'data' in payload) {
+    payload = payload.data;
+  }
+  if (payload && typeof payload === 'object' && 'raw_data' in payload && payload.raw_data !== undefined) {
+    payload = payload.raw_data;
+  }
+
+  if (key.startsWith('vtop_cache_attendance_')) {
+    return Array.isArray(payload) && payload.length > 0;
+  }
+  if (key.startsWith('vtop_cache_timetable_')) {
+    if (Array.isArray(payload)) return payload.length > 0;
+    if (typeof payload === 'object' && payload !== null) {
+      const courses = payload.courses;
+      const tt = payload.timetable;
+      return (Array.isArray(courses) && courses.length > 0) || (tt && typeof tt === 'object' && Object.keys(tt).length > 0);
+    }
+    return false;
+  }
+  if (key.startsWith('vtop_cache_semesters')) {
+    return Array.isArray(payload) && payload.length > 0;
+  }
+  if (key.startsWith('vtop_cache_marks_')) {
+    if (typeof payload === 'object' && payload !== null) {
+      const courses = payload.courses;
+      const combined = payload.combined_scores;
+      return (Array.isArray(courses) && courses.length > 0) || (Array.isArray(combined) && combined.length > 0);
+    }
+    return false;
+  }
+  if (key.startsWith('vtop_cache_grades_')) {
+    if (typeof payload === 'object' && payload !== null) {
+      const grades = payload.grades;
+      return (Array.isArray(grades) && grades.length > 0) || !!payload.cgpa;
+    }
+    return false;
+  }
+  if (key.startsWith('vtop_cache_exams_')) {
+    return Array.isArray(payload) && payload.length > 0;
+  }
+  if (key.startsWith('vtop_cache_profile')) {
+    return typeof payload === 'object' && payload !== null && (!!payload.personal || !!payload.academic || !!payload.name || !!payload.reg_no);
+  }
+
+  return true;
+}
+
+/**
  * Safely writes data to storage.
  * - Prevents storing undefined or null (removes key instead)
+ * - Anti-Wipe Guard: Prevents empty responses from overwriting existing valid caches
  * - Wraps in envelope with timestamp and schema version 2
  * - Isolates large base64 profile pictures to keep primary payloads light
  */
@@ -365,6 +424,15 @@ export function safeSetCache<T>(key: string, data: T, options?: SetCacheOptions)
   if (typeof data === 'object' && ((data as any)?.status === 'error' || (data as any)?.status === 'unauthorized')) {
     console.warn(`[safeSetCache] Skipping write of error response for key "${key}"`);
     return false;
+  }
+
+  // Anti-Wipe Protection: If incoming payload is empty, never overwrite existing populated data
+  if (key.startsWith('vtop_cache_') && !isMeaningfulData(key, data)) {
+    const existing = safeGetCache(key);
+    if (existing !== undefined && isMeaningfulData(key, existing)) {
+      console.warn(`[SafeCache] Guard: Blocked empty data overwrite for "${key}". Existing cache preserved.`);
+      return true;
+    }
   }
 
   try {
