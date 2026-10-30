@@ -25,7 +25,7 @@ export const AttendanceCalculator: React.FC<AttendanceCalculatorProps> = ({
   const [daysPrediction, setDaysPrediction] = useState<any[]>([]);
   const [hasCalculatedDays, setHasCalculatedDays] = useState<boolean>(false);
 
-  const courses = attendanceQuery.data || [];
+  const courses = Array.isArray(attendanceQuery.data) ? attendanceQuery.data : [];
 
   // Initialize selected course index
   useEffect(() => {

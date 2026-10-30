@@ -1,20 +1,26 @@
 /**
- * Production-grade Safe Storage & Cache Engine for VtopCC.
+ * Production-grade Safe Storage & Cache Engine for VtopCC Mobile.
  * 
- * Features:
- * 1. Storage Availability & In-Memory Fallback (handles private browsing / blocked storage)
- * 2. Automated Startup Sanitization & Self-Healing (purges corrupted / malformed entries)
- * 3. Serialization Guards (prevents storing "undefined", "null", "[object Object]", or HTML)
- * 4. Quota Overflow Protection & LRU Auto-Eviction (handles QuotaExceededError smoothly)
- * 5. Type and Schema Validation Guards (ensures parsed data matches expected structure)
- * 6. Cache Envelopes with TTL, Versioning & Integrity Checksum
+ * Powered by a Native Hybrid Two-Tier Storage Engine:
+ * 1. Tier 1 (Ultra-Fast RAM): Synchronous In-Memory Map for instant 0ms React initial renders.
+ * 2. Tier 2 (Native Android Storage): @capacitor/preferences backed by native Android SharedPreferences
+ *    (/data/data/com.vtopcc.app/shared_prefs/CapacitorStorage.xml).
+ *    - Completely independent of Android WebView / Chromium LevelDB.
+ *    - Immune to WebView 5MB quota errors, crashes, and OS storage resets.
+ * 3. Automatic Startup Hydration: Pre-loads all native keys into RAM before React mounts.
+ * 4. Automatic Seamless Migration: Migrates existing localStorage items to native Preferences on first launch.
+ * 5. Defensive Schema Normalization: Guarantees arrays vs objects for attendance, timetables, marks, profile, etc.
+ * 6. Isolated Profile Photo caching: Prevents memory & disk bloat for high-res photo strings.
  */
 
-// In-memory fallback map if window.localStorage is blocked or disabled
+import { Preferences } from '@capacitor/preferences';
+
+// In-memory high-speed cache for synchronous React reads
 const memoryStorage = new Map<string, string>();
+let isStorageEngineInitialized = false;
 
 /**
- * Checks if localStorage is available and writable in current browser environment.
+ * Checks if window.localStorage is available in the current environment.
  */
 export function isStorageAvailable(): boolean {
   try {
@@ -33,63 +39,154 @@ export function isStorageAvailable(): boolean {
 const storageAvailable = isStorageAvailable();
 
 /**
- * Low-level safe raw storage getter.
+ * Helper to identify corrupted, empty, HTML error, or undefined strings.
  */
-function rawGetItem(key: string): string | null {
-  if (storageAvailable) {
-    try {
-      return window.localStorage.getItem(key);
-    } catch (_e) {
-      return memoryStorage.get(key) || null;
-    }
-  }
-  return memoryStorage.get(key) || null;
+export function isCorruptedString(raw: string | null | undefined): boolean {
+  if (raw === null || raw === undefined) return true;
+  if (typeof raw !== 'string') return true;
+  const trimmed = raw.trim();
+  return (
+    trimmed === '' ||
+    trimmed === 'undefined' ||
+    trimmed === 'null' ||
+    trimmed === '[object Object]' ||
+    trimmed.startsWith('<!DOCTYPE') ||
+    trimmed.startsWith('<html') ||
+    trimmed.startsWith('<?xml')
+  );
 }
 
 /**
- * Low-level safe raw storage setter with quota eviction fallback.
+ * Initializes the Native Storage Engine:
+ * 1. Reads all stored keys from Native Capacitor Preferences (Android SharedPreferences).
+ * 2. Populates the synchronous in-memory store so React hooks can read them synchronously.
+ * 3. Migrates any existing keys from localStorage into Native Preferences.
+ */
+export async function initStorageEngine(): Promise<{ totalLoaded: number; migrated: number }> {
+  let totalLoaded = 0;
+  let migrated = 0;
+
+  try {
+    // Step 1: Read all keys from native Capacitor Preferences
+    const { keys } = await Preferences.keys();
+    for (const key of keys) {
+      try {
+        const { value } = await Preferences.get({ key });
+        if (value !== null && !isCorruptedString(value)) {
+          memoryStorage.set(key, value);
+          totalLoaded++;
+        }
+      } catch (_e) {}
+    }
+
+    // Step 2: Auto-migrate any existing data from localStorage to Native Preferences
+    if (storageAvailable) {
+      try {
+        const localKeys: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k) localKeys.push(k);
+        }
+
+        for (const key of localKeys) {
+          const localVal = window.localStorage.getItem(key);
+          if (localVal && !isCorruptedString(localVal)) {
+            if (!memoryStorage.has(key)) {
+              memoryStorage.set(key, localVal);
+              Preferences.set({ key, value: localVal }).catch(() => {});
+              migrated++;
+              totalLoaded++;
+            }
+          } else if (localVal && isCorruptedString(localVal) && key.startsWith('vtop_')) {
+            try {
+              window.localStorage.removeItem(key);
+            } catch (_e) {}
+          }
+        }
+      } catch (lsErr) {
+        console.warn('[StorageEngine] Error migrating from localStorage:', lsErr);
+      }
+    }
+
+    isStorageEngineInitialized = true;
+    console.info(`[StorageEngine] Native storage engine initialized: ${totalLoaded} entries hydrated into RAM (${migrated} migrated).`);
+  } catch (err) {
+    console.warn('[StorageEngine] Error initializing native storage, using RAM/localStorage fallback:', err);
+  }
+
+  return { totalLoaded, migrated };
+}
+
+/**
+ * Low-level safe raw storage getter.
+ * Synchronous: checks RAM map first, then localStorage fallback.
+ */
+function rawGetItem(key: string): string | null {
+  // Tier 1: Instant RAM lookup (0ms)
+  if (memoryStorage.has(key)) {
+    return memoryStorage.get(key) || null;
+  }
+
+  // Fallback: Check localStorage if not yet cached in RAM
+  if (storageAvailable) {
+    try {
+      const val = window.localStorage.getItem(key);
+      if (val !== null && !isCorruptedString(val)) {
+        memoryStorage.set(key, val);
+        return val;
+      }
+    } catch (_e) {}
+  }
+
+  return null;
+}
+
+/**
+ * Low-level safe raw storage setter.
+ * Writes synchronously to RAM, and asynchronously persists to Native Preferences + localStorage.
  */
 function rawSetItem(key: string, value: string): boolean {
+  if (isCorruptedString(value)) {
+    rawRemoveItem(key);
+    return false;
+  }
+
+  // 1. Synchronous RAM store for instant access
+  memoryStorage.set(key, value);
+
+  // 2. Persistent Native Capacitor Preferences (Android SharedPreferences)
+  Preferences.set({ key, value }).catch((err) => {
+    console.warn(`[StorageEngine] Preferences.set failed for "${key}":`, err);
+  });
+
+  // 3. Mirror to localStorage (wrapped in try/catch to absorb WebView quota errors)
   if (storageAvailable) {
     try {
       window.localStorage.setItem(key, value);
-      return true;
-    } catch (e: any) {
-      // QuotaExceededError or DOMException code 22 / 1014
-      const isQuotaError = 
-        e.name === 'QuotaExceededError' ||
-        e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-        e.code === 22 ||
-        e.code === 1014;
-
-      if (isQuotaError) {
-        console.warn(`[SafeCache] Storage quota exceeded. Evicting old cache entries to free space...`);
-        evictOldestCacheEntries(5);
-        try {
-          window.localStorage.setItem(key, value);
-          return true;
-        } catch (_retryErr) {
-          console.error(`[SafeCache] Failed to write key "${key}" after eviction. Falling back to memory.`);
-        }
-      }
-      memoryStorage.set(key, value);
-      return false;
+    } catch (_quotaErr) {
+      // WebView quota exceeded: Native Preferences is our source of truth, so we safely ignore this.
     }
   }
-  memoryStorage.set(key, value);
+
   return true;
 }
 
 /**
  * Low-level safe raw storage remover.
+ * Cleans from RAM, Native Preferences, and localStorage.
  */
 function rawRemoveItem(key: string): void {
+  memoryStorage.delete(key);
+
+  Preferences.remove({ key }).catch((err) => {
+    console.warn(`[StorageEngine] Preferences.remove failed for "${key}":`, err);
+  });
+
   if (storageAvailable) {
     try {
       window.localStorage.removeItem(key);
     } catch (_e) {}
   }
-  memoryStorage.delete(key);
 }
 
 /**
@@ -125,55 +222,18 @@ export function safeStorageRemove(key: string): void {
 }
 
 /**
- * Evicts oldest cache entries (excluding critical user / auth keys) when quota is full.
- */
-function evictOldestCacheEntries(countToEvict = 3): void {
-  try {
-    if (!storageAvailable) return;
-    const cacheKeys: { key: string; length: number }[] = [];
-    
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const key = window.localStorage.key(i);
-      // Evict dynamic non-critical cache (e.g. calendar, exams, marks, timetable)
-      if (key && key.startsWith('vtop_cache_') && !key.includes('profile') && !key.includes('semesters')) {
-        const val = window.localStorage.getItem(key) || '';
-        cacheKeys.push({ key, length: val.length });
-      }
-    }
-
-    // Evict largest entries first
-    cacheKeys.sort((a, b) => b.length - a.length);
-    const toRemove = cacheKeys.slice(0, countToEvict);
-    for (const item of toRemove) {
-      console.log(`[SafeCache] Evicting key: ${item.key} (${item.length} bytes)`);
-      rawRemoveItem(item.key);
-    }
-  } catch (err) {
-    console.warn('[SafeCache] Error during cache eviction:', err);
-  }
-}
-
-/**
  * Safe JSON parse helper that never throws.
  */
 export function safeJsonParse<T>(jsonString: string | null | undefined, fallback: T): T {
   if (!jsonString || typeof jsonString !== 'string') {
     return fallback;
   }
-  const trimmed = jsonString.trim();
-  if (
-    trimmed === '' ||
-    trimmed === 'undefined' ||
-    trimmed === 'null' ||
-    trimmed === '[object Object]' ||
-    trimmed.startsWith('<!DOCTYPE') ||
-    trimmed.startsWith('<html')
-  ) {
+  if (isCorruptedString(jsonString)) {
     return fallback;
   }
 
   try {
-    return JSON.parse(trimmed) as T;
+    return JSON.parse(jsonString.trim()) as T;
   } catch (err) {
     console.warn('[safeJsonParse] Malformed JSON, returning fallback:', err);
     return fallback;
@@ -185,7 +245,7 @@ export interface SetCacheOptions {
   version?: number;  // Schema version
 }
 
-interface CacheEnvelope<T> {
+export interface CacheEnvelope<T> {
   __vtop_envelope: true;
   v?: number;        // version
   t: number;         // timestamp
@@ -193,15 +253,103 @@ interface CacheEnvelope<T> {
   data: T;
 }
 
-function isCacheEnvelope<T>(obj: any): obj is CacheEnvelope<T> {
+export function isCacheEnvelope<T>(obj: any): obj is CacheEnvelope<T> {
   return obj && typeof obj === 'object' && obj.__vtop_envelope === true && 'data' in obj;
+}
+
+/**
+ * Central Data Normalizer: Ensures that data read or written to cache strictly conforms
+ * to the structural expectations of React components (guarantees arrays vs objects, default props).
+ */
+export function normalizeCachedData<T = any>(key: string, raw: any): T {
+  if (raw === null || raw === undefined) return raw;
+
+  // 1. Unwrap envelope if present
+  let payload: any = raw;
+  if (typeof payload === 'object' && payload.__vtop_envelope === true && 'data' in payload) {
+    payload = payload.data;
+  }
+  // Double-envelope safety (if wrapped twice)
+  if (typeof payload === 'object' && payload?.__vtop_envelope === true && 'data' in payload) {
+    payload = payload.data;
+  }
+
+  // 2. Unwrap standard API wrappers ({ status: 'success', raw_data: ... }, semesters, directory)
+  if (payload && typeof payload === 'object') {
+    if ('raw_data' in payload && payload.raw_data !== undefined && payload.raw_data !== null) {
+      payload = payload.raw_data;
+    } else if (key.includes('semesters') && 'semesters' in payload && Array.isArray(payload.semesters)) {
+      payload = payload.semesters;
+    } else if (key.includes('faculty_directory') && 'directory' in payload && typeof payload.directory === 'object') {
+      payload = payload.directory;
+    }
+  }
+
+  // 3. Schema validation and normalization based on key type
+  if (key.startsWith('vtop_cache_semesters')) {
+    return (Array.isArray(payload) ? payload : []) as unknown as T;
+  }
+  if (key.startsWith('vtop_cache_attendance_')) {
+    return (Array.isArray(payload) ? payload : []) as unknown as T;
+  }
+  if (key.startsWith('vtop_cache_exams_')) {
+    return (Array.isArray(payload) ? payload : []) as unknown as T;
+  }
+  if (key.startsWith('vtop_cache_timetable_')) {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return {
+        ...payload,
+        timetable: (payload.timetable && typeof payload.timetable === 'object') ? payload.timetable : {},
+        courses: Array.isArray(payload.courses) ? payload.courses : []
+      } as unknown as T;
+    }
+    if (Array.isArray(payload)) {
+      return { timetable: {}, courses: payload } as unknown as T;
+    }
+    return { timetable: {}, courses: [] } as unknown as T;
+  }
+  if (key.startsWith('vtop_cache_marks_')) {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return {
+        ...payload,
+        courses: Array.isArray(payload.courses) ? payload.courses : [],
+        combined_scores: Array.isArray(payload.combined_scores) ? payload.combined_scores : []
+      } as unknown as T;
+    }
+    return { courses: [], combined_scores: [] } as unknown as T;
+  }
+  if (key.startsWith('vtop_cache_grades_')) {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return {
+        ...payload,
+        grades: Array.isArray(payload.grades) ? payload.grades : [],
+        cgpa: payload.cgpa || ''
+      } as unknown as T;
+    }
+    return { grades: [], cgpa: '' } as unknown as T;
+  }
+  if (key.startsWith('vtop_cache_profile')) {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      // Re-hydrate photo from dedicated photo cache if not in main payload
+      if (!payload.personal?.photo_url) {
+        const photo = safeStorageGet('vtop_cache_profile_photo', '');
+        if (photo) {
+          payload.personal = { ...(payload.personal || {}), photo_url: photo };
+        }
+      }
+      return payload as unknown as T;
+    }
+    return {} as unknown as T;
+  }
+
+  return payload as T;
 }
 
 /**
  * Safely writes data to storage.
  * - Prevents storing undefined or null (removes key instead)
- * - Wraps in envelope with timestamp and optional TTL/version
- * - Catches quota errors and self-evicts
+ * - Wraps in envelope with timestamp and schema version 2
+ * - Isolates large base64 profile pictures to keep primary payloads light
  */
 export function safeSetCache<T>(key: string, data: T, options?: SetCacheOptions): boolean {
   if (!key || typeof key !== 'string') {
@@ -220,21 +368,21 @@ export function safeSetCache<T>(key: string, data: T, options?: SetCacheOptions)
   }
 
   try {
-    // Automatically unwrap API response wrappers ({ status: 'success', raw_data: ... }, semesters, directory)
-    let cleanData: any = data;
-    if (cleanData && typeof cleanData === 'object') {
-      if ('raw_data' in cleanData && cleanData.raw_data !== undefined && cleanData.raw_data !== null) {
-        cleanData = cleanData.raw_data;
-      } else if ('semesters' in cleanData && Array.isArray(cleanData.semesters)) {
-        cleanData = cleanData.semesters;
-      } else if ('directory' in cleanData && typeof cleanData.directory === 'object') {
-        cleanData = cleanData.directory;
+    const cleanData = normalizeCachedData<T>(key, data);
+
+    // If profile contains a large base64 photo, isolate it to keep main payload fast
+    if (key === 'vtop_cache_profile' && cleanData && typeof cleanData === 'object') {
+      const pData: any = cleanData;
+      if (pData.personal?.photo_url && pData.personal.photo_url.length > 50000) {
+        try {
+          rawSetItem('vtop_cache_profile_photo', pData.personal.photo_url);
+        } catch (_photoErr) {}
       }
     }
 
     const envelope: CacheEnvelope<T> = {
       __vtop_envelope: true,
-      v: options?.version ?? 1,
+      v: options?.version ?? 2,
       t: Date.now(),
       exp: options?.ttlMs ? Date.now() + options.ttlMs : undefined,
       data: cleanData
@@ -255,10 +403,10 @@ export function safeSetCache<T>(key: string, data: T, options?: SetCacheOptions)
 
 /**
  * Safely reads and validates data from storage.
- * - Supports both enveloped and legacy raw JSON cache entries
+ * - Supports enveloped (v1 & v2) and legacy raw JSON cache entries
  * - Checks TTL expiration and cleans up expired keys
- * - Optional validator predicate to verify expected schema (e.g. Array.isArray)
- * - Auto-purges corrupt keys on failure
+ * - Normalizes data so arrays and objects are guaranteed
+ * - Optional validator predicate to verify expected schema
  */
 export function safeGetCache<T>(
   key: string,
@@ -275,23 +423,12 @@ export function safeGetCache<T>(
       return fallback;
     }
 
-    const trimmed = item.trim();
-    if (
-      trimmed === '' ||
-      trimmed === 'undefined' ||
-      trimmed === 'null' ||
-      trimmed === '[object Object]' ||
-      trimmed.startsWith('<!DOCTYPE') ||
-      trimmed.startsWith('<html')
-    ) {
+    if (isCorruptedString(item)) {
       rawRemoveItem(key);
       return fallback;
     }
 
-    const parsed = JSON.parse(trimmed);
-
-    // Enveloped or raw JSON cache extraction
-    let payload: any = isCacheEnvelope<T>(parsed) ? parsed.data : parsed;
+    const parsed = JSON.parse(item.trim());
 
     // Check expiration if TTL was set on envelope
     if (isCacheEnvelope<T>(parsed) && parsed.exp && Date.now() > parsed.exp) {
@@ -300,31 +437,14 @@ export function safeGetCache<T>(
       return fallback;
     }
 
-    // Smart auto-unwrapper: handle any wrapper structures seamlessly
-    if (payload && typeof payload === 'object') {
-      if (key.includes('semesters')) {
-        if (Array.isArray(payload.semesters)) {
-          payload = payload.semesters;
-        } else if (Array.isArray(payload.raw_data)) {
-          payload = payload.raw_data;
-        }
-      } else if (key.includes('faculty_directory')) {
-        if (payload.directory && typeof payload.directory === 'object') {
-          payload = payload.directory;
-        } else if (payload.raw_data && typeof payload.raw_data === 'object') {
-          payload = payload.raw_data;
-        }
-      } else if ('raw_data' in payload && payload.raw_data !== undefined && payload.raw_data !== null) {
-        payload = payload.raw_data;
-      }
-    }
+    const payload = normalizeCachedData<T>(key, parsed);
 
     if (validator && !validator(payload)) {
-      console.warn(`[SafeCache] Validator check failed for key "${key}", returning fallback without purge.`);
+      console.warn(`[SafeCache] Validator check failed for key "${key}", returning fallback.`);
       return fallback;
     }
 
-    return payload as T;
+    return payload;
   } catch (err) {
     console.warn(`[SafeCache] Parse error for key "${key}":`, err);
     return fallback;
@@ -350,21 +470,23 @@ export function safeFindCachePrefix<T>(
 
   try {
     const keys: string[] = [];
+    for (const k of memoryStorage.keys()) {
+      if (k.startsWith(prefix)) keys.push(k);
+    }
+
     if (storageAvailable) {
       for (let i = 0; i < window.localStorage.length; i++) {
         const k = window.localStorage.key(i);
-        if (k) keys.push(k);
+        if (k && k.startsWith(prefix) && !keys.includes(k)) {
+          keys.push(k);
+        }
       }
-    } else {
-      keys.push(...memoryStorage.keys());
     }
 
     for (const key of keys) {
-      if (key.startsWith(prefix)) {
-        const found = safeGetCache<T>(key, undefined, validator);
-        if (found !== undefined) {
-          return found;
-        }
+      const found = safeGetCache<T>(key, undefined, validator);
+      if (found !== undefined) {
+        return found;
       }
     }
   } catch (err) {
@@ -374,7 +496,7 @@ export function safeFindCachePrefix<T>(
 }
 
 /**
- * Safely clears all keys starting with a given prefix.
+ * Safely clears all keys starting with a given prefix across RAM, Preferences, and localStorage.
  */
 export function safeClearCachePrefix(prefix: string): number {
   if (!prefix) return 0;
@@ -383,18 +505,18 @@ export function safeClearCachePrefix(prefix: string): number {
   try {
     const keysToRemove: string[] = [];
 
-    if (storageAvailable) {
-      for (let i = 0; i < window.localStorage.length; i++) {
-        const key = window.localStorage.key(i);
-        if (key && key.startsWith(prefix)) {
-          keysToRemove.push(key);
-        }
+    for (const key of memoryStorage.keys()) {
+      if (key.startsWith(prefix)) {
+        keysToRemove.push(key);
       }
     }
 
-    for (const key of memoryStorage.keys()) {
-      if (key.startsWith(prefix) && !keysToRemove.includes(key)) {
-        keysToRemove.push(key);
+    if (storageAvailable) {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && key.startsWith(prefix) && !keysToRemove.includes(key)) {
+          keysToRemove.push(key);
+        }
       }
     }
 
@@ -412,71 +534,53 @@ export function safeClearCachePrefix(prefix: string): number {
 /**
  * Automated Startup Sanitizer & Health Check.
  * Runs on app initialization:
- * - Scans all keys in localStorage
- * - Validates JSON parseability
- * - Purges corrupted, malformed, HTML, or "undefined" strings
+ * - Scans RAM and localStorage keys
+ * - Purges corrupted, HTML, or undefined strings
  * Returns summary of checked & purged items.
  */
 export function sanitizeLocalStorage(): { totalChecked: number; corruptedPurged: number } {
   let totalChecked = 0;
   let corruptedPurged = 0;
 
-  if (!storageAvailable) {
-    return { totalChecked: 0, corruptedPurged: 0 };
-  }
-
   try {
-    const keysToCheck: string[] = [];
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const key = window.localStorage.key(i);
-      if (key) keysToCheck.push(key);
+    const keysToCheck = new Set<string>();
+    for (const k of memoryStorage.keys()) keysToCheck.add(k);
+
+    if (storageAvailable) {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k) keysToCheck.add(k);
+      }
     }
 
     for (const key of keysToCheck) {
       totalChecked++;
-      try {
-        const raw = window.localStorage.getItem(key);
-        if (raw === null) continue;
+      const raw = rawGetItem(key);
+      if (raw === null) continue;
 
-        const trimmed = raw.trim();
-
-        // 1. Check for corrupt string values
-        const isCorruptString =
-          trimmed === '' ||
-          trimmed === 'undefined' ||
-          trimmed === 'null' ||
-          trimmed === '[object Object]' ||
-          trimmed.startsWith('<!DOCTYPE') ||
-          trimmed.startsWith('<html') ||
-          trimmed.startsWith('<?xml');
-
-        if (isCorruptString && key.startsWith('vtop_')) {
+      if (isCorruptedString(raw)) {
+        if (key.startsWith('vtop_')) {
           console.warn(`[Sanitizer] Purging corrupt raw value for key: "${key}"`);
-          window.localStorage.removeItem(key);
+          rawRemoveItem(key);
           corruptedPurged++;
-          continue;
         }
+        continue;
+      }
 
-        // 2. If it's a vtop cache or JSON key, test JSON validity
-        if (key.startsWith('vtop_cache_') || (trimmed.startsWith('{') || trimmed.startsWith('['))) {
-          try {
-            JSON.parse(trimmed);
-          } catch (_parseErr) {
-            console.warn(`[Sanitizer] Purging unparseable JSON for key: "${key}"`);
-            window.localStorage.removeItem(key);
-            corruptedPurged++;
-          }
-        }
-      } catch (_itemErr) {
+      // If it's a vtop cache or JSON key, test JSON validity
+      if (key.startsWith('vtop_cache_') || (raw.startsWith('{') || raw.startsWith('['))) {
         try {
-          window.localStorage.removeItem(key);
+          JSON.parse(raw);
+        } catch (_parseErr) {
+          console.warn(`[Sanitizer] Purging unparseable JSON for key: "${key}"`);
+          rawRemoveItem(key);
           corruptedPurged++;
-        } catch (_e) {}
+        }
       }
     }
 
     if (corruptedPurged > 0) {
-      console.info(`[Sanitizer] Sanitized localStorage: ${corruptedPurged} corrupted entries purged out of ${totalChecked} checked.`);
+      console.info(`[Sanitizer] Sanitized storage: ${corruptedPurged} corrupted entries purged out of ${totalChecked} checked.`);
     }
   } catch (err) {
     console.warn('[Sanitizer] Error during startup sanitization:', err);
@@ -490,24 +594,10 @@ export function sanitizeLocalStorage(): { totalChecked: number; corruptedPurged:
  */
 export function getStorageUsage(): { usedBytes: number; usedFormatted: string; entryCount: number } {
   let usedBytes = 0;
-  let entryCount = 0;
+  const entryCount = memoryStorage.size;
 
-  if (storageAvailable) {
-    try {
-      entryCount = window.localStorage.length;
-      for (let i = 0; i < window.localStorage.length; i++) {
-        const key = window.localStorage.key(i);
-        if (key) {
-          const val = window.localStorage.getItem(key) || '';
-          usedBytes += (key.length + val.length) * 2; // UTF-16 characters approx 2 bytes
-        }
-      }
-    } catch (_e) {}
-  } else {
-    entryCount = memoryStorage.size;
-    for (const [key, val] of memoryStorage.entries()) {
-      usedBytes += (key.length + val.length) * 2;
-    }
+  for (const [key, val] of memoryStorage.entries()) {
+    usedBytes += (key.length + val.length) * 2; // Approx UTF-16 character byte size
   }
 
   const usedFormatted = 
@@ -531,20 +621,25 @@ export function safeGetCalendarCacheForMonth(month: number, year: number, semest
 
   const targetSuffix = `_${month}_${year}`;
   const keys: string[] = [];
+
+  for (const k of memoryStorage.keys()) {
+    if (k.startsWith('vtop_cache_calendar_') && k.endsWith(targetSuffix)) {
+      keys.push(k);
+    }
+  }
+
   if (storageAvailable) {
     for (let i = 0; i < window.localStorage.length; i++) {
       const k = window.localStorage.key(i);
-      if (k) keys.push(k);
+      if (k && k.startsWith('vtop_cache_calendar_') && k.endsWith(targetSuffix) && !keys.includes(k)) {
+        keys.push(k);
+      }
     }
-  } else {
-    keys.push(...memoryStorage.keys());
   }
 
   for (const k of keys) {
-    if (k.startsWith('vtop_cache_calendar_') && k.endsWith(targetSuffix)) {
-      const found = safeGetCache<any>(k);
-      if (found && found.days && Array.isArray(found.days)) return found;
-    }
+    const found = safeGetCache<any>(k);
+    if (found && found.days && Array.isArray(found.days)) return found;
   }
 
   return undefined;

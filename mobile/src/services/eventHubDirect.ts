@@ -1,5 +1,6 @@
 import { CapacitorHttp } from '@capacitor/core';
 import * as cheerio from 'cheerio';
+import { safeStorageGet } from '../lib/cache';
 
 const EVENTHUB_BASE_URL = 'https://eventhubcc.vit.ac.in';
 
@@ -43,7 +44,7 @@ function getCookieHeader(): string {
 function getSavedCreds(creds?: { username?: string; password?: string }): { username?: string; password?: string } {
   if (creds?.username && creds?.password) return creds;
   try {
-    const saved = localStorage.getItem('vtop_direct_saved_creds');
+    const saved = safeStorageGet('vtop_direct_saved_creds');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed.username && parsed.password) return parsed;

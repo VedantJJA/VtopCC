@@ -122,14 +122,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const getAttendanceSummary = () => {
-    if (!attendanceQuery.data || !Array.isArray(attendanceQuery.data)) {
+    const list = Array.isArray(attendanceQuery.data) ? attendanceQuery.data : [];
+    if (list.length === 0) {
       return { percentage: 0, loading: attendanceQuery.isPending };
     }
     let totalAttended = 0;
     let totalConducted = 0;
-    for (const course of attendanceQuery.data) {
-      const attended = parseInt(course.attended_classes, 10);
-      const total = parseInt(course.total_classes, 10);
+    for (const course of list) {
+      const attended = parseInt(course?.attended_classes, 10);
+      const total = parseInt(course?.total_classes, 10);
       if (!isNaN(attended) && !isNaN(total)) {
         totalAttended += attended;
         totalConducted += total;
@@ -271,14 +272,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const slotKey = time_slot_keys[i];
       if (schedule[slotKey] && schedule[slotKey].rowspan) {
         const course = schedule[slotKey];
-        const endTime = (time_slot_keys[i + course.rowspan - 1] || "N/A").split(' - ')[1];
+        const endSlotStr = time_slot_keys[i + course.rowspan - 1] || "N/A";
+        const endTime = endSlotStr.includes(' - ') ? endSlotStr.split(' - ')[1] : (slotKey.includes(' - ') ? slotKey.split(' - ')[1] : '');
         list.push({
-          startTime: slotKey.split(' - ')[0],
-          endTime,
-          title: course.title,
-          code: course.code,
-          type: course.type,
-          venue: course.venue
+          startTime: slotKey.includes(' - ') ? slotKey.split(' - ')[0] : slotKey,
+          endTime: endTime || '',
+          title: course.title || course.code || 'Class',
+          code: course.code || '',
+          type: course.type || '',
+          venue: course.venue || 'TBA'
         });
       }
     }

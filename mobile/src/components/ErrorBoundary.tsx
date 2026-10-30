@@ -1,5 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { sanitizeLocalStorage, safeClearCachePrefix } from '../lib/cache';
 
 interface Props {
   children: ReactNode;
@@ -25,12 +28,23 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Caught unhandled runtime error:', error, errorInfo);
     this.setState({ errorInfo });
+
+    // Tell native Capacitor updater the app is ready to prevent automatic 10-second rollback reload
+    if (Capacitor.isNativePlatform()) {
+      try {
+        CapacitorUpdater.notifyAppReady().catch(() => {});
+      } catch (_e) {}
+    }
+
+    // Auto-sanitize localStorage to heal corrupted entries in place
+    try {
+      sanitizeLocalStorage();
+    } catch (_sErr) {}
   }
 
   private handleClearCacheAndReload = () => {
     try {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('vtop_cache_'));
-      keys.forEach(k => localStorage.removeItem(k));
+      safeClearCachePrefix('vtop_cache_');
       sessionStorage.clear();
     } catch (e) {
       console.warn('Error clearing cache in error boundary:', e);
@@ -54,7 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-2">
               <h2 className="text-xl font-extrabold text-white">Something Went Wrong</h2>
               <p className="text-xs text-slate-400">
-                A rendering issue occurred. This can happen if offline cached data became corrupted.
+                A rendering issue occurred. Tap below to clean up cached entries and recover your session.
               </p>
             </div>
 
@@ -70,7 +84,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Clear Cache & Reload</span>
+                <span>Recover & Refresh App</span>
               </button>
 
               <button

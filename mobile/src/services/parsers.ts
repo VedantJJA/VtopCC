@@ -980,6 +980,7 @@ export function parseCredentials(htmlContent: string) {
 }
 
 export interface FacultyDetails {
+  empId?: string | null;
   image: string | null;
   name: string | null;
   designation: string | null;
@@ -1002,26 +1003,37 @@ export function parseFacultyDetails(htmlContent: string): FacultyDetails | null 
 
   $('td').each((_, td) => {
     const text = $(td).text().trim().toLowerCase();
+    const getNextVal = (el: any): string => {
+      let next = $(el).next('td');
+      if (next.length && next.text().trim() === ':') {
+        next = next.next('td');
+      }
+      return next.text().trim().replace(/^:\s*/, '');
+    };
+
     if (text.includes('name of the faculty')) {
-      name = $(td).next('td').text().trim();
+      name = getNextVal(td);
     } else if (text.includes('designation')) {
-      designation = $(td).next('td').text().trim();
-    } else if (text.includes('name of department')) {
-      department = $(td).next('td').text().trim();
-    } else if (text.includes('school / centre name')) {
-      school = $(td).next('td').text().trim();
-    } else if (text.includes('e-mail id')) {
-      email = $(td).next('td').text().trim();
-    } else if (text.includes('cabin number')) {
-      cabin = $(td).next('td').text().trim();
+      designation = getNextVal(td);
+    } else if (text.includes('name of department') || text.includes('department')) {
+      department = getNextVal(td);
+    } else if (text.includes('school / centre name') || text.includes('school')) {
+      school = getNextVal(td);
+    } else if (text.includes('e-mail id') || text.includes('email') || text.includes('e-mail')) {
+      email = getNextVal(td);
+    } else if (text.includes('cabin number') || text.includes('cabin')) {
+      cabin = getNextVal(td);
     }
   });
 
-  if (!name) {
+  if (!name || name === ':') {
     return null;
   }
 
-  const image = $('img.img-rounded').attr('src') || null;
+  let image = $('img.img-rounded').attr('src') || $('img[src*="viewImage"]').attr('src') || null;
+  if (image && !image.startsWith('http') && !image.startsWith('data:')) {
+    image = `https://vtopcc.vit.ac.in/vtop/${image.replace(/^\//, '')}`;
+  }
 
   return {
     image,

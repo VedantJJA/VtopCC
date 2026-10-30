@@ -33,7 +33,7 @@ function parseExamDate(dateStr: string) {
 
 export const ExamsView: React.FC<ExamsViewProps> = ({ examsQuery, timeFormat = '24h' }) => {
   const [selectedType, setSelectedType] = useState<string>('all');
-  const exams: any[] = examsQuery.data || [];
+  const exams: any[] = Array.isArray(examsQuery.data) ? examsQuery.data : [];
 
   // Group by exam_type
   const examTypes = useMemo(() => {

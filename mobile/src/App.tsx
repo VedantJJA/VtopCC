@@ -105,6 +105,15 @@ function VtopLoginDashboard() {
     if (semList.length > 0 && semList[0].id) {
       return semList[0].id;
     }
+    // Inspect storage for any existing cached timetable semester keys
+    try {
+      const found = safeFindCachePrefix<any>('vtop_cache_timetable_');
+      if (found) {
+        // If timetable cache exists, try to see if active semester key was set
+        const active = safeStorageGet('vtop_active_semester', '');
+        if (active) return active;
+      }
+    } catch (_e) {}
     return '';
   });
   
@@ -224,14 +233,27 @@ function VtopLoginDashboard() {
 
   // Auth state
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    const hasCreds = !!localStorage.getItem('vtop_direct_saved_creds') || !!localStorage.getItem('vtop_saved_creds');
+    const hasCreds = !!safeStorageGet('vtop_direct_saved_creds') || !!safeStorageGet('vtop_saved_creds');
     const hasUser = !!safeStorageGet('vtop_username');
     const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters') || safeFindCachePrefix('vtop_cache_timetable_'));
     const explicitLogout = safeStorageGet('vtop_explicit_logout') === 'true';
     return !explicitLogout && (hasCreds || hasUser || hasCache);
   });
   const [activeUser, setActiveUser] = useState(() => {
-    return safeStorageGet('vtop_username') || '';
+    let user = safeStorageGet('vtop_username', '');
+    if (!user) {
+      try {
+        const directCreds = safeStorageGet('vtop_direct_saved_creds');
+        if (directCreds) {
+          const parsed = JSON.parse(directCreds);
+          if (parsed?.username) {
+            user = parsed.username;
+            safeStorageSet('vtop_username', user);
+          }
+        }
+      } catch (_e) {}
+    }
+    return user;
   });
   const [isRestoringSession, setIsRestoringSession] = useState(false);
   const [syncStep, setSyncStep] = useState<SyncStep>('idle');
@@ -265,7 +287,20 @@ function VtopLoginDashboard() {
     isSyncingRef.current = true;
     setIsRefreshing(true);
 
-    const currentUser = user || activeUser || safeStorageGet('vtop_username', '');
+    let currentUser = user || activeUser || safeStorageGet('vtop_username', '');
+    if (!currentUser) {
+      try {
+        const directCreds = safeStorageGet('vtop_direct_saved_creds');
+        if (directCreds) {
+          const parsed = JSON.parse(directCreds);
+          if (parsed?.username) currentUser = parsed.username;
+        }
+      } catch (_e) {}
+    }
+    if (currentUser && currentUser !== activeUser) {
+      setActiveUser(currentUser);
+      safeStorageSet('vtop_username', currentUser);
+    }
 
     // Offline bypass: do not attempt live network sync when offline
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -294,6 +329,7 @@ function VtopLoginDashboard() {
         const semsRes = await getSemesters();
         const sems = semsRes.data?.semesters || semsRes.data || [];
         if (Array.isArray(sems) && sems.length > 0) {
+          safeSetCache('vtop_cache_semesters', sems);
           queryClient.setQueryData(['semesters', currentUser], sems);
           if (!targetSemId || targetSemId === 'UNAVAILABLE') {
             targetSemId = sems[0].id;
@@ -314,6 +350,7 @@ function VtopLoginDashboard() {
           const attRes = await getAttendance(targetSemId);
           const attData = attRes.data?.raw_data || attRes.data;
           if (Array.isArray(attData) && attData.length > 0) {
+            safeSetCache(`vtop_cache_attendance_${targetSemId}`, attData);
             queryClient.setQueryData(['attendance', currentUser, targetSemId], attData);
           }
         } catch (attErr) {
@@ -324,6 +361,7 @@ function VtopLoginDashboard() {
           const ttRes = await getTimetable(targetSemId, true);
           const timetable = ttRes.data?.raw_data || ttRes.data;
           if (timetable && (timetable.timetable || timetable.courses)) {
+            safeSetCache(`vtop_cache_timetable_${targetSemId}`, timetable);
             queryClient.setQueryData(['timetable', currentUser, targetSemId], timetable);
           }
         } catch (ttErr) {
@@ -339,25 +377,35 @@ function VtopLoginDashboard() {
         try {
           const profRes = await getProfile();
           const prof = profRes.data?.raw_data || profRes.data;
-          if (prof) queryClient.setQueryData(['profile', currentUser], prof);
+          if (prof) {
+            safeSetCache('vtop_cache_profile', prof);
+            queryClient.setQueryData(['profile', currentUser], prof);
+          }
         } catch (_e) {}
 
         try {
           const odRes = await getODSnapshot(targetSemId);
           const od = (odRes as any)?.data?.raw_data || odRes.data;
-          if (od) queryClient.setQueryData(['od-snapshot', currentUser, targetSemId], od);
+          if (od) {
+            safeSetCache(`vtop_cache_od_snapshot_${targetSemId}`, od.total_od_count);
+            queryClient.setQueryData(['od-snapshot', currentUser, targetSemId], od);
+          }
         } catch (_e) {}
 
         try {
           const exRes = await getExams(targetSemId);
           const exams = exRes.data?.raw_data || exRes.data;
-          if (exams) queryClient.setQueryData(['exams', currentUser, targetSemId], exams);
+          if (exams) {
+            safeSetCache(`vtop_cache_exams_${targetSemId}`, exams);
+            queryClient.setQueryData(['exams', currentUser, targetSemId], exams);
+          }
         } catch (_e) {}
 
         try {
           const marksRes = await getMarks(targetSemId);
           const marks = marksRes.data?.raw_data || marksRes.data;
           if (marks && (marks.courses || marks.combined_scores)) {
+            safeSetCache(`vtop_cache_marks_${targetSemId}`, marks);
             queryClient.setQueryData(['marks', currentUser, targetSemId], marks);
           }
         } catch (_e) {}
@@ -365,13 +413,19 @@ function VtopLoginDashboard() {
         try {
           const gradesRes = await getGrades(targetSemId);
           const grades = gradesRes.data?.raw_data || gradesRes.data;
-          if (grades) queryClient.setQueryData(['grades', currentUser, targetSemId], grades);
+          if (grades) {
+            safeSetCache(`vtop_cache_grades_${targetSemId}`, grades);
+            queryClient.setQueryData(['grades', currentUser, targetSemId], grades);
+          }
         } catch (_e) {}
 
         try {
           const credRes = await getCredentials();
           const creds = credRes.data?.raw_data || credRes.data;
-          if (creds) queryClient.setQueryData(['credentials', currentUser], creds);
+          if (creds) {
+            safeSetCache('vtop_cache_credentials', creds);
+            queryClient.setQueryData(['credentials', currentUser], creds);
+          }
         } catch (_e) {}
 
         try {
@@ -384,6 +438,18 @@ function VtopLoginDashboard() {
       markSynced();
       setSyncStep('sync_complete');
       setSyncMessage('All data updated');
+
+      // Trigger immediate React Query invalidation so views re-render with fresh data immediately
+      queryClient.invalidateQueries({ queryKey: ['semesters', currentUser] });
+      queryClient.invalidateQueries({ queryKey: ['profile', currentUser] });
+      if (targetSemId && targetSemId !== 'UNAVAILABLE') {
+        queryClient.invalidateQueries({ queryKey: ['attendance', currentUser, targetSemId] });
+        queryClient.invalidateQueries({ queryKey: ['timetable', currentUser, targetSemId] });
+        queryClient.invalidateQueries({ queryKey: ['marks', currentUser, targetSemId] });
+        queryClient.invalidateQueries({ queryKey: ['grades', currentUser, targetSemId] });
+        queryClient.invalidateQueries({ queryKey: ['exams', currentUser, targetSemId] });
+        queryClient.invalidateQueries({ queryKey: ['od-snapshot', currentUser, targetSemId] });
+      }
 
       setTimeout(() => {
         setSyncStep('idle');
@@ -446,7 +512,7 @@ function VtopLoginDashboard() {
       setActiveUser(localUsername);
     }
 
-    const hasSavedCreds = !!localStorage.getItem('vtop_direct_saved_creds') || !!localStorage.getItem('vtop_saved_creds');
+    const hasSavedCreds = !!safeStorageGet('vtop_direct_saved_creds') || !!safeStorageGet('vtop_saved_creds');
     const hasCache = !!(safeGetCache('vtop_cache_profile') || safeGetCache('vtop_cache_semesters') || safeFindCachePrefix('vtop_cache_timetable_'));
 
     if (hasSavedCreds || localUsername || hasCache) {

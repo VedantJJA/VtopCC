@@ -24,7 +24,7 @@ export const GradesView: React.FC<GradesViewProps> = ({ gradesQuery }) => {
     return 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30';
   };
 
-  const grades: any[] = gradesQuery.data?.grades || [];
+  const grades: any[] = Array.isArray(gradesQuery.data?.grades) ? gradesQuery.data.grades : [];
   const gpa = gradesQuery.data?.gpa;
 
   // Grade breakdown stats

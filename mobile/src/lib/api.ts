@@ -1,5 +1,5 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { safeGetCache, safeSetCache, safeFindCachePrefix, safeGetCalendarCacheForMonth } from './cache';
+import { safeGetCache, safeSetCache, safeFindCachePrefix, safeGetCalendarCacheForMonth, safeStorageGet } from './cache';
 import { 
   directStartLogin, 
   directLoginAttempt, 
@@ -166,7 +166,7 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig): Promise
   }
 
   if (url === '/auth/auto-login') {
-    const savedStr = localStorage.getItem('vtop_direct_saved_creds');
+    const savedStr = safeStorageGet('vtop_direct_saved_creds');
     if (!savedStr) {
       return Promise.reject({
         isDirectMock: true,
@@ -203,7 +203,7 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig): Promise
   }
 
   if (url === '/auth/dev-creds') {
-    const savedStr = localStorage.getItem('vtop_direct_saved_creds');
+    const savedStr = safeStorageGet('vtop_direct_saved_creds');
     if (savedStr) {
       const saved = JSON.parse(savedStr);
       return Promise.reject({

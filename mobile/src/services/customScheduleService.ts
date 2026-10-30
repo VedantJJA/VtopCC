@@ -1,3 +1,5 @@
+import { safeStorageGet, safeStorageSet } from '../lib/cache';
+
 export interface CustomScheduleItem {
   id: string;
   title: string;
@@ -26,7 +28,7 @@ const STORAGE_KEY = 'vtop_custom_schedules';
 
 export function getCustomSchedules(): CustomScheduleItem[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = safeStorageGet(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -37,10 +39,10 @@ export function getCustomSchedules(): CustomScheduleItem[] {
 
 export function saveCustomSchedules(items: CustomScheduleItem[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    safeStorageSet(STORAGE_KEY, JSON.stringify(items));
     window.dispatchEvent(new Event('vtop_custom_schedules_updated'));
   } catch (err) {
-    console.warn('Failed to save custom schedules to localStorage', err);
+    console.warn('Failed to save custom schedules to storage', err);
   }
 }
 

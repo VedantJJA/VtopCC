@@ -20,7 +20,7 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
 }) => {
   const [selectedCourse, setSelectedCourse] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const courses: any[] = timetableQuery.data?.courses || [];
+  const courses: any[] = Array.isArray(timetableQuery.data?.courses) ? timetableQuery.data.courses : [];
 
   // Group attendance records by course code
   const attendanceMap: Record<string, any[]> = {};
@@ -69,15 +69,17 @@ export const CoursesView: React.FC<CoursesViewProps> = ({
     let weightedMarksSum = 0;
     let hasMarks = false;
 
-    course.components.forEach((comp: any) => {
-      const compMarks = marksQuery?.data?.courses?.find((c: any) => c.code === comp.course_code && c.type === comp.course_type);
-      if (compMarks?.assessments && compMarks.assessments.length > 0) {
-        hasMarks = true;
-        const subtotal = getComponentSubtotal(compMarks.assessments);
-        const credits = parseFloat(comp.credits || 0);
-        weightedMarksSum += (subtotal * credits);
-      }
-    });
+    if (Array.isArray(course?.components)) {
+      course.components.forEach((comp: any) => {
+        const compMarks = marksQuery?.data?.courses?.find((c: any) => c.code === comp.course_code && c.type === comp.course_type);
+        if (compMarks?.assessments && compMarks.assessments.length > 0) {
+          hasMarks = true;
+          const subtotal = getComponentSubtotal(compMarks.assessments);
+          const credits = parseFloat(comp.credits || 0);
+          weightedMarksSum += (subtotal * credits);
+        }
+      });
+    }
 
     if (!hasMarks) return null;
     const totalCredits = parseFloat(course.total_credits || 0);

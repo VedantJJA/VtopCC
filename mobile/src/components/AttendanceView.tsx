@@ -25,7 +25,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'warning' | 'theory' | 'lab'>('all');
 
-  const courses = attendanceQuery.data || [];
+  const courses = Array.isArray(attendanceQuery.data) ? attendanceQuery.data : [];
 
   // Calculate Overall Aggregate Attendance Metrics
   const summary = useMemo(() => {
@@ -94,7 +94,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     return <AttendanceSkeleton />;
   }
 
-  if (!attendanceQuery.data || attendanceQuery.data.length === 0) {
+  if (courses.length === 0) {
     return (
       <div className="p-8 bg-bgCard border border-borderColor rounded-2xl text-center space-y-2 shadow-sm">
         <Clock className="h-12 w-12 text-textMuted mx-auto" />
@@ -449,7 +449,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>Failed to retrieve lecture history log.</span>
                 </div>
-              ) : !attendanceDetailQuery.data || attendanceDetailQuery.data.length === 0 ? (
+              ) : !Array.isArray(attendanceDetailQuery.data) || attendanceDetailQuery.data.length === 0 ? (
                 <div className="p-6 text-center text-textMuted text-xs">
                   No lecture entries found for this course.
                 </div>

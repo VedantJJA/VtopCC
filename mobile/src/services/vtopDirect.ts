@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 import * as parsers from './parsers';
 import { facultyDirectory } from '../data/facultyDirectory';
 import { solveCaptchaClient } from '../lib/solver';
+import { safeGetCache, safeStorageGet, safeStorageSet, safeStorageRemove } from '../lib/cache';
 
 const VTOP_BASE_URL = 'https://vtopcc.vit.ac.in/vtop/';
 
@@ -22,9 +23,9 @@ let session: DirectSession = {
   cookies: {}
 };
 
-// Load saved session from localStorage if available
+// Load saved session from storage engine if available
 try {
-  const saved = localStorage.getItem('vtop_direct_session');
+  const saved = safeStorageGet('vtop_direct_session');
   if (saved) {
     session = JSON.parse(saved);
   }
@@ -32,7 +33,7 @@ try {
 
 function saveSession() {
   try {
-    localStorage.setItem('vtop_direct_session', JSON.stringify(session));
+    safeStorageSet('vtop_direct_session', JSON.stringify(session));
   } catch (_e) {}
 }
 
@@ -44,7 +45,7 @@ export function clearDirectSession() {
     cookies: {}
   };
   try {
-    localStorage.removeItem('vtop_direct_session');
+    safeStorageRemove('vtop_direct_session');
   } catch (_e) {}
 }
 
@@ -196,7 +197,7 @@ export async function directStartLogin(): Promise<{
 
   saveSession();
 
-  const savedCreds = !!localStorage.getItem('vtop_direct_saved_creds');
+  const savedCreds = !!safeStorageGet('vtop_direct_saved_creds');
 
   return {
     status: 'captcha_ready',
@@ -292,9 +293,9 @@ export async function directLoginAttempt(
     }
 
     saveSession();
-    localStorage.setItem('vtop_direct_saved_creds', JSON.stringify({ username: session.username, password: pass }));
-    localStorage.setItem('vtop_username', session.username);
-    localStorage.removeItem('vtop_explicit_logout');
+    safeStorageSet('vtop_direct_saved_creds', JSON.stringify({ username: session.username, password: pass }));
+    safeStorageSet('vtop_username', session.username);
+    safeStorageRemove('vtop_explicit_logout');
 
     return { status: 'success', message: `Welcome, ${session.authorizedId}!` };
   } else {
@@ -374,7 +375,7 @@ export async function ensureDirectSession(forceRenew = false): Promise<boolean> 
 
   sessionRenewalPromise = (async () => {
     try {
-      const savedStr = localStorage.getItem('vtop_direct_saved_creds');
+      const savedStr = safeStorageGet('vtop_direct_saved_creds');
       if (!savedStr) {
         console.warn('[Direct Auth] No saved credentials available for auto session renew.');
         return false;
@@ -661,12 +662,9 @@ export async function directGetMarks(semesterSubId: string): Promise<{ courses: 
   // Fetch credits from registered courses in timetable to attach them
   let courses: any[] = [];
   try {
-    const cachedTtStr = localStorage.getItem(`vtop_cache_timetable_${semesterSubId}`);
-    if (cachedTtStr) {
-      try {
-        const cachedTt = JSON.parse(cachedTtStr);
-        courses = cachedTt?.courses || (Array.isArray(cachedTt) ? cachedTt : []);
-      } catch (_e) {}
+    const cachedTt = safeGetCache<any>(`vtop_cache_timetable_${semesterSubId}`);
+    if (cachedTt) {
+      courses = cachedTt?.courses || (Array.isArray(cachedTt) ? cachedTt : []);
     }
     if (!courses || courses.length === 0) {
       const ttRes = await vtopRequest({
@@ -920,13 +918,12 @@ export async function directGetCredentials(): Promise<any> {
 export async function directGetClassGroupId(semesterSubId: string): Promise<string> {
   let selectedGroup = 'ALL';
   try {
-    const cachedTtStr = localStorage.getItem(`vtop_cache_timetable_${semesterSubId}`);
-    if (cachedTtStr) {
-      try {
-        const pattern = /[A-Z0-9\+]+-[A-Z0-9]+-[A-Z]+-[A-Z0-9\.-]+-[A-Z0-9\.-]+-([A-Z0-9]+)/;
-        const match = pattern.exec(cachedTtStr);
-        if (match) return match[1];
-      } catch (_e) {}
+    const cachedTt = safeGetCache<any>(`vtop_cache_timetable_${semesterSubId}`);
+    if (cachedTt) {
+      const cachedTtStr = JSON.stringify(cachedTt);
+      const pattern = /[A-Z0-9\+]+-[A-Z0-9]+-[A-Z]+-[A-Z0-9\.-]+-[A-Z0-9\.-]+-([A-Z0-9]+)/;
+      const match = pattern.exec(cachedTtStr);
+      if (match) return match[1];
     }
 
     const res = await vtopRequest({
@@ -1116,7 +1113,7 @@ export async function directSearchFaculty(empIdOrName: string): Promise<any> {
       designation: 'Faculty Member',
       department: 'VIT Chennai',
       school: 'VIT Chennai',
-      email: 'Connect to VTOP for email',
+      email: `${resolvedId}@vit.ac.in`,
       cabin: 'Connect to VTOP for cabin',
       image: null,
       isOfflineRecord: true
@@ -1126,6 +1123,24 @@ export async function directSearchFaculty(empIdOrName: string): Promise<any> {
   try {
     await ensureDirectSession();
 
+    // 1. Initialize EmployeeSearch menu in VTOP session to ensure authorized context
+    try {
+      await vtopRequest({
+        url: 'hrms/EmployeeSearchForStudent',
+        method: 'POST',
+        data: {
+          verifyMenu: 'true',
+          authorizedID: session.authorizedId,
+          _csrf: session.csrfToken,
+          nocache: Date.now().toString()
+        },
+        headers: {
+          'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+        }
+      });
+    } catch (_menuErr) {}
+
+    // 2. Query EmployeeSearch1ForStudent
     const res = await vtopRequest({
       url: 'hrms/EmployeeSearch1ForStudent',
       method: 'POST',
@@ -1138,7 +1153,7 @@ export async function directSearchFaculty(empIdOrName: string): Promise<any> {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://vtopcc.vit.ac.in/vtop/content'
+        'Referer': 'https://vtopcc.vit.ac.in/vtop/hrms/EmployeeSearchForStudent'
       }
     });
 
@@ -1148,8 +1163,12 @@ export async function directSearchFaculty(empIdOrName: string): Promise<any> {
     }
 
     const parsed = parsers.parseFacultyDetails(html);
-    if (parsed) {
-      return parsed;
+    if (parsed && parsed.name) {
+      return {
+        ...parsed,
+        empId: resolvedId,
+        email: parsed.email || `${resolvedId}@vit.ac.in`
+      };
     }
   } catch (err) {
     console.warn(`[directSearchFaculty] HRMS live fetch error for ${resolvedId}:`, err);
@@ -1163,7 +1182,7 @@ export async function directSearchFaculty(empIdOrName: string): Promise<any> {
       designation: 'Faculty Member',
       department: 'VIT Chennai',
       school: 'VIT Chennai',
-      email: 'Connect to VTOP for email',
+      email: `${resolvedId}@vit.ac.in`,
       cabin: 'Connect to VTOP for cabin',
       image: null,
       isOfflineRecord: true

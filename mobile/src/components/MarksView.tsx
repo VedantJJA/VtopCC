@@ -9,7 +9,7 @@ interface MarksViewProps {
 export const MarksView: React.FC<MarksViewProps> = ({ marksQuery }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const courses: any[] = marksQuery.data?.courses || [];
+  const courses: any[] = Array.isArray(marksQuery.data?.courses) ? marksQuery.data.courses : [];
 
   // Summary Metrics
   const summary = useMemo(() => {

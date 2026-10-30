@@ -233,11 +233,11 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
       if (slotClass && slotClass.isStart) {
         const cellData = slotClass.data;
         const isLab = cellData && (cellData.type?.includes('L') || cellData.type?.includes('Lab'));
-        const activeTime = isLab ? slot.labTime : slot.theoryTime;
-        const [startTime] = activeTime.split(' - ');
+        const activeTime = isLab ? (slot.labTime || '') : (slot.theoryTime || '');
+        const [startTime] = (activeTime || '').split(' - ');
 
         // Compute end time based on rowspan
-        let endTime = activeTime.split(' - ')[1] || '';
+        let endTime = (activeTime || '').split(' - ')[1] || '';
         const rowspan = cellData.rowspan || 1;
         if (rowspan > 1) {
           let covered = 0;
@@ -250,8 +250,8 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
           }
           const lastSlot = TIMETABLE_SLOTS[endIdx - 1];
           if (lastSlot) {
-            const lastTime = isLab ? lastSlot.labTime : lastSlot.theoryTime;
-            endTime = lastTime.split(' - ')[1] || endTime;
+            const lastTime = isLab ? (lastSlot.labTime || '') : (lastSlot.theoryTime || '');
+            endTime = (lastTime || '').split(' - ')[1] || endTime;
           }
         }
 
@@ -687,9 +687,9 @@ export const TimetableView: React.FC<TimetableViewProps> = ({
                             <span>{formatTimeRange('13:25 - 14:00', timeFormat)}</span>
                           ) : (
                             <>
-                              <span>T: {formatTime(slot.theoryTime.split(' - ')[0], timeFormat)}</span>
+                              <span>T: {formatTime((slot.theoryTime || '').split(' - ')[0], timeFormat)}</span>
                               <br />
-                              <span>L: {formatTime(slot.labTime.split(' - ')[0], timeFormat)}</span>
+                              <span>L: {formatTime((slot.labTime || '').split(' - ')[0], timeFormat)}</span>
                             </>
                           )}
                         </div>

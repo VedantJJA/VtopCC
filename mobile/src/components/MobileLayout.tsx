@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { 
   LayoutDashboard, CalendarDays, Activity, Calculator, Grid, 
   RefreshCw, Sun, Moon, ArrowLeft, BookOpen, Award, FileText, 
-  Home, Calendar, Search, Settings, Shield, User, LogOut, ChevronRight, Sparkles
+  Home, Calendar, Search, Settings, Shield, User, LogOut, ChevronRight, Sparkles,
+  Download, CheckCircle2, AlertCircle, Loader2
 } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { VtopLogo } from './VtopLogo';
 import { SyncStatusStepper, type SyncStep } from './SyncStatusStepper';
+import { checkAppVersion, applyOtaUpdate, type AppVersionInfo } from '../lib/ota';
 
 export interface DockItemConfig {
   id: string;
@@ -485,6 +487,48 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
   isAdmin,
   onLogout
 }) => {
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppVersionInfo | null>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgressMsg, setUpdateProgressMsg] = useState('');
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  const handleCheckForUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateError(null);
+    try {
+      const info = await checkAppVersion();
+      setUpdateInfo(info);
+      setIsUpdateModalOpen(true);
+    } catch (e: any) {
+      setUpdateError(e?.message || 'Failed to check for updates');
+      setIsUpdateModalOpen(true);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handlePerformUpdate = async () => {
+    if (!updateInfo?.serverVersion || !updateInfo?.downloadUrl) return;
+    setIsUpdating(true);
+    setUpdateProgressMsg('Preparing update download...');
+    try {
+      const res = await applyOtaUpdate(
+        updateInfo.serverVersion,
+        updateInfo.downloadUrl,
+        (msg) => setUpdateProgressMsg(msg)
+      );
+      if (!res.success) {
+        setUpdateError(res.message);
+        setIsUpdating(false);
+      }
+    } catch (err: any) {
+      setUpdateError(err?.message || 'Failed to install update');
+      setIsUpdating(false);
+    }
+  };
+
   const hubSections = [
     {
       title: 'Academics & Tools',
@@ -578,6 +622,46 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
         </div>
       ))}
 
+      {/* App Version & OTA Updates Section */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-bold text-textMuted uppercase tracking-wider px-1">
+          System & Updates
+        </h4>
+        <div className="p-4 bg-bgCard border border-borderColor rounded-2xl shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
+                <Download className="h-5 w-5" />
+              </div>
+              <div>
+                <h5 className="text-xs font-bold text-textMain">Over-The-Air (OTA) Updates</h5>
+                <p className="text-[11px] text-textMuted">
+                  App Version: <span className="font-mono font-semibold text-textMain">{updateInfo?.currentVersion || 'v1.0.0'}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleCheckForUpdate}
+            disabled={checkingUpdate || isUpdating}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-accentColor/10 hover:bg-accentColor/20 text-accentColor font-bold text-xs border border-accentColor/20 transition-all cursor-pointer disabled:opacity-50"
+          >
+            {checkingUpdate ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Checking Server...</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4" />
+                <span>Check for Update</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Logout Button */}
       <div className="pt-2">
         <button
@@ -588,6 +672,104 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
           <span>Sign Out of VTOP</span>
         </button>
       </div>
+
+      {/* Interactive Update Modal Dialog */}
+      {isUpdateModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-bgCard border border-borderColor rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-5 text-center">
+            {isUpdating ? (
+              <div className="space-y-4 py-4">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
+                  <Loader2 className="h-7 w-7 animate-spin" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-textMain">Updating VtopCC...</h3>
+                  <p className="text-xs text-textMuted mt-1">{updateProgressMsg || 'Downloading bundle...'}</p>
+                </div>
+                <div className="w-full bg-bgPrimary h-2 rounded-full overflow-hidden border border-borderColor">
+                  <div className="h-full bg-blue-500 animate-pulse rounded-full w-3/4"></div>
+                </div>
+              </div>
+            ) : updateError ? (
+              <div className="space-y-4">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center">
+                  <AlertCircle className="h-7 w-7" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-textMain">Update Check Notice</h3>
+                  <p className="text-xs text-textMuted mt-1">{updateError}</p>
+                </div>
+                <button
+                  onClick={() => setIsUpdateModalOpen(false)}
+                  className="w-full py-2.5 rounded-xl bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor text-textMain font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            ) : updateInfo?.updateAvailable ? (
+              <div className="space-y-4">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                  <Sparkles className="h-7 w-7" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-textMain">Update Available!</h3>
+                  <p className="text-xs text-textMuted mt-1">
+                    A new version of VtopCC is available on the server.
+                  </p>
+                </div>
+
+                <div className="bg-bgPrimary/60 border border-borderColor rounded-2xl p-3 text-xs space-y-1.5 font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-textMuted">Current App:</span>
+                    <span className="text-textMain font-bold">{updateInfo.currentVersion}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-textMuted">Server Version:</span>
+                    <span className="text-emerald-500 font-bold">{updateInfo.serverVersion}</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-textMuted">
+                  Would you like to install this update now?
+                </p>
+
+                <div className="flex gap-2.5 pt-1">
+                  <button
+                    onClick={() => setIsUpdateModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor text-textMuted hover:text-textMain font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handlePerformUpdate}
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
+                  >
+                    Update Now
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                  <CheckCircle2 className="h-7 w-7" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-textMain">You're Up to Date</h3>
+                  <p className="text-xs text-textMuted mt-1">
+                    VtopCC {updateInfo?.currentVersion || 'v1.0.0'} is currently the newest version.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsUpdateModalOpen(false)}
+                  className="w-full py-2.5 rounded-xl bg-bgPrimary hover:bg-bgPrimary/80 border border-borderColor text-textMain font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
