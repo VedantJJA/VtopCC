@@ -29,6 +29,9 @@ services:
       VITE_API_URL: "${services.vtopcc-backend.url}"
     routes:
       - type: rewrite
+        source: "/ota/*"
+        destination: "${services.vtopcc-backend.url}/ota/*"
+      - type: rewrite
         source: "/api/*"
         destination: "${services.vtopcc-backend.url}/api/*"
       - type: rewrite

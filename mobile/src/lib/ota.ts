@@ -3,13 +3,15 @@ import { CapacitorUpdater } from '@capgo/capacitor-updater';
 
 /**
  * OTA update manifest URL. Host a JSON file shaped like:
- *   { "version": "1.0.1", "url": "https://vtopcc.klouds.online/ota/bundle-1.0.1.zip" }
+ *   { "version": "1.0.1", "url": "https://vtopcc.klouds.online/api/ota/bundle-1.0.1.zip" }
  * The zip must contain the contents of `dist/` (index.html at its root).
  * Override at build time with VITE_OTA_MANIFEST_URL.
  */
 export const OTA_MANIFEST_URL: string =
   (import.meta.env.VITE_OTA_MANIFEST_URL as string | undefined) ||
-  'https://vtopcc.klouds.online/ota/version.json';
+  'https://vtopcc.klouds.online/api/ota/version.json';
+
+export const OTA_FALLBACK_URL = 'https://vtopcc.klouds.online/ota/version.json';
 
 export interface AppVersionInfo {
   currentVersion: string;
@@ -36,8 +38,37 @@ export async function initOta(): Promise<void> {
   }
 }
 
+async function fetchManifest(url: string): Promise<{ version: string; url: string } | { error: string }> {
+  try {
+    const res = await fetch(`${url}?t=${Date.now()}`, { 
+      cache: 'no-store',
+      headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
+    });
+
+    if (!res.ok) {
+      return { error: `Server responded with status ${res.status}` };
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    const text = await res.text();
+
+    if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      return { error: 'Server returned HTML instead of JSON' };
+    }
+
+    const parsed = JSON.parse(text);
+    if (!parsed || !parsed.version || !parsed.url) {
+      return { error: 'Invalid manifest format on server' };
+    }
+
+    return parsed as { version: string; url: string };
+  } catch (err: any) {
+    return { error: err?.message || 'Could not connect to update server' };
+  }
+}
+
 /**
- * Checks for updates: fetches current installed app version and latest server version from manifest.
+ * Checks for updates: queries backend and web endpoints for the latest version manifest.
  */
 export async function checkAppVersion(): Promise<AppVersionInfo> {
   let currentVersion = '1.0.0';
@@ -54,82 +85,25 @@ export async function checkAppVersion(): Promise<AppVersionInfo> {
     }
   }
 
-  try {
-    const res = await fetch(`${OTA_MANIFEST_URL}?t=${Date.now()}`, { 
-      cache: 'no-store',
-      headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
-    });
+  const candidateUrls = [
+    OTA_MANIFEST_URL,
+    OTA_FALLBACK_URL
+  ];
 
-    if (!res.ok) {
-      return {
-        currentVersion,
-        isNative,
-        serverVersion: null,
-        downloadUrl: null,
-        updateAvailable: false,
-        status: 'error',
-        errorMessage: `Update server responded with status ${res.status}`
-      };
+  let manifest: { version: string; url: string } | null = null;
+  let lastError = '';
+
+  for (const url of candidateUrls) {
+    const result = await fetchManifest(url);
+    if ('version' in result && result.version && result.url) {
+      manifest = result;
+      break;
+    } else if ('error' in result) {
+      lastError = result.error;
     }
+  }
 
-    const contentType = res.headers.get('content-type') || '';
-    const text = await res.text();
-
-    // Check if the response is HTML (e.g. SPA fallback to index.html when /ota/ files are missing)
-    if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-      return {
-        currentVersion,
-        isNative,
-        serverVersion: null,
-        downloadUrl: null,
-        updateAvailable: false,
-        status: 'error',
-        errorMessage: 'Update server returned HTML instead of JSON. The OTA files (/ota/version.json and bundle.zip) have not been uploaded to the website server yet.'
-      };
-    }
-
-    let manifest: { version?: string; url?: string };
-    try {
-      manifest = JSON.parse(text);
-    } catch (_parseErr) {
-      return {
-        currentVersion,
-        isNative,
-        serverVersion: null,
-        downloadUrl: null,
-        updateAvailable: false,
-        status: 'error',
-        errorMessage: 'Failed to parse update manifest JSON from server'
-      };
-    }
-
-    const serverVersion = manifest.version || null;
-    const downloadUrl = manifest.url || null;
-
-    if (!serverVersion || !downloadUrl) {
-      return {
-        currentVersion,
-        isNative,
-        serverVersion: null,
-        downloadUrl: null,
-        updateAvailable: false,
-        status: 'error',
-        errorMessage: 'Invalid update manifest on server'
-      };
-    }
-
-    const isDifferent = isVersionNewer(serverVersion, currentVersion);
-
-    return {
-      currentVersion,
-      isNative,
-      serverVersion,
-      downloadUrl,
-      updateAvailable: isDifferent,
-      status: isDifferent ? 'update_available' : 'up_to_date'
-    };
-  } catch (err: any) {
-    console.warn('[OTA] Version check failed:', err);
+  if (!manifest) {
     return {
       currentVersion,
       isNative,
@@ -137,9 +111,22 @@ export async function checkAppVersion(): Promise<AppVersionInfo> {
       downloadUrl: null,
       updateAvailable: false,
       status: 'error',
-      errorMessage: err?.message || 'Could not connect to update server'
+      errorMessage: lastError || 'Could not reach OTA update server.'
     };
   }
+
+  const serverVersion = manifest.version;
+  const downloadUrl = manifest.url;
+  const isDifferent = isVersionNewer(serverVersion, currentVersion);
+
+  return {
+    currentVersion,
+    isNative,
+    serverVersion,
+    downloadUrl,
+    updateAvailable: isDifferent,
+    status: isDifferent ? 'update_available' : 'up_to_date'
+  };
 }
 
 /**

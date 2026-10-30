@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import authRouter from './routes/auth.routes';
 import dataRouter from './routes/data.routes';
 import adminRouter from './routes/admin.routes';
+import otaRouter from './routes/ota.routes';
 
 dotenv.config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -24,6 +25,10 @@ app.use(cookieParser());
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
+
+// OTA Update Routes (mounted at both /ota and /api/ota for flexible routing)
+app.use('/ota', otaRouter);
+app.use('/api/ota', otaRouter);
 
 // Routes
 app.use('/api/auth', authRouter);
