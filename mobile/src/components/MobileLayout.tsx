@@ -500,6 +500,9 @@ const MobileMoreHub: React.FC<MobileMoreHubProps> = ({
     try {
       const info = await checkAppVersion();
       setUpdateInfo(info);
+      if (info.status === 'error') {
+        setUpdateError(info.errorMessage || 'Failed to check for updates');
+      }
       setIsUpdateModalOpen(true);
     } catch (e: any) {
       setUpdateError(e?.message || 'Failed to check for updates');

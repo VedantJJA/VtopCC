@@ -72,7 +72,37 @@ export async function checkAppVersion(): Promise<AppVersionInfo> {
       };
     }
 
-    const manifest = (await res.json()) as { version?: string; url?: string };
+    const contentType = res.headers.get('content-type') || '';
+    const text = await res.text();
+
+    // Check if the response is HTML (e.g. SPA fallback to index.html when /ota/ files are missing)
+    if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      return {
+        currentVersion,
+        isNative,
+        serverVersion: null,
+        downloadUrl: null,
+        updateAvailable: false,
+        status: 'error',
+        errorMessage: 'Update server returned HTML instead of JSON. The OTA files (/ota/version.json and bundle.zip) have not been uploaded to the website server yet.'
+      };
+    }
+
+    let manifest: { version?: string; url?: string };
+    try {
+      manifest = JSON.parse(text);
+    } catch (_parseErr) {
+      return {
+        currentVersion,
+        isNative,
+        serverVersion: null,
+        downloadUrl: null,
+        updateAvailable: false,
+        status: 'error',
+        errorMessage: 'Failed to parse update manifest JSON from server'
+      };
+    }
+
     const serverVersion = manifest.version || null;
     const downloadUrl = manifest.url || null;
 
